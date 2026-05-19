@@ -34,8 +34,7 @@ with a GNSS kit to get heading accuracy on Polaris with <= 2deg accuracy.
 
 The sensor fusion core is built on a variant of the Kalman Filter called the
 Unscented Kalman Filter (Due to tight turnaround the actual solution might be
-the Extended Kalman Filter) (Due to tight turnaround the actual solution might
-be the Extended Kalman Filter).
+the Extended Kalman Filter using TinyEKF).
 
 #### Reference Projects
 
