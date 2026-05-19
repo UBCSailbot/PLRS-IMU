@@ -1,3 +1,5 @@
 .direnv/
 .envrc
 .pio/
+.clangd
+compile_commands.json
