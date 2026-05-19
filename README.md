@@ -13,6 +13,23 @@ If you use a nix based package management, a dev shell is provided in
 `flake.nix`. If you do not already use [direnv](https://direnv.net/), this can
 automatically load and unload your development environment.
 
+## Overview
+
+The purpose of this project is to combine the measurements from a 9-DoF MEMS IMU
+with a GNSS kit to get heading accuracy on Polaris with <= 2deg accuracy.
+
+### Kalman Filtering
+
+The sensor fusion core is built on a variant of the Kalman Filter called the
+Unscented Kalman Filter (Due to tight turnaround the actual solution might be
+the Extended Kalman Filter) (Due to tight turnaround the actual solution might
+be the Extended Kalman Filter).
+
+#### Reference Projects
+
+[TinyEKF](https://github.com/simondlevy/TinyEKF): Lightweight C/C++ Extended
+Kalman Filter.
+
 ## Hardware
 
 MCU:
