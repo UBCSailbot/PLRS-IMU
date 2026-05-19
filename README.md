@@ -34,9 +34,11 @@ Kalman Filter.
 
 MCU:
 [Raspeberry Pi RP2040](https://pip-assets.raspberrypi.com/categories/814-rp2040/documents/RP-008371-DS-1-rp2040-datasheet.pdf?disposition=inline)
+
 MEMS IMU (accelerometer, gyroscope, magnetometer):
-[Xsens MTI-3-5A-T](https://mtidocs.xsens.com/mti-1-series) GNSS kit (dual
-antenna):
+[Xsens MTI-3-5A-T](https://mtidocs.xsens.com/mti-1-series)
+
+GNSS kit (dual antenna):
 [Septentrio MOSAIC-GO H](https://shop.septentrio.com/en/shop/mosaic-go-h-heading-gnss-module-evaluation-kit)
 
 ## Firmware
