@@ -7,6 +7,18 @@ This repository contains the source code for Polaris' IMU project.
 This project's toolchain is based on [PlatformIO](https://platformio.org/),
 configured for the rp2040.
 
+### Build and Flash
+
+To build the project, run:
+```bash
+pio run
+```
+
+To flash the compiled firmware to the RP2040, run:
+```bash
+pio run -t upload
+```
+
 ### Flakes
 
 If you use a nix based package management, a dev shell is provided in
@@ -44,3 +56,28 @@ GNSS kit (dual antenna):
 ## Firmware
 
 [FreeRTOS](https://www.freertos.org/)
+
+## Project Creation
+
+This project was created with:
+
+```bash
+pio project init -b pico
+```
+
+### FreeRTOS Setup Steps
+
+To configure PlatformIO for FreeRTOS on the RP2040, the environment in `platformio.ini` is set up to use the Earle Philhower core:
+
+1. **Set Custom Platform**: Point to the Max Gerhardt PlatformIO registry to access the required core.
+   ```ini
+   platform = https://github.com/maxgerhardt/platform-raspberrypi.git
+   ```
+2. **Set the Core**: Specify the Earle Philhower core instead of the default Mbed OS core.
+   ```ini
+   board_build.core = earlephilhower
+   ```
+3. **Enable FreeRTOS Flag**: Instruct the core to compile and link the built-in FreeRTOS kernel.
+   ```ini
+   build_flags = -D PIO_FRAMEWORK_ARDUINO_ENABLE_FREERTOS
+   ```
