@@ -13,7 +13,10 @@
     in
     {
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ platformio ];
+        packages = with pkgs; [ 
+          platformio 
+          python3
+        ];
       };
     };
 }

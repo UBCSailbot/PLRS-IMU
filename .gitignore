@@ -2,4 +2,5 @@
 .envrc
 .pio/
 .clangd
+.cache/
 compile_commands.json
