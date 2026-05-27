@@ -13,10 +13,27 @@
     in
     {
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ 
-          platformio 
+        packages = with pkgs; [
+          platformio
           python3
         ];
+        shellHook = ''
+          # Regenerate compile_commands.json so clangd sees current source files.
+          pio run -e native -t compiledb 2>/dev/null
+
+          # Derive the C++ standard from platformio.ini so .clangd never drifts.
+          # Reads the [env:native] section; stops at the next section header.
+          std=$(awk '/^\[env:native\]/{f=1;next} /^\[/{f=0} f' platformio.ini \
+            | grep -oP '(?<=-std=)\S+' | head -1)
+
+          cat > .clangd <<EOF
+Index:
+  Background: true
+CompileFlags:
+  Add: [-std=$std]   # propagated from platformio.ini [env:native]
+  Remove: [-std=c++14, -std=c++17, -std=c++20, -std=gnu++14, -std=gnu++17, -std=gnu++20]
+EOF
+        '';
       };
     };
 }
