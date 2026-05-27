@@ -10,6 +10,12 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+      unity-src = pkgs.fetchFromGitHub {
+        owner = "ThrowTheSwitch";
+        repo = "Unity";
+        rev = "v2.6.1";
+        hash = "sha256-g0ubq7RxGQmL1R6vz9RIGJpVWYsgrZhsTWSrL1ySEug=";
+      };
     in
     {
       devShells.${system}.default = pkgs.mkShell {
@@ -30,7 +36,8 @@
 Index:
   Background: Build
 CompileFlags:
-  Add: [-std=$std]   # propagated from platformio.ini [env:native]
+  Compiler: $(which g++)
+  Add: [-std=$std, -Ilib/mti_imu, -I${unity-src}/src]
   Remove: [-std=c++14, -std=c++17, -std=c++20, -std=gnu++14, -std=gnu++17, -std=gnu++20]
 EOF
         '';
