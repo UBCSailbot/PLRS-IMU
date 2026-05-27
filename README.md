@@ -89,6 +89,11 @@ The goal is heading accuracy of ≤2° on Polaris by fusing IMU and GNSS
 measurements through a Kalman filter (likely an Extended Kalman Filter given
 time constraints).
 
+### Reference Projects
+
+[TinyEKF](https://github.com/simondlevy/TinyEKF): Lightweight C/C++ Extended
+Kalman Filter.
+
 ## Hardware
 
 MCU:
