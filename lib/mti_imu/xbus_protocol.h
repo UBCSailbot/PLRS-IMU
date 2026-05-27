@@ -319,5 +319,4 @@ private:
   std::array<uint8_t, MAX_PAYLOAD> _buffer{};
 };
 
-
 } // namespace xbus
