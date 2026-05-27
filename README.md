@@ -2,12 +2,7 @@
 
 [![CI](https://github.com/georgesleen/PLRS-IMU/actions/workflows/ci.yml/badge.svg)](https://github.com/georgesleen/PLRS-IMU/actions/workflows/ci.yml)
 
-This repository contains the IMU driver firmware for Polaris. It is phase one
-of a three-phase project: MTi-3 IMU driver → dual-band GNSS driver → Kalman
-filter fusion.
-
-The protocol layer (`lib/mti_imu/xbus_protocol.h`) has no Arduino dependency
-and compiles under plain `g++ -std=c++23` for host testing.
+This repository contains the IMU firmware for Polaris.
 
 ## Setup
 
@@ -50,8 +45,7 @@ instructions above. Install WSL2 from PowerShell:
 wsl --install -d Ubuntu-24.04
 ```
 
-Clone the repo inside WSL, not on the Windows filesystem — performance on
-`/mnt/c/…` is poor. For flashing, the RP2040 needs to be forwarded from
+For flashing, the RP2040 needs to be forwarded from
 Windows into WSL using
 [usbipd-win](https://github.com/dorssel/usbipd-win):
 
@@ -69,8 +63,6 @@ pio run  -e pico            # build firmware
 pio run  -e pico -t upload  # flash the RP2040
 ```
 
-A red test suite is a hard stop. CI enforces this on every pull request.
-
 ## Coding style
 
 Formatting is `BasedOnStyle: LLVM` (2-space indent, 80 columns), enforced by
@@ -83,14 +75,13 @@ a leading underscore (`_state`, `_sum`).
 
 A few design rules worth knowing before contributing:
 
-- `ByteSpan` (`std::span<const uint8_t>`) is the only way a buffer travels
-  through an API — no raw `(ptr, len)` pairs.
+- `ByteSpan` (`std::span<const uint8_t>`) is preferred to `(ptr, len)` pairs.
 - Outputs are returned, not written through out-parameters.
 - Use `std::expected<T, E>` when failure has a meaningful reason,
   `std::optional` when it doesn't.
 - `std::bit_cast` for type punning — no pointer casts, no `memcpy`.
 - Named constants for all magic numbers.
-- The protocol layer must never gain an Arduino dependency.
+- Statically allocate all memory instead of using malloc.
 
 ## Overview
 
