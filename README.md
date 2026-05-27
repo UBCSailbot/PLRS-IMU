@@ -1,6 +1,6 @@
 # Polaris IMU
 
-[![CI](https://github.com/georgesleen/PLRS-IMU/actions/workflows/ci.yml/badge.svg)](https://github.com/georgesleen/PLRS-IMU/actions/workflows/ci.yml)
+[![CI](https://github.com/UBCSailbot/PLRS-IMU/actions/workflows/ci.yml/badge.svg)](https://github.com/UBCSailbot/PLRS-IMU/actions/workflows/ci.yml)
 
 This repository contains the IMU firmware for Polaris.
 
@@ -26,8 +26,8 @@ sudo apt-get install -y clang-format g++ python3-pip
 pip install platformio
 ```
 
-Ubuntu 22.04's default `g++` is version 11, which lacks `std::expected`.
-Install `g++-12` or later.
+Ubuntu 22.04's default `g++` is version 11, which lacks `std::expected`. Install
+`g++-12` or later.
 
 ### macOS
 
@@ -45,8 +45,7 @@ instructions above. Install WSL2 from PowerShell:
 wsl --install -d Ubuntu-24.04
 ```
 
-For flashing, the RP2040 needs to be forwarded from
-Windows into WSL using
+For flashing, the RP2040 needs to be forwarded from Windows into WSL using
 [usbipd-win](https://github.com/dorssel/usbipd-win):
 
 ```powershell
@@ -65,13 +64,12 @@ pio run  -e pico -t upload  # flash the RP2040
 
 ## Coding style
 
-Formatting is `BasedOnStyle: LLVM` (2-space indent, 80 columns), enforced by
-CI. Format changed files with `:fmt` in Helix or `clang-format -i <file>`
+Formatting is enforced by CI. Format changed files with `clang-format -i <file>`
 before pushing.
 
 Naming conventions: types and enum members in `PascalCase`, free functions and
-methods in `snake_case`, constants in `UPPER_SNAKE_CASE`, private members with
-a leading underscore (`_state`, `_sum`).
+methods in `snake_case`, constants in `UPPER_SNAKE_CASE`, private members with a
+leading underscore (`_state`, `_sum`).
 
 A few design rules worth knowing before contributing:
 
@@ -105,7 +103,9 @@ MEMS IMU (accelerometer, gyroscope, magnetometer):
 GNSS kit (dual antenna):
 [Septentrio mosaic-go H](https://shop.septentrio.com/en/shop/mosaic-go-h-heading-gnss-module-evaluation-kit)
 
-Firmware: [FreeRTOS](https://www.freertos.org/)
+## Firmware
+
+[FreeRTOS](https://www.freertos.org/)
 
 ## License
 
