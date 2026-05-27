@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v14
+      - uses: DeterminateSystems/magic-nix-cache-action@v8
+      - name: Check formatting
+        run: |
+          nix develop --no-update-lock-file -c \
+            bash -c 'find lib src test -type f \( -name "*.h" -o -name "*.cpp" \) -print0 \
+              | xargs -0 clang-format --dry-run --Werror'
+
+  test:
+    name: PlatformIO native tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v14
+      - uses: DeterminateSystems/magic-nix-cache-action@v8
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('platformio.ini') }}
+      - name: Run native tests
+        run: nix develop --no-update-lock-file -c pio test -e native

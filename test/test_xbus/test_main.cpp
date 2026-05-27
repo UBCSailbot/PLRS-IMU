@@ -2,8 +2,8 @@
  * Host (native) unit tests for the Xbus protocol core.
  */
 
-#include <unity.h>
 #include "xbus_protocol.h"
+#include <unity.h>
 
 using namespace xbus;
 
@@ -28,8 +28,8 @@ static_assert(kGoToConfig->bytes[4] == 0xD1); // checksum
 
 // Oversize payloads are also rejected at compile time.
 constexpr std::array<uint8_t, MAX_PAYLOAD + 1> kBig{};
-constexpr auto kOversize = Packet::command(MID::SetOutputConfig,
-                                           ByteSpan(kBig.data(), kBig.size()));
+constexpr auto kOversize =
+    Packet::command(MID::SetOutputConfig, ByteSpan(kBig.data(), kBig.size()));
 static_assert(!kOversize.has_value());
 
 // Feed all bytes in a span into the parser at a fixed timestamp. Returns the
@@ -93,8 +93,8 @@ void test_command_empty_payload() {
 /** @brief Payload bytes are copied into data[] and len is set to match. */
 void test_command_payload_copied() {
   const uint8_t payload[] = {0x20, 0x10, 0x00, 0x64};
-  auto result = Packet::command(MID::SetOutputConfig,
-                                ByteSpan(payload, sizeof payload));
+  auto result =
+      Packet::command(MID::SetOutputConfig, ByteSpan(payload, sizeof payload));
   TEST_ASSERT_TRUE(result.has_value());
   TEST_ASSERT_EQUAL_size_t(sizeof payload, result->len);
   TEST_ASSERT_EQUAL_HEX8_ARRAY(payload, result->data.data(), sizeof payload);
@@ -116,7 +116,8 @@ void test_command_accepts_max_payload() {
   TEST_ASSERT_EQUAL_size_t(MAX_PAYLOAD, result->len);
 }
 
-/** @brief MAX_PAYLOAD + 1 bytes is rejected; extended-length frames are out of scope. */
+/** @brief MAX_PAYLOAD + 1 bytes is rejected; extended-length frames are out of
+ * scope. */
 void test_command_rejects_oversize() {
   std::array<uint8_t, MAX_PAYLOAD + 1> payload{};
   auto result = Packet::command(MID::SetOutputConfig,
@@ -137,19 +138,22 @@ void test_encode_gotoconfig_bytes() {
   TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, enc->bytes.data(), sizeof expected);
 }
 
-/** @brief SetOutputConfig with 4-byte payload produces a correct 9-byte frame. */
+/** @brief SetOutputConfig with 4-byte payload produces a correct 9-byte frame.
+ */
 void test_encode_with_payload_bytes() {
   const uint8_t payload[] = {0x20, 0x10, 0x00, 0x64};
-  auto enc = encode(Packet::command(MID::SetOutputConfig,
-                                    ByteSpan(payload, sizeof payload)).value());
+  auto enc = encode(
+      Packet::command(MID::SetOutputConfig, ByteSpan(payload, sizeof payload))
+          .value());
   TEST_ASSERT_TRUE(enc.has_value());
-  const uint8_t expected[] = {0xFA, 0xFF, 0xC0, 0x04,
-                               0x20, 0x10, 0x00, 0x64, 0xA9};
+  const uint8_t expected[] = {0xFA, 0xFF, 0xC0, 0x04, 0x20,
+                              0x10, 0x00, 0x64, 0xA9};
   TEST_ASSERT_EQUAL_size_t(sizeof expected, enc->len);
   TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, enc->bytes.data(), sizeof expected);
 }
 
-/** @brief encode() returns nullopt for a packet with a manually overflowed len. */
+/** @brief encode() returns nullopt for a packet with a manually overflowed len.
+ */
 void test_encode_rejects_oversize() {
   Packet p;
   p.mid = MID::SetOutputConfig;
@@ -164,8 +168,7 @@ void test_encode_rejects_oversize() {
 /** @brief Reassembles a known big-endian 16-bit value correctly. */
 void test_read_u16_big_endian() {
   const uint8_t b[] = {0x20, 0x10};
-  TEST_ASSERT_EQUAL_HEX16(0x2010,
-                           read_u16_big_endian(ByteSpan(b, sizeof b)));
+  TEST_ASSERT_EQUAL_HEX16(0x2010, read_u16_big_endian(ByteSpan(b, sizeof b)));
 }
 
 /** @brief High and low byte extremes (0xFF, 0x00). */
@@ -217,7 +220,8 @@ void test_parse_clean_frame() {
 void test_parse_with_payload() {
   Parser p;
   // SetOutputConfig, Quaternion@100Hz: FA FF C0 04 20 10 00 64 A9
-  const uint8_t frame[] = {0xFA, 0xFF, 0xC0, 0x04, 0x20, 0x10, 0x00, 0x64, 0xA9};
+  const uint8_t frame[] = {0xFA, 0xFF, 0xC0, 0x04, 0x20,
+                           0x10, 0x00, 0x64, 0xA9};
   auto pkt = feed_frame(p, frame);
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT(pkt->mid == MID::SetOutputConfig);
@@ -226,7 +230,8 @@ void test_parse_with_payload() {
   TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, pkt->data.data(), 4);
 }
 
-/** @brief Bad checksum yields nullopt; parser resyncs and accepts the next frame. */
+/** @brief Bad checksum yields nullopt; parser resyncs and accepts the next
+ * frame. */
 void test_bad_checksum_rejected_then_resyncs() {
   Parser p;
   const uint8_t bad[] = {0xFA, 0xFF, 0x30, 0x00, 0xD2}; // D2 instead of D1
@@ -251,7 +256,8 @@ void test_junk_before_frame_ignored() {
   TEST_ASSERT(pkt->mid == MID::GoToConfig);
 }
 
-/** @brief A stalled frame is dropped when the next byte arrives past FRAME_TIMEOUT. */
+/** @brief A stalled frame is dropped when the next byte arrives past
+ * FRAME_TIMEOUT. */
 void test_timeout_drops_stalled_frame() {
   Parser p;
   // Feed preamble + bid + mid at t=0; parser is mid-frame in Len state.
@@ -260,7 +266,8 @@ void test_timeout_drops_stalled_frame() {
   p.feed(0x30, Ms{0});
   TEST_ASSERT_TRUE(p.mid_frame());
 
-  // 60ms > FRAME_TIMEOUT(50ms): the 0xFA triggers a reset then starts a new frame.
+  // 60ms > FRAME_TIMEOUT(50ms): the 0xFA triggers a reset then starts a new
+  // frame.
   p.feed(0xFA, Ms{60});
   p.feed(0xFF, Ms{60});
   p.feed(0x30, Ms{60});
@@ -270,7 +277,8 @@ void test_timeout_drops_stalled_frame() {
   TEST_ASSERT(pkt->mid == MID::GoToConfig);
 }
 
-/** @brief A slow but uninterrupted frame (40ms between bytes) is not timed out. */
+/** @brief A slow but uninterrupted frame (40ms between bytes) is not timed out.
+ */
 void test_no_false_timeout() {
   Parser p;
   const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
@@ -281,7 +289,8 @@ void test_no_false_timeout() {
   TEST_ASSERT(pkt->mid == MID::GoToConfig);
 }
 
-/** @brief LEN == 0xFF (extended frame) is rejected; parser resets and resyncs. */
+/** @brief LEN == 0xFF (extended frame) is rejected; parser resets and resyncs.
+ */
 void test_extended_length_rejected() {
   Parser p;
   p.feed(0xFA, Ms{0});
@@ -333,7 +342,8 @@ void test_find_data_found() {
 
 /** @brief Non-matching DataId returns nullopt. */
 void test_find_data_not_found() {
-  const uint8_t raw[] = {0x20, 0x10, 0x04, 0x3F, 0x80, 0x00, 0x00}; // Quaternion only
+  const uint8_t raw[] = {0x20, 0x10, 0x04, 0x3F,
+                         0x80, 0x00, 0x00}; // Quaternion only
   Packet p;
   p.mid = MID::MTData2;
   p.len = sizeof raw;
