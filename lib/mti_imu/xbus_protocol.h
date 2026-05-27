@@ -25,6 +25,7 @@ constexpr uint8_t LEN_EXTENDED = 0xff;
 constexpr uint8_t BID_MASTER = 0xff;     // host/master bus address in Xbus
 constexpr std::size_t MAX_PAYLOAD = 254; // for standard messages
 constexpr std::size_t MAX_FRAME = MAX_PAYLOAD + 5;
+constexpr std::size_t SUBPACKET_HEADER = 3;
 
 using ByteSpan = std::span<const uint8_t>;
 using Ms = std::chrono::milliseconds;
@@ -64,6 +65,24 @@ enum class DataId : uint16_t {
   MagneticField = 0xc020,
   StatusWord = 0xe020,
 };
+
+/**
+ * Helper functions.
+ */
+
+constexpr uint8_t twosComplement(const uint8_t num) {
+  return static_cast<uint8_t>(0x100 - num);
+}
+
+constexpr uint16_t read_u16_big_endian(ByteSpan b) {
+  return static_cast<uint16_t>((b[0] << 8) | b[1]);
+}
+
+constexpr float read_f32_big_endian(ByteSpan b) {
+  uint32_t u = (uint32_t(b[0] << 24) | (uint32_t(b[1]) << 16) |
+                uint32_t(b[2]) << 8 | uint32_t(b[3]));
+  return std::bit_cast<float>(u);
+}
 
 /*
  * Messages and Validation.
@@ -117,17 +136,6 @@ struct Packet {
     return p;
   }
 };
-
-/**
- * @brief Compute the two's complement of a number.
- *
- * @param num: The number to be complemented.
- *
- * @return The two's complement of num.
- */
-constexpr uint8_t twosComplement(const uint8_t num) {
-  return static_cast<uint8_t>(0x100 - num);
-}
 
 /**
  * @brief Compute the checksum of a standard xbus message.
@@ -318,5 +326,45 @@ private:
   uint8_t _sum = 0;
   std::array<uint8_t, MAX_PAYLOAD> _buffer{};
 };
+
+/**
+ * IMU Specific Command Parsing.
+ */
+
+/**
+ * IMU specific data packet. Borrows from the parent packet's buffer => valid
+ * only while the packet is in scope.
+ */
+struct DataPacket {
+  DataId id;
+  ByteSpan bytes;
+};
+
+/**
+ * @brief Find the first sub packet matching `wanted`.
+ *
+ * @param packet. The packet to search through.
+ * @param wanted. The data to search for.
+ *
+ * @return The first sub packet matching 'wanted', or nullopt.
+ */
+inline std::optional<DataPacket> find_data(const Packet &packet,
+                                           DataId wanted) {
+  ByteSpan s = packet.payload();
+  std::size_t i = 0;
+  while (i + SUBPACKET_HEADER <= s.size()) {
+    DataId id = static_cast<DataId>(
+        (s[i] << 8) | s[i + 1]); // Convert from big endian to little endian
+    uint8_t len = s[i + 2];
+    if (i + SUBPACKET_HEADER + len > s.size()) {
+      break;
+    }
+    if (id == wanted) {
+      return DataPacket{id, s.subspan(i + SUBPACKET_HEADER, len)};
+    }
+    i += SUBPACKET_HEADER + len;
+  }
+  return std::nullopt;
+}
 
 } // namespace xbus
