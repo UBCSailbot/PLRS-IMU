@@ -62,6 +62,16 @@ pio run  -e pico            # build firmware
 pio run  -e pico -t upload  # flash the RP2040
 ```
 
+### Git hooks
+
+Pre-push hooks are tracked in `hooks/` and mirror the CI checks (clang-format
++ native tests). If you use direnv, they are installed automatically when you
+enter the directory. Without direnv, install them once manually:
+
+```bash
+ln -sf ../../hooks/pre-push .git/hooks/pre-push
+```
+
 ## Coding style
 
 Formatting is enforced by CI. Format changed files with `clang-format -i <file>`
