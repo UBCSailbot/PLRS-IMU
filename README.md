@@ -1,6 +1,9 @@
 # Polaris IMU
 
 [![CI](https://github.com/UBCSailbot/PLRS-IMU/actions/workflows/ci.yml/badge.svg)](https://github.com/UBCSailbot/PLRS-IMU/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/UBCSailbot/PLRS-IMU)](LICENSE)
+[![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23)
+[![RP2040](https://img.shields.io/badge/platform-RP2040-red.svg)](https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf)
 
 This repository contains the IMU firmware for Polaris.
 
@@ -116,6 +119,14 @@ GNSS kit (dual antenna):
 ## Firmware
 
 [FreeRTOS](https://www.freertos.org/)
+
+## Roadmap
+
+| Milestone | Issues |
+|---|---|
+| [Python Logger](https://github.com/UBCSailbot/PLRS-IMU/milestone/1) | Serial capture script, log format, replay utility |
+| [Python EKF Sim](https://github.com/UBCSailbot/PLRS-IMU/milestone/2) | pybind11 bindings, synthetic data generator, sim runner, plotter |
+| [HIL Testing](https://github.com/UBCSailbot/PLRS-IMU/milestone/3) | On-device test suite, PIO Remote agent, CI integration |
 
 ## License
 
