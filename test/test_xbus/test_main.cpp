@@ -325,7 +325,8 @@ void test_back_to_back_frames() {
 // Parser — additional coverage from handoff
 // ---------------------------------------------------------------------------
 
-/** @brief encode() output round-trips through Parser back to the same packet. */
+/** @brief encode() output round-trips through Parser back to the same packet.
+ */
 void test_encode_roundtrip_via_parser() {
   const uint8_t payload[] = {0x20, 0x10, 0xFF, 0xFF};
   auto enc = encode(
@@ -452,10 +453,14 @@ void test_mtdata2_quaternion_extraction() {
   auto found = find_data(*pkt, DataId::Quaternion);
   TEST_ASSERT_TRUE(found.has_value());
   TEST_ASSERT_EQUAL_size_t(16, found->bytes.size());
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qw, read_f32_big_endian(found->bytes.subspan(0)));
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qx, read_f32_big_endian(found->bytes.subspan(4)));
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qy, read_f32_big_endian(found->bytes.subspan(8)));
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qz, read_f32_big_endian(found->bytes.subspan(12)));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qw,
+                           read_f32_big_endian(found->bytes.subspan(0)));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qx,
+                           read_f32_big_endian(found->bytes.subspan(4)));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qy,
+                           read_f32_big_endian(found->bytes.subspan(8)));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qz,
+                           read_f32_big_endian(found->bytes.subspan(12)));
 
   TEST_ASSERT_FALSE(find_data(*pkt, DataId::MagneticField).has_value());
 }
