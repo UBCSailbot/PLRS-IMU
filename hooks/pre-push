@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "pre-push: clang-format..."
+echo "[pre-push] clang-format..."
 find lib src test -type f \( -name "*.h" -o -name "*.cpp" \) -print0 \
   | xargs -0 clang-format --dry-run --Werror
-echo "pre-push: pio test -e native..."
+echo "[pre-push] pio test -e native..."
 pio test -e native
-echo "pre-push: all checks passed."
+echo "[pre-push] all checks passed."
