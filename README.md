@@ -25,7 +25,7 @@ nix develop
 ### Linux
 
 ```bash
-sudo apt-get install -y clang-format g++ python3-pip
+sudo apt-get install -y clang-format g++ make python3-pip
 pip install platformio
 ```
 
@@ -60,10 +60,13 @@ usbipd attach --wsl --busid <id>
 ### Build, test, and flash
 
 ```bash
-pio test -e native          # host Unity tests
-pio run  -e pico            # build firmware
-pio run  -e pico -t upload  # flash the RP2040
+make test    # host Unity tests
+make build   # build firmware
+make upload  # flash the RP2040
+make format  # clang-format all sources in-place
 ```
+
+Run `make` with no arguments to list all targets.
 
 ### Git hooks
 
