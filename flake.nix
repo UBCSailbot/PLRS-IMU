@@ -21,25 +21,37 @@
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
           clang-tools
+          jq
           platformio
           python3
         ];
         shellHook = ''
-          # Regenerate compile_commands.json so clangd sees current source files.
-          pio run -e native -t compiledb 2>/dev/null
+          # Generate compile databases for both environments.
+          # pico build may download the ARM toolchain on first run (~100 MB, cached
+          # in ~/.platformio afterward). Failures are non-fatal so a cold machine
+          # without network still gets at least the native database.
+          pio run -e native -t compiledb 2>/dev/null || true
+          pio run -e pico   -t compiledb 2>/dev/null || true
 
-          # Derive the C++ standard from platformio.ini so .clangd never drifts.
-          # Reads the [env:native] section; stops at the next section header.
-          std=$(awk '/^\[env:native\]/{f=1;next} /^\[/{f=0} f' platformio.ini \
-            | grep -oP '(?<=-std=)\S+' | head -1)
+          # Merge both databases into the project root so clangd gets one view
+          # covering native test files (Unity flags) and firmware files (Arduino
+          # headers, ARM defines). clangd searches upward for compile_commands.json
+          # and uses the nearest match per translation unit.
+          native=".pio/build/native/compile_commands.json"
+          pico=".pio/build/pico/compile_commands.json"
+          if [ -f "$native" ] && [ -f "$pico" ]; then
+            jq -s '.[0] + .[1]' "$native" "$pico" > compile_commands.json
+          elif [ -f "$pico" ]; then
+            cp "$pico" compile_commands.json
+          elif [ -f "$native" ]; then
+            cp "$native" compile_commands.json
+          fi
 
-          cat > .clangd <<EOF
+          cat > .clangd <<'EOF'
 Index:
   Background: Build
 CompileFlags:
-  Compiler: $(which g++)
-  Add: [-std=$std, -Ilib/mti_imu, -I${unity-src}/src]
-  Remove: [-std=c++14, -std=c++17, -std=c++20, -std=gnu++14, -std=gnu++17, -std=gnu++20]
+  CompilationDatabase: .
 EOF
         '';
       };
