@@ -2,8 +2,10 @@
  * Host (native) unit tests for the Xbus protocol core.
  */
 
+#include "test_helpers.h"
 #include "xbus_protocol.h"
 #include <unity.h>
+#include <vector>
 
 using namespace xbus;
 
@@ -320,6 +322,145 @@ void test_back_to_back_frames() {
 }
 
 // ---------------------------------------------------------------------------
+// Parser — additional coverage from handoff
+// ---------------------------------------------------------------------------
+
+/** @brief encode() output round-trips through Parser back to the same packet. */
+void test_encode_roundtrip_via_parser() {
+  const uint8_t payload[] = {0x20, 0x10, 0xFF, 0xFF};
+  auto enc = encode(
+      Packet::command(MID::SetOutputConfig, ByteSpan(payload, sizeof payload))
+          .value());
+  TEST_ASSERT_TRUE(enc.has_value());
+
+  Parser p;
+  std::optional<Packet> got;
+  for (std::size_t i = 0; i < enc->len; ++i)
+    got = p.feed(enc->bytes[i], Ms{0});
+
+  TEST_ASSERT_TRUE(got.has_value());
+  TEST_ASSERT(got->mid == MID::SetOutputConfig);
+  TEST_ASSERT_EQUAL_size_t(sizeof payload, got->len);
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(payload, got->data.data(), sizeof payload);
+}
+
+/** @brief Each inter-byte gap is FRAME_TIMEOUT-1; frame must still complete. */
+void test_no_timeout_when_under_threshold() {
+  Parser p;
+  const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
+  std::optional<Packet> pkt;
+  Ms t{0};
+  for (uint8_t b : frame) {
+    pkt = p.feed(b, t);
+    t += Parser::FRAME_TIMEOUT - Ms{1};
+  }
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT(pkt->mid == MID::GoToConfig);
+}
+
+/** @brief A very large first-byte timestamp (idle gap) must not trip the
+ * timeout. */
+void test_idle_gap_then_frame_ok() {
+  Parser p;
+  const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
+  std::optional<Packet> pkt;
+  Ms t{10'000'000};
+  for (uint8_t b : frame) {
+    pkt = p.feed(b, t);
+    t += Ms{1};
+  }
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT(pkt->mid == MID::GoToConfig);
+}
+
+/** @brief Corrupted LEN causes phantom-byte swallow; parser resyncs eventually.
+ *
+ * Documents a real design limitation: without the timeout, a corrupted LEN of
+ * N causes ~N bytes of subsequent frames to be swallowed before the bad
+ * checksum fires. FRAME_TIMEOUT is the intended fast-recovery path. */
+void test_corrupted_len_resyncs_but_only_slowly_without_timeout() {
+  Parser p;
+  auto frame = xtest::make_frame(MID::GoToConfigAck, {0x01, 0x02});
+  frame[3] = 200; // corrupt LEN: 2 -> 200
+
+  for (uint8_t b : frame)
+    p.feed(b, Ms{0}); // fixed timestamp — timeout never fires
+
+  bool recovered = false;
+  int frames_needed = 0;
+  for (int i = 0; i < 60 && !recovered; ++i) {
+    auto good = xtest::make_frame(MID::GoToConfigAck, {});
+    ++frames_needed;
+    for (uint8_t b : good) {
+      if (p.feed(b, Ms{0}).has_value()) {
+        recovered = true;
+        break;
+      }
+    }
+  }
+  TEST_ASSERT_TRUE_MESSAGE(recovered,
+                           "parser resyncs eventually after corrupted LEN");
+  TEST_ASSERT_GREATER_THAN_INT(1, frames_needed); // phantom swallow occurred
+}
+
+/** @brief Corrupted LEN + timeout = immediate clean resync on next preamble. */
+void test_corrupted_len_recovers_immediately_with_timeout() {
+  Parser p;
+  auto frame = xtest::make_frame(MID::GoToConfigAck, {0x01, 0x02});
+  frame[3] = 200; // corrupt LEN
+  for (uint8_t b : frame)
+    p.feed(b, Ms{0});
+  TEST_ASSERT_TRUE(p.mid_frame());
+
+  const uint8_t good[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
+  Ms t = Parser::FRAME_TIMEOUT + Ms{1};
+  std::optional<Packet> got;
+  for (uint8_t b : good) {
+    got = p.feed(b, t);
+    t += Ms{1};
+  }
+  TEST_ASSERT_TRUE(got.has_value());
+  TEST_ASSERT(got->mid == MID::GoToConfig);
+}
+
+// ---------------------------------------------------------------------------
+// find_data() — integration
+// ---------------------------------------------------------------------------
+
+/** @brief Full MTData2 round-trip: build frame, parse it, extract quaternion
+ * via find_data, verify read_f32_big_endian round-trips all four components. */
+void test_mtdata2_quaternion_extraction() {
+  float qw = 0.7071f, qx = 0.0f, qy = 0.7071f, qz = 0.0f;
+  std::vector<uint8_t> qbytes;
+  for (float v : {qw, qx, qy, qz}) {
+    auto fb = xtest::be_float(v);
+    qbytes.insert(qbytes.end(), fb.begin(), fb.end());
+  }
+
+  std::vector<uint8_t> payload;
+  auto pc = xtest::make_subpacket(DataId::PacketCounter, {0x00, 0x2A});
+  payload.insert(payload.end(), pc.begin(), pc.end());
+  auto q = xtest::make_subpacket(DataId::Quaternion, qbytes);
+  payload.insert(payload.end(), q.begin(), q.end());
+
+  auto frame = xtest::make_frame(MID::MTData2, payload);
+  Parser p;
+  auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT(pkt->mid == MID::MTData2);
+
+  auto found = find_data(*pkt, DataId::Quaternion);
+  TEST_ASSERT_TRUE(found.has_value());
+  TEST_ASSERT_EQUAL_size_t(16, found->bytes.size());
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qw, read_f32_big_endian(found->bytes.subspan(0)));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qx, read_f32_big_endian(found->bytes.subspan(4)));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qy, read_f32_big_endian(found->bytes.subspan(8)));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qz, read_f32_big_endian(found->bytes.subspan(12)));
+
+  TEST_ASSERT_FALSE(find_data(*pkt, DataId::MagneticField).has_value());
+}
+
+// ---------------------------------------------------------------------------
 // find_data()
 // ---------------------------------------------------------------------------
 
@@ -411,6 +552,12 @@ int main(int, char **) {
   RUN_TEST(test_no_false_timeout);
   RUN_TEST(test_extended_length_rejected);
   RUN_TEST(test_back_to_back_frames);
+  RUN_TEST(test_encode_roundtrip_via_parser);
+  RUN_TEST(test_no_timeout_when_under_threshold);
+  RUN_TEST(test_idle_gap_then_frame_ok);
+  RUN_TEST(test_corrupted_len_resyncs_but_only_slowly_without_timeout);
+  RUN_TEST(test_corrupted_len_recovers_immediately_with_timeout);
+  RUN_TEST(test_mtdata2_quaternion_extraction);
   RUN_TEST(test_find_data_found);
   RUN_TEST(test_find_data_not_found);
   RUN_TEST(test_find_data_truncated_safe);
