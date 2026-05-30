@@ -154,4 +154,76 @@ inline std::vector<uint8_t> make_pvt_geodetic_body(const sbf::PVTGeodetic &v) {
   return b;
 }
 
+inline std::vector<uint8_t>
+make_pos_cov_geodetic_body(const sbf::PosCovGeodetic &v) {
+  std::vector<uint8_t> b;
+  push_le(b, v.tow);
+  push_le(b, v.wnc);
+  b.push_back(v.mode);
+  b.push_back(v.error);
+  push_le(b, v.cov_latlat);
+  push_le(b, v.cov_lonlon);
+  push_le(b, v.cov_hgthgt);
+  push_le(b, v.cov_bb);
+  push_le(b, v.cov_latlon);
+  push_le(b, v.cov_lathgt);
+  push_le(b, v.cov_latb);
+  push_le(b, v.cov_lonhgt);
+  push_le(b, v.cov_lonb);
+  push_le(b, v.cov_hb);
+  return b;
+}
+
+inline std::vector<uint8_t>
+make_vel_cov_geodetic_body(const sbf::VelCovGeodetic &v) {
+  std::vector<uint8_t> b;
+  push_le(b, v.tow);
+  push_le(b, v.wnc);
+  b.push_back(v.mode);
+  b.push_back(v.error);
+  push_le(b, v.cov_vnvn);
+  push_le(b, v.cov_veve);
+  push_le(b, v.cov_vuvu);
+  push_le(b, v.cov_dtdt);
+  push_le(b, v.cov_vnve);
+  push_le(b, v.cov_vnvu);
+  push_le(b, v.cov_vndt);
+  push_le(b, v.cov_vevu);
+  push_le(b, v.cov_vedt);
+  push_le(b, v.cov_vudt);
+  return b;
+}
+
+inline std::vector<uint8_t> make_att_euler_body(const sbf::AttEuler &v) {
+  std::vector<uint8_t> b;
+  push_le(b, v.tow);
+  push_le(b, v.wnc);
+  b.push_back(v.nr_sv);
+  b.push_back(v.error);
+  push_le(b, v.mode);
+  push_le(b, v.reserved);
+  push_le(b, v.heading);
+  push_le(b, v.pitch);
+  push_le(b, v.roll);
+  push_le(b, v.pitch_dot);
+  push_le(b, v.roll_dot);
+  push_le(b, v.heading_dot);
+  return b;
+}
+
+inline std::vector<uint8_t> make_att_cov_euler_body(const sbf::AttCovEuler &v) {
+  std::vector<uint8_t> b;
+  push_le(b, v.tow);
+  push_le(b, v.wnc);
+  b.push_back(v.reserved);
+  b.push_back(v.error);
+  push_le(b, v.cov_headhead);
+  push_le(b, v.cov_pitchpitch);
+  push_le(b, v.cov_rollroll);
+  push_le(b, v.cov_headpitch);
+  push_le(b, v.cov_headroll);
+  push_le(b, v.cov_pitchroll);
+  return b;
+}
+
 } // namespace stest

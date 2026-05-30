@@ -153,4 +153,309 @@ inline std::optional<PVTGeodetic> parse_pvt_geodetic(const Packet &p) {
   };
 }
 
+/*
+ * PosCovGeodetic, block 5906, mosaic-X5 Reference Guide section 4.2.10.
+ */
+
+namespace pos_cov_geodetic_layout {
+constexpr uint16_t BLOCK_NUMBER = 5906;
+constexpr std::size_t TOW = 0;
+constexpr std::size_t WNC = 4;
+constexpr std::size_t MODE = 6;
+constexpr std::size_t ERROR = 7;
+constexpr std::size_t COV_LATLAT = 8;
+constexpr std::size_t COV_LONLON = 12;
+constexpr std::size_t COV_HGTHGT = 16;
+constexpr std::size_t COV_BB = 20;
+constexpr std::size_t COV_LATLON = 24;
+constexpr std::size_t COV_LATHGT = 28;
+constexpr std::size_t COV_LATB = 32;
+constexpr std::size_t COV_LONHGT = 36;
+constexpr std::size_t COV_LONB = 40;
+constexpr std::size_t COV_HB = 44;
+constexpr std::size_t MIN_BODY = COV_HB + sizeof(float);
+} // namespace pos_cov_geodetic_layout
+
+/**
+ * Position variance-covariance matrix in geodetic coordinates.
+ * Spec: section 4.2.10, block 5906. All units are m^2.
+ */
+struct PosCovGeodetic {
+  uint32_t tow;     // 0.001 s, DNU = DNU_U4
+  uint16_t wnc;     // weeks, DNU = DNU_U2
+  uint8_t mode;     // bit field, PVT mode and flags
+  uint8_t error;    // error code, 0 = no error
+  float cov_latlat; // m^2, DNU = DNU_F4
+  float cov_lonlon; // m^2, DNU = DNU_F4
+  float cov_hgthgt; // m^2, DNU = DNU_F4
+  float cov_bb;     // m^2, clock-bias variance, DNU = DNU_F4
+  float cov_latlon; // m^2, DNU = DNU_F4
+  float cov_lathgt; // m^2, DNU = DNU_F4
+  float cov_latb;   // m^2, DNU = DNU_F4
+  float cov_lonhgt; // m^2, DNU = DNU_F4
+  float cov_lonb;   // m^2, DNU = DNU_F4
+  float cov_hb;     // m^2, DNU = DNU_F4
+};
+
+/**
+ * @brief Decode a PosCovGeodetic block from a parsed Packet.
+ *
+ * @param p The packet whose block_number must equal 5906.
+ *
+ * @return The decoded struct, or nullopt on block-number mismatch or
+ *         short body.
+ */
+inline std::optional<PosCovGeodetic> parse_pos_cov_geodetic(const Packet &p) {
+  namespace o = pos_cov_geodetic_layout;
+  if (p.block_number() != o::BLOCK_NUMBER) {
+    return std::nullopt;
+  }
+  if (p.body_length < o::MIN_BODY) {
+    return std::nullopt;
+  }
+  const ByteSpan b = p.body();
+  return PosCovGeodetic{
+      .tow = read_little_endian<uint32_t>(b, o::TOW),
+      .wnc = read_little_endian<uint16_t>(b, o::WNC),
+      .mode = b[o::MODE],
+      .error = b[o::ERROR],
+      .cov_latlat = read_little_endian<float>(b, o::COV_LATLAT),
+      .cov_lonlon = read_little_endian<float>(b, o::COV_LONLON),
+      .cov_hgthgt = read_little_endian<float>(b, o::COV_HGTHGT),
+      .cov_bb = read_little_endian<float>(b, o::COV_BB),
+      .cov_latlon = read_little_endian<float>(b, o::COV_LATLON),
+      .cov_lathgt = read_little_endian<float>(b, o::COV_LATHGT),
+      .cov_latb = read_little_endian<float>(b, o::COV_LATB),
+      .cov_lonhgt = read_little_endian<float>(b, o::COV_LONHGT),
+      .cov_lonb = read_little_endian<float>(b, o::COV_LONB),
+      .cov_hb = read_little_endian<float>(b, o::COV_HB),
+  };
+}
+
+/*
+ * VelCovGeodetic, block 5908, mosaic-X5 Reference Guide section 4.2.10.
+ */
+
+namespace vel_cov_geodetic_layout {
+constexpr uint16_t BLOCK_NUMBER = 5908;
+constexpr std::size_t TOW = 0;
+constexpr std::size_t WNC = 4;
+constexpr std::size_t MODE = 6;
+constexpr std::size_t ERROR = 7;
+constexpr std::size_t COV_VNVN = 8;
+constexpr std::size_t COV_VEVE = 12;
+constexpr std::size_t COV_VUVU = 16;
+constexpr std::size_t COV_DTDT = 20;
+constexpr std::size_t COV_VNVE = 24;
+constexpr std::size_t COV_VNVU = 28;
+constexpr std::size_t COV_VNDT = 32;
+constexpr std::size_t COV_VEVU = 36;
+constexpr std::size_t COV_VEDT = 40;
+constexpr std::size_t COV_VUDT = 44;
+constexpr std::size_t MIN_BODY = COV_VUDT + sizeof(float);
+} // namespace vel_cov_geodetic_layout
+
+/**
+ * Velocity variance-covariance matrix in geodetic (NEU) coordinates.
+ * Spec: section 4.2.10, block 5908. All units are m^2/s^2.
+ */
+struct VelCovGeodetic {
+  uint32_t tow;   // 0.001 s, DNU = DNU_U4
+  uint16_t wnc;   // weeks, DNU = DNU_U2
+  uint8_t mode;   // bit field, PVT mode and flags
+  uint8_t error;  // error code, 0 = no error
+  float cov_vnvn; // (m/s)^2, north velocity variance, DNU = DNU_F4
+  float cov_veve; // (m/s)^2, east velocity variance, DNU = DNU_F4
+  float cov_vuvu; // (m/s)^2, up velocity variance, DNU = DNU_F4
+  float cov_dtdt; // (m/s)^2, clock drift variance, DNU = DNU_F4
+  float cov_vnve; // (m/s)^2, DNU = DNU_F4
+  float cov_vnvu; // (m/s)^2, DNU = DNU_F4
+  float cov_vndt; // (m/s)^2, DNU = DNU_F4
+  float cov_vevu; // (m/s)^2, DNU = DNU_F4
+  float cov_vedt; // (m/s)^2, DNU = DNU_F4
+  float cov_vudt; // (m/s)^2, DNU = DNU_F4
+};
+
+/**
+ * @brief Decode a VelCovGeodetic block from a parsed Packet.
+ *
+ * @param p The packet whose block_number must equal 5908.
+ *
+ * @return The decoded struct, or nullopt on block-number mismatch or
+ *         short body.
+ */
+inline std::optional<VelCovGeodetic> parse_vel_cov_geodetic(const Packet &p) {
+  namespace o = vel_cov_geodetic_layout;
+  if (p.block_number() != o::BLOCK_NUMBER) {
+    return std::nullopt;
+  }
+  if (p.body_length < o::MIN_BODY) {
+    return std::nullopt;
+  }
+  const ByteSpan b = p.body();
+  return VelCovGeodetic{
+      .tow = read_little_endian<uint32_t>(b, o::TOW),
+      .wnc = read_little_endian<uint16_t>(b, o::WNC),
+      .mode = b[o::MODE],
+      .error = b[o::ERROR],
+      .cov_vnvn = read_little_endian<float>(b, o::COV_VNVN),
+      .cov_veve = read_little_endian<float>(b, o::COV_VEVE),
+      .cov_vuvu = read_little_endian<float>(b, o::COV_VUVU),
+      .cov_dtdt = read_little_endian<float>(b, o::COV_DTDT),
+      .cov_vnve = read_little_endian<float>(b, o::COV_VNVE),
+      .cov_vnvu = read_little_endian<float>(b, o::COV_VNVU),
+      .cov_vndt = read_little_endian<float>(b, o::COV_VNDT),
+      .cov_vevu = read_little_endian<float>(b, o::COV_VEVU),
+      .cov_vedt = read_little_endian<float>(b, o::COV_VEDT),
+      .cov_vudt = read_little_endian<float>(b, o::COV_VUDT),
+  };
+}
+
+/*
+ * AttEuler, block 5938, mosaic-X5 Reference Guide section 4.2.11.
+ */
+
+namespace att_euler_layout {
+constexpr uint16_t BLOCK_NUMBER = 5938;
+constexpr std::size_t TOW = 0;
+constexpr std::size_t WNC = 4;
+constexpr std::size_t NR_SV = 6;
+constexpr std::size_t ERROR = 7;
+constexpr std::size_t MODE = 8;
+constexpr std::size_t RESERVED = 10;
+constexpr std::size_t HEADING = 12;
+constexpr std::size_t PITCH = 16;
+constexpr std::size_t ROLL = 20;
+constexpr std::size_t PITCH_DOT = 24;
+constexpr std::size_t ROLL_DOT = 28;
+constexpr std::size_t HEADING_DOT = 32;
+constexpr std::size_t MIN_BODY = HEADING_DOT + sizeof(float);
+} // namespace att_euler_layout
+
+/**
+ * Euler attitude (heading, pitch, roll) and their rates from the dual-
+ * antenna baseline. Spec: section 4.2.11, block 5938. Angles in degrees.
+ *
+ * Note that on the mosaic-go-H, heading is the load-bearing output (dual
+ * antenna baseline); roll is only available if a third antenna is fitted
+ * and otherwise sits at DNU.
+ */
+struct AttEuler {
+  uint32_t tow;  // 0.001 s, DNU = DNU_U4
+  uint16_t wnc;  // weeks, DNU = DNU_U2
+  uint8_t nr_sv; // satellites used (average over antennas), DNU = DNU_U1
+  uint8_t error; // bit field, per-baseline error codes
+  uint16_t mode; // attitude mode code (heading/pitch/roll availability)
+  uint16_t reserved;
+  float heading;     // degrees, DNU = DNU_F4
+  float pitch;       // degrees, DNU = DNU_F4
+  float roll;        // degrees, DNU = DNU_F4 (or always DNU if 2-antenna)
+  float pitch_dot;   // degrees/s, DNU = DNU_F4
+  float roll_dot;    // degrees/s, DNU = DNU_F4
+  float heading_dot; // degrees/s, DNU = DNU_F4
+};
+
+/**
+ * @brief Decode an AttEuler block from a parsed Packet.
+ *
+ * @param p The packet whose block_number must equal 5938.
+ *
+ * @return The decoded struct, or nullopt on block-number mismatch or
+ *         short body.
+ */
+inline std::optional<AttEuler> parse_att_euler(const Packet &p) {
+  namespace o = att_euler_layout;
+  if (p.block_number() != o::BLOCK_NUMBER) {
+    return std::nullopt;
+  }
+  if (p.body_length < o::MIN_BODY) {
+    return std::nullopt;
+  }
+  const ByteSpan b = p.body();
+  return AttEuler{
+      .tow = read_little_endian<uint32_t>(b, o::TOW),
+      .wnc = read_little_endian<uint16_t>(b, o::WNC),
+      .nr_sv = b[o::NR_SV],
+      .error = b[o::ERROR],
+      .mode = read_little_endian<uint16_t>(b, o::MODE),
+      .reserved = read_little_endian<uint16_t>(b, o::RESERVED),
+      .heading = read_little_endian<float>(b, o::HEADING),
+      .pitch = read_little_endian<float>(b, o::PITCH),
+      .roll = read_little_endian<float>(b, o::ROLL),
+      .pitch_dot = read_little_endian<float>(b, o::PITCH_DOT),
+      .roll_dot = read_little_endian<float>(b, o::ROLL_DOT),
+      .heading_dot = read_little_endian<float>(b, o::HEADING_DOT),
+  };
+}
+
+/*
+ * AttCovEuler, block 5939, mosaic-X5 Reference Guide section 4.2.11.
+ */
+
+namespace att_cov_euler_layout {
+constexpr uint16_t BLOCK_NUMBER = 5939;
+constexpr std::size_t TOW = 0;
+constexpr std::size_t WNC = 4;
+constexpr std::size_t RESERVED = 6;
+constexpr std::size_t ERROR = 7;
+constexpr std::size_t COV_HEADHEAD = 8;
+constexpr std::size_t COV_PITCHPITCH = 12;
+constexpr std::size_t COV_ROLLROLL = 16;
+constexpr std::size_t COV_HEADPITCH = 20;
+constexpr std::size_t COV_HEADROLL = 24;
+constexpr std::size_t COV_PITCHROLL = 28;
+constexpr std::size_t MIN_BODY = COV_PITCHROLL + sizeof(float);
+} // namespace att_cov_euler_layout
+
+/**
+ * Variance-covariance matrix of the Euler attitude angles.
+ * Spec: section 4.2.11, block 5939. All units are degrees^2.
+ *
+ * Per the spec, off-diagonal covariances are reserved future
+ * functionality and are emitted as DNU_F4 by current firmware.
+ */
+struct AttCovEuler {
+  uint32_t tow; // 0.001 s, DNU = DNU_U4
+  uint16_t wnc; // weeks, DNU = DNU_U2
+  uint8_t reserved;
+  uint8_t error;        // bit field, per-baseline error codes
+  float cov_headhead;   // degrees^2, heading variance, DNU = DNU_F4
+  float cov_pitchpitch; // degrees^2, pitch variance, DNU = DNU_F4
+  float cov_rollroll;   // degrees^2, roll variance, DNU = DNU_F4
+  float cov_headpitch;  // degrees^2, reserved (currently DNU_F4)
+  float cov_headroll;   // degrees^2, reserved (currently DNU_F4)
+  float cov_pitchroll;  // degrees^2, reserved (currently DNU_F4)
+};
+
+/**
+ * @brief Decode an AttCovEuler block from a parsed Packet.
+ *
+ * @param p The packet whose block_number must equal 5939.
+ *
+ * @return The decoded struct, or nullopt on block-number mismatch or
+ *         short body.
+ */
+inline std::optional<AttCovEuler> parse_att_cov_euler(const Packet &p) {
+  namespace o = att_cov_euler_layout;
+  if (p.block_number() != o::BLOCK_NUMBER) {
+    return std::nullopt;
+  }
+  if (p.body_length < o::MIN_BODY) {
+    return std::nullopt;
+  }
+  const ByteSpan b = p.body();
+  return AttCovEuler{
+      .tow = read_little_endian<uint32_t>(b, o::TOW),
+      .wnc = read_little_endian<uint16_t>(b, o::WNC),
+      .reserved = b[o::RESERVED],
+      .error = b[o::ERROR],
+      .cov_headhead = read_little_endian<float>(b, o::COV_HEADHEAD),
+      .cov_pitchpitch = read_little_endian<float>(b, o::COV_PITCHPITCH),
+      .cov_rollroll = read_little_endian<float>(b, o::COV_ROLLROLL),
+      .cov_headpitch = read_little_endian<float>(b, o::COV_HEADPITCH),
+      .cov_headroll = read_little_endian<float>(b, o::COV_HEADROLL),
+      .cov_pitchroll = read_little_endian<float>(b, o::COV_PITCHROLL),
+  };
+}
+
 } // namespace sbf

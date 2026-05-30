@@ -464,6 +464,157 @@ void test_parse_pvt_geodetic_dnu_preserved() {
 }
 
 // ---------------------------------------------------------------------------
+// parse_pos_cov_geodetic() / parse_vel_cov_geodetic() / parse_att_euler() /
+// parse_att_cov_euler()
+// ---------------------------------------------------------------------------
+
+namespace {
+template <typename T>
+sbf::Packet make_packet_with(const std::vector<uint8_t> &body, uint16_t id) {
+  sbf::Packet p;
+  p.id = id;
+  p.body_length = static_cast<uint16_t>(body.size());
+  for (std::size_t i = 0; i < body.size(); i++) {
+    p.data[i] = body[i];
+  }
+  return p;
+}
+} // namespace
+
+/** @brief PosCovGeodetic round-trip: every field comes back bit-exact. */
+void test_parse_pos_cov_geodetic_round_trip() {
+  const sbf::PosCovGeodetic expected{
+      .tow = 111,
+      .wnc = 222,
+      .mode = 0x05,
+      .error = 0,
+      .cov_latlat = 0.01f,
+      .cov_lonlon = 0.02f,
+      .cov_hgthgt = 0.04f,
+      .cov_bb = 1e-6f,
+      .cov_latlon = 0.001f,
+      .cov_lathgt = -0.002f,
+      .cov_latb = 0.003f,
+      .cov_lonhgt = -0.004f,
+      .cov_lonb = 0.005f,
+      .cov_hb = -0.006f,
+  };
+  const auto body = stest::make_pos_cov_geodetic_body(expected);
+  const auto pkt = make_packet_with<sbf::PosCovGeodetic>(
+      body, sbf::pos_cov_geodetic_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_pos_cov_geodetic(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT32(expected.tow, out->tow);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_latlat, out->cov_latlat);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_lonlon, out->cov_lonlon);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_hgthgt, out->cov_hgthgt);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_bb, out->cov_bb);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_latlon, out->cov_latlon);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_lathgt, out->cov_lathgt);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_latb, out->cov_latb);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_lonhgt, out->cov_lonhgt);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_lonb, out->cov_lonb);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_hb, out->cov_hb);
+}
+
+/** @brief VelCovGeodetic round-trip: every field comes back bit-exact. */
+void test_parse_vel_cov_geodetic_round_trip() {
+  const sbf::VelCovGeodetic expected{
+      .tow = 333,
+      .wnc = 444,
+      .mode = 0x05,
+      .error = 0,
+      .cov_vnvn = 0.1f,
+      .cov_veve = 0.2f,
+      .cov_vuvu = 0.4f,
+      .cov_dtdt = 1e-3f,
+      .cov_vnve = 0.01f,
+      .cov_vnvu = -0.02f,
+      .cov_vndt = 0.03f,
+      .cov_vevu = -0.04f,
+      .cov_vedt = 0.05f,
+      .cov_vudt = -0.06f,
+  };
+  const auto body = stest::make_vel_cov_geodetic_body(expected);
+  const auto pkt = make_packet_with<sbf::VelCovGeodetic>(
+      body, sbf::vel_cov_geodetic_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_vel_cov_geodetic(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vnvn, out->cov_vnvn);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_veve, out->cov_veve);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vuvu, out->cov_vuvu);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_dtdt, out->cov_dtdt);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vnve, out->cov_vnve);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vnvu, out->cov_vnvu);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vndt, out->cov_vndt);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vevu, out->cov_vevu);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vedt, out->cov_vedt);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_vudt, out->cov_vudt);
+}
+
+/** @brief AttEuler round-trip: heading/pitch/roll + rates come back exact. */
+void test_parse_att_euler_round_trip() {
+  const sbf::AttEuler expected{
+      .tow = 555,
+      .wnc = 666,
+      .nr_sv = 10,
+      .error = 0,
+      .mode = 4, // heading + pitch + roll, fixed ambiguities
+      .reserved = 0,
+      .heading = 90.5f,
+      .pitch = 2.25f,
+      .roll = -1.5f,
+      .pitch_dot = 0.1f,
+      .roll_dot = -0.2f,
+      .heading_dot = 0.3f,
+  };
+  const auto body = stest::make_att_euler_body(expected);
+  const auto pkt = make_packet_with<sbf::AttEuler>(
+      body, sbf::att_euler_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_att_euler(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT32(expected.tow, out->tow);
+  TEST_ASSERT_EQUAL_UINT16(expected.mode, out->mode);
+  TEST_ASSERT_EQUAL_FLOAT(expected.heading, out->heading);
+  TEST_ASSERT_EQUAL_FLOAT(expected.pitch, out->pitch);
+  TEST_ASSERT_EQUAL_FLOAT(expected.roll, out->roll);
+  TEST_ASSERT_EQUAL_FLOAT(expected.pitch_dot, out->pitch_dot);
+  TEST_ASSERT_EQUAL_FLOAT(expected.roll_dot, out->roll_dot);
+  TEST_ASSERT_EQUAL_FLOAT(expected.heading_dot, out->heading_dot);
+}
+
+/** @brief AttCovEuler round-trip: covariance fields come back exact. */
+void test_parse_att_cov_euler_round_trip() {
+  const sbf::AttCovEuler expected{
+      .tow = 777,
+      .wnc = 888,
+      .reserved = 0,
+      .error = 0,
+      .cov_headhead = 0.5f,
+      .cov_pitchpitch = 0.25f,
+      .cov_rollroll = 0.125f,
+      .cov_headpitch = sbf::DNU_F4,
+      .cov_headroll = sbf::DNU_F4,
+      .cov_pitchroll = sbf::DNU_F4,
+  };
+  const auto body = stest::make_att_cov_euler_body(expected);
+  const auto pkt = make_packet_with<sbf::AttCovEuler>(
+      body, sbf::att_cov_euler_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_att_cov_euler(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_headhead, out->cov_headhead);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_pitchpitch, out->cov_pitchpitch);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cov_rollroll, out->cov_rollroll);
+  TEST_ASSERT_EQUAL_FLOAT(sbf::DNU_F4, out->cov_headpitch);
+  TEST_ASSERT_EQUAL_FLOAT(sbf::DNU_F4, out->cov_headroll);
+  TEST_ASSERT_EQUAL_FLOAT(sbf::DNU_F4, out->cov_pitchroll);
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -492,5 +643,9 @@ int main(int, char **) {
   RUN_TEST(test_parse_pvt_geodetic_short_body_rejected);
   RUN_TEST(test_parse_pvt_geodetic_forward_compat);
   RUN_TEST(test_parse_pvt_geodetic_dnu_preserved);
+  RUN_TEST(test_parse_pos_cov_geodetic_round_trip);
+  RUN_TEST(test_parse_vel_cov_geodetic_round_trip);
+  RUN_TEST(test_parse_att_euler_round_trip);
+  RUN_TEST(test_parse_att_cov_euler_round_trip);
   return UNITY_END();
 }
