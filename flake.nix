@@ -43,19 +43,33 @@
           pio run -e pico -t compiledb 2>/dev/null || true
           [ -f compile_commands.json ] && mv compile_commands.json "$pico"
 
-          # `pio compiledb` only emits entries for src/, so test/*.cpp would be
-          # invisible to clangd. Template entries from the native src/main.cpp
-          # command (identical flags, only filenames differ).
+          # `pio compiledb` only emits an entry for src/main.cpp; test files
+          # need the Unity headers and PIO_UNIT_TESTING define which only
+          # appear in the actual test build command. Capture those by running
+          # the test build in verbose mode (without executing tests) and
+          # parsing the g++ lines that compile each test_main.cpp.
+          # The test .o files are removed first so PIO emits compile commands
+          # even on cached rebuilds.
           if [ -f "$native" ]; then
-            template=$(jq '.[0]' "$native")
-            if [ -n "$template" ] && [ "$template" != "null" ]; then
-              test_entries=$(find test -name "*.cpp" -type f | while read -r f; do
-                printf '%s\n' "$template" | jq --arg f "$f" '
-                  .file = $f
-                  | .command = (.command | sub("src/main\\.cpp"; $f))
-                  | .output = ".pio/build/native/" + ($f | sub("\\.cpp$"; ".o"))
-                '
-              done | jq -s '.')
+            rm -f .pio/build/native/test/*/test_main.o
+            test_log=$(mktemp)
+            pio test -e native --without-uploading --without-testing -vvv \
+              > "$test_log" 2>&1 || true
+            test_entries=$(grep -E '^g\+\+ .* -c .* test/.*test_main\.cpp$' "$test_log" \
+              | while read -r cmd; do
+                  file=$(printf '%s' "$cmd" | awk '{print $NF}')
+                  output=$(printf '%s' "$cmd" \
+                    | grep -oE -- '-o [^ ]+' \
+                    | head -1 \
+                    | awk '{print $2}')
+                  jq -n --arg dir "$PWD" \
+                        --arg file "$file" \
+                        --arg cmd "$cmd" \
+                        --arg output "$output" \
+                    '{directory: $dir, file: $file, command: $cmd, output: $output}'
+                done | jq -s '.')
+            rm -f "$test_log"
+            if [ -n "$test_entries" ] && [ "$test_entries" != "[]" ]; then
               jq --argjson new "$test_entries" '. + $new' "$native" > "$native.tmp"
               mv "$native.tmp" "$native"
             fi
