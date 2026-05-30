@@ -6,12 +6,25 @@
  */
 
 #pragma once
+#include "sbf_blocks.h"
 #include "sbf_protocol.h"
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <vector>
 
 namespace stest {
+
+/**
+ * @brief Append a trivially-copyable value to `v` in little-endian order.
+ *        Used by block-body builders to deposit u16/u32/u64/f32/f64 fields.
+ */
+template <typename T> inline void push_le(std::vector<uint8_t> &v, T x) {
+  const auto bytes = std::bit_cast<std::array<std::byte, sizeof(T)>>(x);
+  for (auto b : bytes) {
+    v.push_back(static_cast<uint8_t>(b));
+  }
+}
 
 namespace detail {
 
@@ -101,6 +114,44 @@ make_block_with_length(uint16_t id, uint16_t length,
   for (uint8_t b : crc_input)
     f.push_back(b);
   return f;
+}
+
+/**
+ * @brief Serialize a PVTGeodetic struct into its on-wire body bytes.
+ *        Field order must mirror sbf::pvt_geodetic_layout exactly; a wrong
+ *        offset on the production side shows up as a swapped field.
+ */
+inline std::vector<uint8_t> make_pvt_geodetic_body(const sbf::PVTGeodetic &v) {
+  std::vector<uint8_t> b;
+  push_le(b, v.tow);
+  push_le(b, v.wnc);
+  b.push_back(v.mode);
+  b.push_back(v.error);
+  push_le(b, v.latitude);
+  push_le(b, v.longitude);
+  push_le(b, v.height);
+  push_le(b, v.undulation);
+  push_le(b, v.v_north);
+  push_le(b, v.v_east);
+  push_le(b, v.v_up);
+  push_le(b, v.cog);
+  push_le(b, v.rx_clk_bias);
+  push_le(b, v.rx_clk_drift);
+  b.push_back(v.time_system);
+  b.push_back(v.datum);
+  b.push_back(v.nr_sv);
+  b.push_back(v.wa_corr_info);
+  push_le(b, v.reference_id);
+  push_le(b, v.mean_corr_age);
+  push_le(b, v.signal_info);
+  b.push_back(v.alert_flag);
+  b.push_back(v.nr_bases);
+  push_le(b, v.ppp_info);
+  push_le(b, v.latency);
+  push_le(b, v.h_accuracy);
+  push_le(b, v.v_accuracy);
+  b.push_back(v.misc);
+  return b;
 }
 
 } // namespace stest

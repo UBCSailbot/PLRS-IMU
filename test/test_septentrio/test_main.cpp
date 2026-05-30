@@ -2,6 +2,7 @@
  * Host (native) unit tests for the SBF protocol core.
  */
 
+#include "sbf_blocks.h"
 #include "sbf_protocol.h"
 #include "test_helpers.h"
 #include <unity.h>
@@ -328,6 +329,141 @@ void test_no_timeout_when_under_threshold() {
 }
 
 // ---------------------------------------------------------------------------
+// parse_pvt_geodetic()
+// ---------------------------------------------------------------------------
+
+namespace {
+sbf::PVTGeodetic make_sentinel_pvt() {
+  return sbf::PVTGeodetic{
+      .tow = 123456789,
+      .wnc = 2345,
+      .mode = 0x01,
+      .error = 0,
+      .latitude = 0.85,
+      .longitude = -2.13,
+      .height = 42.5,
+      .undulation = -17.25f,
+      .v_north = 1.5f,
+      .v_east = -2.5f,
+      .v_up = 0.25f,
+      .cog = 123.75f,
+      .rx_clk_bias = 0.001234,
+      .rx_clk_drift = 0.05f,
+      .time_system = 0,
+      .datum = 0,
+      .nr_sv = 14,
+      .wa_corr_info = 0x03,
+      .reference_id = 4321,
+      .mean_corr_age = 50,
+      .signal_info = 0xCAFEBABE,
+      .alert_flag = 0x01,
+      .nr_bases = 1,
+      .ppp_info = 0x1234,
+      .latency = 100,
+      .h_accuracy = 250,
+      .v_accuracy = 350,
+      .misc = 0x42,
+  };
+}
+
+sbf::Packet make_pvt_packet(const std::vector<uint8_t> &body, uint16_t id) {
+  sbf::Packet p;
+  p.id = id;
+  p.body_length = static_cast<uint16_t>(body.size());
+  for (std::size_t i = 0; i < body.size(); i++) {
+    p.data[i] = body[i];
+  }
+  return p;
+}
+} // namespace
+
+/** @brief Round-trip: every field comes back bit-exact for a known body. */
+void test_parse_pvt_geodetic_round_trip() {
+  const auto expected = make_sentinel_pvt();
+  const auto body = stest::make_pvt_geodetic_body(expected);
+  const auto pkt =
+      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_pvt_geodetic(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT32(expected.tow, out->tow);
+  TEST_ASSERT_EQUAL_UINT16(expected.wnc, out->wnc);
+  TEST_ASSERT_EQUAL_UINT8(expected.mode, out->mode);
+  TEST_ASSERT_EQUAL_UINT8(expected.error, out->error);
+  TEST_ASSERT_EQUAL_DOUBLE(expected.latitude, out->latitude);
+  TEST_ASSERT_EQUAL_DOUBLE(expected.longitude, out->longitude);
+  TEST_ASSERT_EQUAL_DOUBLE(expected.height, out->height);
+  TEST_ASSERT_EQUAL_FLOAT(expected.undulation, out->undulation);
+  TEST_ASSERT_EQUAL_FLOAT(expected.v_north, out->v_north);
+  TEST_ASSERT_EQUAL_FLOAT(expected.v_east, out->v_east);
+  TEST_ASSERT_EQUAL_FLOAT(expected.v_up, out->v_up);
+  TEST_ASSERT_EQUAL_FLOAT(expected.cog, out->cog);
+  TEST_ASSERT_EQUAL_DOUBLE(expected.rx_clk_bias, out->rx_clk_bias);
+  TEST_ASSERT_EQUAL_FLOAT(expected.rx_clk_drift, out->rx_clk_drift);
+  TEST_ASSERT_EQUAL_UINT8(expected.time_system, out->time_system);
+  TEST_ASSERT_EQUAL_UINT8(expected.datum, out->datum);
+  TEST_ASSERT_EQUAL_UINT8(expected.nr_sv, out->nr_sv);
+  TEST_ASSERT_EQUAL_UINT8(expected.wa_corr_info, out->wa_corr_info);
+  TEST_ASSERT_EQUAL_UINT16(expected.reference_id, out->reference_id);
+  TEST_ASSERT_EQUAL_UINT16(expected.mean_corr_age, out->mean_corr_age);
+  TEST_ASSERT_EQUAL_UINT32(expected.signal_info, out->signal_info);
+  TEST_ASSERT_EQUAL_UINT8(expected.alert_flag, out->alert_flag);
+  TEST_ASSERT_EQUAL_UINT8(expected.nr_bases, out->nr_bases);
+  TEST_ASSERT_EQUAL_UINT16(expected.ppp_info, out->ppp_info);
+  TEST_ASSERT_EQUAL_UINT16(expected.latency, out->latency);
+  TEST_ASSERT_EQUAL_UINT16(expected.h_accuracy, out->h_accuracy);
+  TEST_ASSERT_EQUAL_UINT16(expected.v_accuracy, out->v_accuracy);
+  TEST_ASSERT_EQUAL_UINT8(expected.misc, out->misc);
+}
+
+/** @brief Wrong block number returns nullopt even if body shape is right. */
+void test_parse_pvt_geodetic_wrong_block_number() {
+  const auto body = stest::make_pvt_geodetic_body(make_sentinel_pvt());
+  const auto pkt = make_pvt_packet(body, /*EndOfPVT*/ 5921);
+  TEST_ASSERT_FALSE(sbf::parse_pvt_geodetic(pkt).has_value());
+}
+
+/** @brief Body shorter than the Rev 2 layout is rejected. */
+void test_parse_pvt_geodetic_short_body_rejected() {
+  std::vector<uint8_t> body(sbf::pvt_geodetic_layout::MIN_BODY - 1, 0);
+  const auto pkt =
+      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+  TEST_ASSERT_FALSE(sbf::parse_pvt_geodetic(pkt).has_value());
+}
+
+/** @brief Body longer than the Rev 2 layout still parses (forward compat). */
+void test_parse_pvt_geodetic_forward_compat() {
+  auto body = stest::make_pvt_geodetic_body(make_sentinel_pvt());
+  body.insert(body.end(), {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE});
+  const auto pkt =
+      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_pvt_geodetic(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT8(0x42, out->misc); // last Rev 2 field still correct
+}
+
+/** @brief Do-Not-Use sentinels survive parsing unchanged. */
+void test_parse_pvt_geodetic_dnu_preserved() {
+  sbf::PVTGeodetic dnu = make_sentinel_pvt();
+  dnu.tow = sbf::DNU_U4;
+  dnu.wnc = sbf::DNU_U2;
+  dnu.latitude = sbf::DNU_F8;
+  dnu.undulation = sbf::DNU_F4;
+
+  const auto body = stest::make_pvt_geodetic_body(dnu);
+  const auto pkt =
+      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_pvt_geodetic(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT32(sbf::DNU_U4, out->tow);
+  TEST_ASSERT_EQUAL_UINT16(sbf::DNU_U2, out->wnc);
+  TEST_ASSERT_EQUAL_DOUBLE(sbf::DNU_F8, out->latitude);
+  TEST_ASSERT_EQUAL_FLOAT(sbf::DNU_F4, out->undulation);
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -351,5 +487,10 @@ int main(int, char **) {
   RUN_TEST(test_length_exceeds_max_rejected);
   RUN_TEST(test_timeout_drops_stalled_block);
   RUN_TEST(test_no_timeout_when_under_threshold);
+  RUN_TEST(test_parse_pvt_geodetic_round_trip);
+  RUN_TEST(test_parse_pvt_geodetic_wrong_block_number);
+  RUN_TEST(test_parse_pvt_geodetic_short_body_rejected);
+  RUN_TEST(test_parse_pvt_geodetic_forward_compat);
+  RUN_TEST(test_parse_pvt_geodetic_dnu_preserved);
   return UNITY_END();
 }
