@@ -2,6 +2,7 @@
  * Host (native) unit tests for the SBF protocol core.
  */
 
+#include "command.h"
 #include "nmea_protocol.h"
 #include "sbf_blocks.h"
 #include "sbf_protocol.h"
@@ -12,8 +13,11 @@
 #include <vector>
 
 using namespace sbf;
+using septentrio_gnss::Command;
 using septentrio_gnss::Message;
 using septentrio_gnss::Parser;
+using septentrio_gnss::Reply;
+using septentrio_gnss::ReplyKind;
 
 // ---------------------------------------------------------------------------
 // Compile-time regression tests.
@@ -60,6 +64,19 @@ feed_sentence(Parser &p, const std::vector<uint8_t> &frame, Ms t = Ms{0}) {
     auto msg = p.feed(b, t);
     if (msg && std::holds_alternative<nmea::Sentence>(*msg)) {
       result = std::get<nmea::Sentence>(*msg);
+    }
+  }
+  return result;
+}
+
+// Reply counterpart.
+std::optional<Reply> feed_reply(Parser &p, const std::vector<uint8_t> &frame,
+                                Ms t = Ms{0}) {
+  std::optional<Reply> result;
+  for (uint8_t b : frame) {
+    auto msg = p.feed(b, t);
+    if (msg && std::holds_alternative<Reply>(*msg)) {
+      result = std::get<Reply>(*msg);
     }
   }
   return result;
@@ -680,6 +697,77 @@ void test_dollar_mid_nmea_then_sbf_dispatches() {
 }
 
 // ---------------------------------------------------------------------------
+// Command::build()
+// ---------------------------------------------------------------------------
+
+/** @brief Command body is copied verbatim and terminated with '\r'. */
+void test_command_build_appends_cr() {
+  auto cmd = Command::build("setSBFOutput,Stream1,COM1,PVTGeodetic,sec1");
+  TEST_ASSERT_TRUE(cmd.has_value());
+  const auto view = cmd->view();
+  TEST_ASSERT_EQUAL_size_t(43, view.size()); // 42 chars + '\r'
+  TEST_ASSERT_EQUAL_HEX8('\r', view.back());
+}
+
+/** @brief Body that would not leave room for the terminator is rejected. */
+void test_command_build_rejects_oversize() {
+  std::array<char, septentrio_gnss::MAX_COMMAND_LEN> body{};
+  body.fill('x');
+  auto cmd = Command::build(std::string_view(body.data(), body.size()));
+  TEST_ASSERT_FALSE(cmd.has_value());
+}
+
+// ---------------------------------------------------------------------------
+// Wire parser - Reply
+// ---------------------------------------------------------------------------
+
+/** @brief "$R: ...\nCOM1>" parses to Reply{kind=Ok, text=body}. */
+void test_parse_clean_reply_ok() {
+  Parser p;
+  auto frame =
+      stest::make_reply(septentrio_gnss::REPLY_KIND_OK, " setSBFOutput\n  ack");
+  auto r = feed_reply(p, frame);
+  TEST_ASSERT_TRUE(r.has_value());
+  TEST_ASSERT_EQUAL(static_cast<int>(ReplyKind::Ok), static_cast<int>(r->kind));
+  TEST_ASSERT_EQUAL_STRING_LEN(" setSBFOutput\n  ack\n", r->data.data(),
+                               r->length);
+}
+
+/** @brief "$R?" is the Err kind. */
+void test_parse_reply_err() {
+  Parser p;
+  auto frame = stest::make_reply(septentrio_gnss::REPLY_KIND_ERR,
+                                 " SBFOutput: Not authorized!");
+  auto r = feed_reply(p, frame);
+  TEST_ASSERT_TRUE(r.has_value());
+  TEST_ASSERT_EQUAL(static_cast<int>(ReplyKind::Err),
+                    static_cast<int>(r->kind));
+}
+
+/** @brief "$R!" is the Info kind. */
+void test_parse_reply_info() {
+  Parser p;
+  auto frame = stest::make_reply(septentrio_gnss::REPLY_KIND_INFO, " LogIn");
+  auto r = feed_reply(p, frame);
+  TEST_ASSERT_TRUE(r.has_value());
+  TEST_ASSERT_EQUAL(static_cast<int>(ReplyKind::Info),
+                    static_cast<int>(r->kind));
+}
+
+/** @brief "$R" followed by a non-kind char is NMEA, not Reply. */
+void test_dollar_R_without_kind_char_is_nmea() {
+  Parser p;
+  // Build an NMEA sentence whose body starts with 'R'. The first char
+  // after '$R' is 'M' which is not a reply kind, so the wire parser
+  // should fall back to NMEA.
+  auto frame = stest::make_nmea("RMC,123519,A,4807.038,N");
+  auto s = feed_sentence(p, frame);
+  TEST_ASSERT_TRUE(s.has_value());
+  TEST_ASSERT_EQUAL_STRING_LEN("RMC,123519,A,4807.038,N", s->data.data(),
+                               s->length);
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -716,5 +804,11 @@ int main(int, char **) {
   RUN_TEST(test_nmea_bad_checksum_rejected);
   RUN_TEST(test_nmea_then_sbf_interleaved);
   RUN_TEST(test_dollar_mid_nmea_then_sbf_dispatches);
+  RUN_TEST(test_command_build_appends_cr);
+  RUN_TEST(test_command_build_rejects_oversize);
+  RUN_TEST(test_parse_clean_reply_ok);
+  RUN_TEST(test_parse_reply_err);
+  RUN_TEST(test_parse_reply_info);
+  RUN_TEST(test_dollar_R_without_kind_char_is_nmea);
   return UNITY_END();
 }

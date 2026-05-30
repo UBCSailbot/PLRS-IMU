@@ -6,6 +6,7 @@
  */
 
 #pragma once
+#include "command.h"
 #include "nmea_protocol.h"
 #include "sbf_blocks.h"
 #include "sbf_protocol.h"
@@ -235,6 +236,32 @@ inline std::vector<uint8_t> make_nmea(std::string_view body) {
   v.push_back(static_cast<uint8_t>(hex[xor_val & 0x0F]));
   v.push_back(nmea::CR);
   v.push_back(nmea::LF);
+  return v;
+}
+
+/**
+ * @brief Assemble a complete receiver reply: "$R<kind><body>\n<port>>".
+ *
+ * @param kind  '#:#', '#!#' or '#?#' (Ok / Info / Err).
+ * @param body  Bytes between the kind marker and the prompt's leading
+ *              newline (e.g. " setSBFOutput\n  ack").
+ * @param port  Prompt port name (e.g. "COM1"). Must match the
+ *              uppercase-letters-then-digits pattern.
+ */
+inline std::vector<uint8_t> make_reply(char kind, std::string_view body,
+                                       std::string_view port = "COM1") {
+  std::vector<uint8_t> v;
+  v.push_back('$');
+  v.push_back(static_cast<uint8_t>(septentrio_gnss::REPLY_MARKER_CHAR));
+  v.push_back(static_cast<uint8_t>(kind));
+  for (char c : body) {
+    v.push_back(static_cast<uint8_t>(c));
+  }
+  v.push_back('\n');
+  for (char c : port) {
+    v.push_back(static_cast<uint8_t>(c));
+  }
+  v.push_back('>');
   return v;
 }
 

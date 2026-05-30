@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "command.h"
 #include "nmea_protocol.h"
 #include "sbf_protocol.h"
 #include <array>
@@ -20,7 +21,7 @@
 namespace septentrio_gnss {
 
 using Ms = std::chrono::milliseconds;
-using Message = std::variant<sbf::Packet, nmea::Sentence>;
+using Message = std::variant<sbf::Packet, nmea::Sentence, Reply>;
 
 static_assert(sbf::SYNC1 == nmea::START,
               "Wire dispatch assumes SBF SYNC1 == NMEA START");
@@ -46,6 +47,10 @@ public:
     _nmea_length = 0;
     _nmea_running_xor = 0;
     _nmea_expected_xor = 0;
+    _reply_kind = ReplyKind::Ok;
+    _reply_length = 0;
+    _reply_in_prompt_candidate = false;
+    _reply_body_end_before_prompt = 0;
   }
 
   /**
@@ -83,6 +88,8 @@ public:
       } else if (byte == sbf::SYNC1) {
         // $$... stay in AfterDollar; the second '$' might still be the real
         // start
+      } else if (byte == REPLY_MARKER_CHAR) {
+        _state = State::AfterR;
       } else {
         // Start NMEA. The byte is the first body character.
         _nmea_length = 0;
@@ -90,6 +97,27 @@ public:
         return _nmea_consume_body_byte(byte);
       }
       break;
+    case State::AfterR:
+      if (byte == REPLY_KIND_OK || byte == REPLY_KIND_INFO ||
+          byte == REPLY_KIND_ERR) {
+        _reply_kind = (byte == REPLY_KIND_OK)     ? ReplyKind::Ok
+                      : (byte == REPLY_KIND_INFO) ? ReplyKind::Info
+                                                  : ReplyKind::Err;
+        _reply_length = 0;
+        _reply_in_prompt_candidate = false;
+        _reply_body_end_before_prompt = 0;
+        _state = State::ReplyBody;
+      } else {
+        // Not a reply; treat as NMEA starting with 'R' then this byte.
+        _nmea_length = 0;
+        _nmea_running_xor = nmea::XOR_INIT;
+        _nmea_running_xor ^= static_cast<uint8_t>(REPLY_MARKER_CHAR);
+        _nmea_buffer[_nmea_length++] = REPLY_MARKER_CHAR;
+        return _nmea_consume_body_byte(byte);
+      }
+      break;
+    case State::ReplyBody:
+      return _reply_consume_body_byte(byte);
 
     /*
      * SBF states.
@@ -157,6 +185,7 @@ private:
   enum class State : uint8_t {
     Idle,
     AfterDollar,
+    AfterR,
     SbfCrcLo,
     SbfCrcHi,
     SbfIdLo,
@@ -167,6 +196,7 @@ private:
     NmeaBody,
     NmeaChecksumHi,
     NmeaChecksumLo,
+    ReplyBody,
   };
 
   static constexpr std::size_t SBF_ID_OFFSET = 0;
@@ -255,6 +285,59 @@ private:
     return Message{s};
   }
 
+  static constexpr bool is_prompt_char(uint8_t c) {
+    return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+  }
+
+  std::optional<Message> _reply_consume_body_byte(uint8_t byte) {
+    // The prompt terminator is "\n<PORT>>" where <PORT> is letters/digits.
+    // After a '\n', enter prompt-candidate mode and tentatively collect
+    // prompt chars; if '>' arrives we strip them and deliver. Anything
+    // non-prompt cancels the candidate.
+    if (byte == '\n') {
+      if (_reply_length >= MAX_REPLY_BODY) {
+        reset();
+        return std::nullopt;
+      }
+      _reply_data_buffer[_reply_length++] = static_cast<char>(byte);
+      _reply_in_prompt_candidate = true;
+      _reply_body_end_before_prompt = _reply_length;
+      return std::nullopt;
+    }
+    if (_reply_in_prompt_candidate) {
+      if (byte == '>' && _reply_length > _reply_body_end_before_prompt) {
+        _reply_length = _reply_body_end_before_prompt;
+        return _reply_finish();
+      }
+      if (is_prompt_char(byte)) {
+        if (_reply_length >= MAX_REPLY_BODY) {
+          reset();
+          return std::nullopt;
+        }
+        _reply_data_buffer[_reply_length++] = static_cast<char>(byte);
+        return std::nullopt;
+      }
+      _reply_in_prompt_candidate = false;
+    }
+    if (_reply_length >= MAX_REPLY_BODY) {
+      reset();
+      return std::nullopt;
+    }
+    _reply_data_buffer[_reply_length++] = static_cast<char>(byte);
+    return std::nullopt;
+  }
+
+  std::optional<Message> _reply_finish() {
+    Reply r;
+    r.kind = _reply_kind;
+    for (std::size_t i = 0; i < _reply_length; i++) {
+      r.data[i] = _reply_data_buffer[i];
+    }
+    r.length = _reply_length;
+    reset();
+    return Message{r};
+  }
+
   State _state = State::Idle;
   Ms _last_advance{0};
 
@@ -271,6 +354,13 @@ private:
   uint8_t _nmea_running_xor = 0;
   uint8_t _nmea_expected_xor = 0;
   std::array<char, nmea::MAX_BODY> _nmea_buffer{};
+
+  // Reply state.
+  ReplyKind _reply_kind = ReplyKind::Ok;
+  std::size_t _reply_length = 0;
+  bool _reply_in_prompt_candidate = false;
+  std::size_t _reply_body_end_before_prompt = 0;
+  std::array<char, MAX_REPLY_BODY> _reply_data_buffer{};
 };
 
 } // namespace septentrio_gnss
