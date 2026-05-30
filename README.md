@@ -24,36 +24,12 @@ nix develop
 
 ### Linux
 
-```bash
-sudo apt-get install -y clang-format g++ make python3-pip
-pip install platformio
-```
-
-Ubuntu 22.04's default `g++` is version 11, which lacks `std::expected`. Install
-`g++-12` or later.
-
-### macOS
+Install Nix using the Determinate installer:
 
 ```bash
-brew install llvm platformio
-export PATH="$(brew --prefix llvm)/bin:$PATH"
-```
-
-### Windows
-
-The recommended path is WSL2 with Ubuntu 24.04, then follow the Linux
-instructions above. Install WSL2 from PowerShell:
-
-```powershell
-wsl --install -d Ubuntu-24.04
-```
-
-Once in WSL execute the following to download and configure nix:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install # Download nix for use in ubuntu
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
 mkdir -p ~/.config/nix/
-echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf # Append flakes to your config
+echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 ```
 
 Then install direnv through Nix (the apt package is too old to support `use flake`):
@@ -61,10 +37,40 @@ Then install direnv through Nix (the apt package is too old to support `use flak
 ```bash
 nix profile add nixpkgs#direnv
 echo '# Direnv shell hook'
-echo 'eval "$(direnv hook bash)"' >> ~/.bashrc # Install shell hook for direnv
-exec bash # Reload your shell variables
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
+exec bash
 direnv allow
 ```
+
+### macOS
+
+Install Nix using the Determinate installer:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+mkdir -p ~/.config/nix/
+echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+```
+
+Then install direnv through Nix:
+
+```bash
+nix profile add nixpkgs#direnv
+echo '# Direnv shell hook'
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
+exec zsh
+direnv allow
+```
+
+### Windows
+
+The recommended path is WSL2 with Ubuntu 24.04. Install WSL2 from PowerShell:
+
+```powershell
+wsl --install -d Ubuntu-24.04
+```
+
+Once in WSL, follow the [Linux](#linux) instructions above.
 
 For flashing, the RP2040 needs to be forwarded from Windows into WSL using
 [usbipd-win](https://github.com/dorssel/usbipd-win):
@@ -89,9 +95,21 @@ git config --global core.autocrlf false # Very important you don't miss this on 
 
 #### Configure the gh Helper (For Logging Into GitHub):
 
+Linux:
+
 ```bash
-sudo apt update
-sudo apt install gh
+sudo apt update && sudo apt install gh
+```
+
+macOS:
+
+```bash
+brew install gh
+```
+
+Then authenticate:
+
+```bash
 gh auth login
 ```
 
