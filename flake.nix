@@ -26,19 +26,44 @@
           python3
         ];
         shellHook = ''
-          # Generate compile databases for both environments.
-          # pico build may download the ARM toolchain on first run (~100 MB, cached
-          # in ~/.platformio afterward). Failures are non-fatal so a cold machine
-          # without network still gets at least the native database.
+          # Generate compile databases for both environments. `pio compiledb`
+          # overwrites the project-root compile_commands.json on each run, so
+          # capture each env's output before invoking the next.
+          # pico build may download the ARM toolchain on first run (~100 MB,
+          # cached afterward). Failures are non-fatal so a cold machine without
+          # network still gets at least the native database.
+          mkdir -p .pio
+          native=".pio/compile_commands.native.json"
+          pico=".pio/compile_commands.pico.json"
+          rm -f "$native" "$pico" compile_commands.json
+
           pio run -e native -t compiledb 2>/dev/null || true
-          pio run -e pico   -t compiledb 2>/dev/null || true
+          [ -f compile_commands.json ] && mv compile_commands.json "$native"
+
+          pio run -e pico -t compiledb 2>/dev/null || true
+          [ -f compile_commands.json ] && mv compile_commands.json "$pico"
+
+          # `pio compiledb` only emits entries for src/, so test/*.cpp would be
+          # invisible to clangd. Template entries from the native src/main.cpp
+          # command (identical flags, only filenames differ).
+          if [ -f "$native" ]; then
+            template=$(jq '.[0]' "$native")
+            if [ -n "$template" ] && [ "$template" != "null" ]; then
+              test_entries=$(find test -name "*.cpp" -type f | while read -r f; do
+                printf '%s\n' "$template" | jq --arg f "$f" '
+                  .file = $f
+                  | .command = (.command | sub("src/main\\.cpp"; $f))
+                  | .output = ".pio/build/native/" + ($f | sub("\\.cpp$"; ".o"))
+                '
+              done | jq -s '.')
+              jq --argjson new "$test_entries" '. + $new' "$native" > "$native.tmp"
+              mv "$native.tmp" "$native"
+            fi
+          fi
 
           # Merge both databases into the project root so clangd gets one view
           # covering native test files (Unity flags) and firmware files (Arduino
-          # headers, ARM defines). clangd searches upward for compile_commands.json
-          # and uses the nearest match per translation unit.
-          native=".pio/build/native/compile_commands.json"
-          pico=".pio/build/pico/compile_commands.json"
+          # headers, ARM defines). clangd uses the entry matching each TU.
           if [ -f "$native" ] && [ -f "$pico" ]; then
             jq -s '.[0] + .[1]' "$native" "$pico" > compile_commands.json
           elif [ -f "$pico" ]; then
