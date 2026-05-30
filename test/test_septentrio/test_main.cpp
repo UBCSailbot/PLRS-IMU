@@ -366,7 +366,7 @@ sbf::PVTGeodetic make_sentinel_pvt() {
   };
 }
 
-sbf::Packet make_pvt_packet(const std::vector<uint8_t> &body, uint16_t id) {
+sbf::Packet make_packet(const std::vector<uint8_t> &body, uint16_t id) {
   sbf::Packet p;
   p.id = id;
   p.body_length = static_cast<uint16_t>(body.size());
@@ -381,8 +381,7 @@ sbf::Packet make_pvt_packet(const std::vector<uint8_t> &body, uint16_t id) {
 void test_parse_pvt_geodetic_round_trip() {
   const auto expected = make_sentinel_pvt();
   const auto body = stest::make_pvt_geodetic_body(expected);
-  const auto pkt =
-      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+  const auto pkt = make_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_pvt_geodetic(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -419,15 +418,14 @@ void test_parse_pvt_geodetic_round_trip() {
 /** @brief Wrong block number returns nullopt even if body shape is right. */
 void test_parse_pvt_geodetic_wrong_block_number() {
   const auto body = stest::make_pvt_geodetic_body(make_sentinel_pvt());
-  const auto pkt = make_pvt_packet(body, /*EndOfPVT*/ 5921);
+  const auto pkt = make_packet(body, /*EndOfPVT*/ 5921);
   TEST_ASSERT_FALSE(sbf::parse_pvt_geodetic(pkt).has_value());
 }
 
 /** @brief Body shorter than the Rev 2 layout is rejected. */
 void test_parse_pvt_geodetic_short_body_rejected() {
   std::vector<uint8_t> body(sbf::pvt_geodetic_layout::MIN_BODY - 1, 0);
-  const auto pkt =
-      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+  const auto pkt = make_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
   TEST_ASSERT_FALSE(sbf::parse_pvt_geodetic(pkt).has_value());
 }
 
@@ -435,8 +433,7 @@ void test_parse_pvt_geodetic_short_body_rejected() {
 void test_parse_pvt_geodetic_forward_compat() {
   auto body = stest::make_pvt_geodetic_body(make_sentinel_pvt());
   body.insert(body.end(), {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE});
-  const auto pkt =
-      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+  const auto pkt = make_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_pvt_geodetic(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -452,8 +449,7 @@ void test_parse_pvt_geodetic_dnu_preserved() {
   dnu.undulation = sbf::DNU_F4;
 
   const auto body = stest::make_pvt_geodetic_body(dnu);
-  const auto pkt =
-      make_pvt_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+  const auto pkt = make_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_pvt_geodetic(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -467,19 +463,6 @@ void test_parse_pvt_geodetic_dnu_preserved() {
 // parse_pos_cov_geodetic() / parse_vel_cov_geodetic() / parse_att_euler() /
 // parse_att_cov_euler()
 // ---------------------------------------------------------------------------
-
-namespace {
-template <typename T>
-sbf::Packet make_packet_with(const std::vector<uint8_t> &body, uint16_t id) {
-  sbf::Packet p;
-  p.id = id;
-  p.body_length = static_cast<uint16_t>(body.size());
-  for (std::size_t i = 0; i < body.size(); i++) {
-    p.data[i] = body[i];
-  }
-  return p;
-}
-} // namespace
 
 /** @brief PosCovGeodetic round-trip: every field comes back bit-exact. */
 void test_parse_pos_cov_geodetic_round_trip() {
@@ -500,8 +483,8 @@ void test_parse_pos_cov_geodetic_round_trip() {
       .cov_hb = -0.006f,
   };
   const auto body = stest::make_pos_cov_geodetic_body(expected);
-  const auto pkt = make_packet_with<sbf::PosCovGeodetic>(
-      body, sbf::pos_cov_geodetic_layout::BLOCK_NUMBER);
+  const auto pkt =
+      make_packet(body, sbf::pos_cov_geodetic_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_pos_cov_geodetic(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -537,8 +520,8 @@ void test_parse_vel_cov_geodetic_round_trip() {
       .cov_vudt = -0.06f,
   };
   const auto body = stest::make_vel_cov_geodetic_body(expected);
-  const auto pkt = make_packet_with<sbf::VelCovGeodetic>(
-      body, sbf::vel_cov_geodetic_layout::BLOCK_NUMBER);
+  const auto pkt =
+      make_packet(body, sbf::vel_cov_geodetic_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_vel_cov_geodetic(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -571,8 +554,7 @@ void test_parse_att_euler_round_trip() {
       .heading_dot = 0.3f,
   };
   const auto body = stest::make_att_euler_body(expected);
-  const auto pkt = make_packet_with<sbf::AttEuler>(
-      body, sbf::att_euler_layout::BLOCK_NUMBER);
+  const auto pkt = make_packet(body, sbf::att_euler_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_att_euler(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -601,8 +583,7 @@ void test_parse_att_cov_euler_round_trip() {
       .cov_pitchroll = sbf::DNU_F4,
   };
   const auto body = stest::make_att_cov_euler_body(expected);
-  const auto pkt = make_packet_with<sbf::AttCovEuler>(
-      body, sbf::att_cov_euler_layout::BLOCK_NUMBER);
+  const auto pkt = make_packet(body, sbf::att_cov_euler_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_att_cov_euler(pkt);
   TEST_ASSERT_TRUE(out.has_value());
