@@ -56,11 +56,10 @@ mkdir -p ~/.config/nix/
 echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf # Append flakes to your config
 ```
 
-Then update your packages and install direnv with the following:
+Then install direnv through Nix (the apt package is too old to support `use flake`):
 
 ```bash
-sudo apt update
-sudo apt install direnv
+nix profile install nixpkgs#direnv
 echo '# Direnv shell hook'
 echo 'eval "$(direnv hook bash)"' >> ~/.bashrc # Install shell hook for direnv
 exec bash # Reload your shell variables
