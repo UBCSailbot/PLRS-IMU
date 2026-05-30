@@ -2,13 +2,18 @@
  * Host (native) unit tests for the SBF protocol core.
  */
 
+#include "nmea_protocol.h"
 #include "sbf_blocks.h"
 #include "sbf_protocol.h"
 #include "test_helpers.h"
+#include "wire_parser.h"
 #include <unity.h>
+#include <variant>
 #include <vector>
 
 using namespace sbf;
+using septentrio_gnss::Message;
+using septentrio_gnss::Parser;
 
 // ---------------------------------------------------------------------------
 // Compile-time regression tests.
@@ -33,14 +38,29 @@ static_assert(read_little_endian<uint32_t>({kLeBytes.data(), kLeBytes.size()},
 static_assert(read_little_endian<uint64_t>({kLeBytes.data(), kLeBytes.size()},
                                            0) == 0x8765432112345678ULL);
 
-// Feed all bytes from `frame` into the parser at a fixed timestamp. Returns
-// the result of the final byte (the only one that can carry a complete
-// packet).
+// Feed all bytes into the parser at a fixed timestamp; return the SBF
+// Packet variant if the last byte completed one, else nullopt.
 std::optional<Packet> feed_block(Parser &p, const std::vector<uint8_t> &frame,
                                  Ms t = Ms{0}) {
   std::optional<Packet> result;
   for (uint8_t b : frame) {
-    result = p.feed(b, t);
+    auto msg = p.feed(b, t);
+    if (msg && std::holds_alternative<Packet>(*msg)) {
+      result = std::get<Packet>(*msg);
+    }
+  }
+  return result;
+}
+
+// NMEA counterpart.
+std::optional<nmea::Sentence>
+feed_sentence(Parser &p, const std::vector<uint8_t> &frame, Ms t = Ms{0}) {
+  std::optional<nmea::Sentence> result;
+  for (uint8_t b : frame) {
+    auto msg = p.feed(b, t);
+    if (msg && std::holds_alternative<nmea::Sentence>(*msg)) {
+      result = std::get<nmea::Sentence>(*msg);
+    }
   }
   return result;
 }
@@ -177,13 +197,8 @@ void test_back_to_back_blocks() {
   auto first = stest::make_block(5921, {0x01, 0x02, 0x03, 0x04});
   auto second = stest::make_block(5938, {0x05, 0x06, 0x07, 0x08});
 
-  std::optional<Packet> a, b;
-  for (uint8_t byte : first) {
-    a = p.feed(byte, Ms{0});
-  }
-  for (uint8_t byte : second) {
-    b = p.feed(byte, Ms{0});
-  }
+  auto a = feed_block(p, first);
+  auto b = feed_block(p, second);
 
   TEST_ASSERT_TRUE(a.has_value());
   TEST_ASSERT_EQUAL_UINT16(5921, a->id);
@@ -208,12 +223,13 @@ void test_dollar_at_in_body_does_not_false_trigger() {
 // Parser - resync paths
 // ---------------------------------------------------------------------------
 
-/** @brief SYNC1 followed by non-SYNC2 resets and recovers on next frame. */
-void test_sync1_then_non_sync2_resyncs() {
+/** @brief Garbage starting with '$' (which the wire parser interprets as
+ *         in-progress NMEA) does not block a subsequent valid SBF block
+ *         from parsing. */
+void test_garbage_then_sbf_recovers() {
   Parser p;
   const std::vector<uint8_t> garbage = {SYNC1, 'X', 'Y', 'Z'};
   feed_block(p, garbage);
-  TEST_ASSERT_FALSE(p.mid_frame());
 
   auto frame = stest::make_block(5921, {0xAA, 0xBB, 0xCC, 0xDD});
   auto pkt = feed_block(p, frame);
@@ -306,10 +322,7 @@ void test_timeout_drops_stalled_block() {
   // After the timeout, the parser resets before processing the next byte.
   // Feed a fresh frame starting from the stall instant.
   auto fresh = stest::make_block(5938, {0xAA, 0xBB, 0xCC, 0xDD});
-  std::optional<Packet> pkt;
-  for (std::size_t i = 0; i < fresh.size(); i++) {
-    pkt = p.feed(fresh[i], Parser::FRAME_TIMEOUT + Ms{1});
-  }
+  auto pkt = feed_block(p, fresh, Parser::FRAME_TIMEOUT + Ms{1});
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT_EQUAL_UINT16(5938, pkt->id);
 }
@@ -322,7 +335,10 @@ void test_no_timeout_when_under_threshold() {
   // Feed each byte 100ms apart (< FRAME_TIMEOUT of 250ms).
   std::optional<Packet> pkt;
   for (std::size_t i = 0; i < frame.size(); i++) {
-    pkt = p.feed(frame[i], Ms{100} * static_cast<long>(i));
+    auto m = p.feed(frame[i], Ms{100} * static_cast<long>(i));
+    if (m && std::holds_alternative<Packet>(*m)) {
+      pkt = std::get<Packet>(*m);
+    }
   }
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT_EQUAL_UINT16(5921, pkt->id);
@@ -596,6 +612,74 @@ void test_parse_att_cov_euler_round_trip() {
 }
 
 // ---------------------------------------------------------------------------
+// NMEA + wire dispatch
+// ---------------------------------------------------------------------------
+
+/** @brief Clean NMEA sentence parses to a Sentence with the right body. */
+void test_parse_clean_nmea() {
+  Parser p;
+  auto frame = stest::make_nmea("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9");
+  auto s = feed_sentence(p, frame);
+  TEST_ASSERT_TRUE(s.has_value());
+  TEST_ASSERT_EQUAL_STRING_LEN("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9",
+                               s->data.data(), s->length);
+}
+
+/** @brief Wrong NMEA checksum returns nullopt; parser resyncs. */
+void test_nmea_bad_checksum_rejected() {
+  Parser p;
+  auto bad = stest::make_nmea("GPGGA,foo");
+  // The two checksum chars are at indices size-4 and size-3 (before CR LF).
+  bad[bad.size() - 4] ^= 0x01;
+  auto s = feed_sentence(p, bad);
+  TEST_ASSERT_FALSE(s.has_value());
+
+  auto good = stest::make_nmea("GPGGA,foo");
+  auto s2 = feed_sentence(p, good);
+  TEST_ASSERT_TRUE(s2.has_value());
+}
+
+/** @brief NMEA followed by SBF on the same byte stream: both decode as
+ *         their own variant alternative. */
+void test_nmea_then_sbf_interleaved() {
+  Parser p;
+  auto nmea_frame = stest::make_nmea("GPGGA,42");
+  auto sbf_frame = stest::make_block(5921, {0xAA, 0xBB, 0xCC, 0xDD});
+
+  std::optional<nmea::Sentence> nmea_out;
+  std::optional<Packet> sbf_out;
+  for (uint8_t b : nmea_frame) {
+    auto m = p.feed(b, Ms{0});
+    if (m && std::holds_alternative<nmea::Sentence>(*m)) {
+      nmea_out = std::get<nmea::Sentence>(*m);
+    }
+  }
+  for (uint8_t b : sbf_frame) {
+    auto m = p.feed(b, Ms{0});
+    if (m && std::holds_alternative<Packet>(*m)) {
+      sbf_out = std::get<Packet>(*m);
+    }
+  }
+  TEST_ASSERT_TRUE(nmea_out.has_value());
+  TEST_ASSERT_TRUE(sbf_out.has_value());
+  TEST_ASSERT_EQUAL_UINT16(5921, sbf_out->id);
+}
+
+/** @brief Stray '$' mid NMEA line resets dispatch; a following '$@' starts
+ *         a fresh SBF block instead of being consumed as NMEA body bytes. */
+void test_dollar_mid_nmea_then_sbf_dispatches() {
+  Parser p;
+  // Begin a NMEA line (no terminator), then drop a clean SBF block.
+  std::vector<uint8_t> stream = {'$', 'G', 'P', 'G', 'G', 'A'};
+  auto sbf_frame = stest::make_block(5938, {0x10, 0x20, 0x30, 0x40});
+  stream.insert(stream.end(), sbf_frame.begin(), sbf_frame.end());
+
+  auto pkt = feed_block(p, stream);
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT_EQUAL_UINT16(5938, pkt->id);
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -611,7 +695,7 @@ int main(int, char **) {
   RUN_TEST(test_parse_zero_body_block);
   RUN_TEST(test_back_to_back_blocks);
   RUN_TEST(test_dollar_at_in_body_does_not_false_trigger);
-  RUN_TEST(test_sync1_then_non_sync2_resyncs);
+  RUN_TEST(test_garbage_then_sbf_recovers);
   RUN_TEST(test_repeated_sync1_then_sync2_starts_frame);
   RUN_TEST(test_bad_crc_rejected_then_resyncs);
   RUN_TEST(test_length_not_multiple_of_4_rejected);
@@ -628,5 +712,9 @@ int main(int, char **) {
   RUN_TEST(test_parse_vel_cov_geodetic_round_trip);
   RUN_TEST(test_parse_att_euler_round_trip);
   RUN_TEST(test_parse_att_cov_euler_round_trip);
+  RUN_TEST(test_parse_clean_nmea);
+  RUN_TEST(test_nmea_bad_checksum_rejected);
+  RUN_TEST(test_nmea_then_sbf_interleaved);
+  RUN_TEST(test_dollar_mid_nmea_then_sbf_dispatches);
   return UNITY_END();
 }

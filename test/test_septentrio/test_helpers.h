@@ -6,11 +6,13 @@
  */
 
 #pragma once
+#include "nmea_protocol.h"
 #include "sbf_blocks.h"
 #include "sbf_protocol.h"
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 namespace stest {
@@ -208,6 +210,32 @@ inline std::vector<uint8_t> make_att_cov_euler_body(const sbf::AttCovEuler &v) {
   push_le(b, v.cov_headroll);
   push_le(b, v.cov_pitchroll);
   return b;
+}
+
+/**
+ * @brief Assemble a complete NMEA sentence: '$' + body + '*' + hex checksum
+ *        + CR + LF. The checksum is XOR of body bytes.
+ *
+ * @param body  Characters between '$' and '*' (e.g. "GPGGA,123,...").
+ */
+inline std::vector<uint8_t> make_nmea(std::string_view body) {
+  uint8_t xor_val = 0;
+  for (char c : body) {
+    xor_val ^= static_cast<uint8_t>(c);
+  }
+  const char *hex = "0123456789ABCDEF";
+
+  std::vector<uint8_t> v;
+  v.push_back(nmea::START);
+  for (char c : body) {
+    v.push_back(static_cast<uint8_t>(c));
+  }
+  v.push_back(nmea::CHECKSUM_DELIMITER);
+  v.push_back(static_cast<uint8_t>(hex[xor_val >> nmea::NIBBLE_BITS]));
+  v.push_back(static_cast<uint8_t>(hex[xor_val & 0x0F]));
+  v.push_back(nmea::CR);
+  v.push_back(nmea::LF);
+  return v;
 }
 
 } // namespace stest
