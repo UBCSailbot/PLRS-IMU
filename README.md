@@ -48,6 +48,25 @@ instructions above. Install WSL2 from PowerShell:
 wsl --install -d Ubuntu-24.04
 ```
 
+Once in WSL execute the following to download and configure nix:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install # Download nix for use in ubuntu
+mkdir -p ~/.config/nix/
+echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf # Append flakes to your config
+```
+
+Then update your packages and install direnv with the following:
+
+```bash
+sudo apt update
+sudo apt install direnv
+echo '# Direnv shell hook'
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc # Install shell hook for direnv
+exec bash # Reload your shell variables
+direnv allow
+```
+
 For flashing, the RP2040 needs to be forwarded from Windows into WSL using
 [usbipd-win](https://github.com/dorssel/usbipd-win):
 
@@ -55,6 +74,26 @@ For flashing, the RP2040 needs to be forwarded from Windows into WSL using
 usbipd list                  # find the RP2040 bus ID
 usbipd bind --busid <id>
 usbipd attach --wsl --busid <id>
+```
+
+### Set up Git and GitHub
+
+Skip this section if you've already configured git and your GitHub credentials.
+
+#### Configure Git:
+
+```bash
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+git config --global core.autocrlf false # Very important you don't miss this on WSL!
+```
+
+#### Configure the gh Helper (For Logging Into GitHub):
+
+```bash
+sudo apt update
+sudo apt install gh
+gh auth login
 ```
 
 ### Build, test, and flash
