@@ -17,6 +17,13 @@ minimum-version = "0.10"
 build-dir = "build/{wheel_tag}"
 wheel.packages = ["plrs_sim"]
 
+[tool.uv]
+# Use the Python provided by the nix devshell, not a uv-downloaded binary.
+# uv's prebuilt CPythons link against the host's libstdc++, which is not
+# on the nix shell's library path and breaks numpy import inside CI.
+python-preference = "only-system"
+python-downloads = "never"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

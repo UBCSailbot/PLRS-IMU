@@ -29,6 +29,15 @@
           ruff
           uv
         ];
+        # PyPI wheels (numpy and the rest of the SciPy stack) link against
+        # libstdc++ at the host's standard path, which on Nix only lives in
+        # the store. Expose the needed libs via LD_LIBRARY_PATH so import
+        # works inside uv-managed venvs. (FHS is the alternative, but
+        # `nix develop -c` doesn't enter its namespace.)
+        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+          pkgs.stdenv.cc.cc.lib
+          pkgs.zlib
+        ];
         shellHook = ''
           # Generate compile databases for both environments. `pio compiledb`
           # overwrites the project-root compile_commands.json on each run, so
@@ -106,3 +115,4 @@ EOF
       };
     };
 }
+
