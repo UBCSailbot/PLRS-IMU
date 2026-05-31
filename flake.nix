@@ -24,6 +24,7 @@
           jq
           platformio
           python3
+          uv
         ];
         shellHook = ''
           # Generate compile databases for both environments. `pio compiledb`

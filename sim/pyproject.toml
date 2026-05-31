@@ -1,0 +1,21 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.2"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "plrs-sim"
+version = "0.1.0"
+description = "Python simulation harness for the Polaris IMU EKF"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "numpy>=2"]
+
+[tool.scikit-build]
+minimum-version = "0.10"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["plrs_sim"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
