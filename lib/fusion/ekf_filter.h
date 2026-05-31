@@ -40,7 +40,8 @@ constexpr float RAD_TO_DEG = 180.0f / std::numbers::pi_v<float>;
  * with no contribution from x[IDX_GYRO_BIAS]. Constant across all updates.
  */
 constexpr float H_GNSS_HEADING[N_MEAS * N_STATE] = {
-    1.0f, 0.0f,
+    1.0f,
+    0.0f,
 };
 
 class TinyEkfFilter {
@@ -61,9 +62,7 @@ public:
    * @param cfg. Filter tuning parameters.
    */
   explicit TinyEkfFilter(Config cfg)
-      : _cfg(cfg),
-        _Q{cfg.q_heading_deg2, 0.0f,
-           0.0f,                cfg.q_bias_deg2_s2} {
+      : _cfg(cfg), _Q{cfg.q_heading_deg2, 0.0f, 0.0f, cfg.q_bias_deg2_s2} {
     const float pdiag[N_STATE] = {
         _cfg.p0_heading_deg2,
         _cfg.p0_bias_deg2_s2,
@@ -85,21 +84,22 @@ public:
       return;
     }
 
-    const float dt_s = std::chrono::duration<float>(
-                           imu.timestamp - _last_predict_time)
-                           .count();
+    const float dt_s =
+        std::chrono::duration<float>(imu.timestamp - _last_predict_time)
+            .count();
     _last_predict_time = imu.timestamp;
 
     const float gyro_z_deg_s = imu.rate_of_turn_z_rad_s * RAD_TO_DEG;
 
     const float fx[N_STATE] = {
-        _ekf.x[IDX_HEADING] +
-            (gyro_z_deg_s - _ekf.x[IDX_GYRO_BIAS]) * dt_s,
+        _ekf.x[IDX_HEADING] + (gyro_z_deg_s - _ekf.x[IDX_GYRO_BIAS]) * dt_s,
         _ekf.x[IDX_GYRO_BIAS],
     };
     const float F[N_STATE * N_STATE] = {
-        1.0f, -dt_s,
-        0.0f, 1.0f,
+        1.0f,
+        -dt_s,
+        0.0f,
+        1.0f,
     };
 
     ekf_predict(&_ekf, fx, F, _Q);
@@ -141,9 +141,8 @@ public:
     return FusionOutput{
         .heading_deg = _ekf.x[IDX_HEADING],
         .heading_variance_deg2 =
-            _initialized
-                ? _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING]
-                : FLT_MAX,
+            _initialized ? _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING]
+                         : FLT_MAX,
         .timestamp = _last_predict_time,
     };
   }
