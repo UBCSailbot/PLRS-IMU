@@ -37,6 +37,12 @@
           pico=".pio/compile_commands.pico.json"
           rm -f "$native" "$pico" compile_commands.json
 
+          # Pre-install lib_deps so their include paths appear in the compile
+          # databases. pio run -t compiledb also installs them, but doing it
+          # here makes failures visible independently of the compiledb step.
+          pio pkg install -e native 2>/dev/null || true
+          pio pkg install -e pico 2>/dev/null || true
+
           pio run -e native -t compiledb 2>/dev/null || true
           [ -f compile_commands.json ] && mv compile_commands.json "$native"
 
