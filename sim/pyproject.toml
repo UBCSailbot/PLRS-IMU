@@ -1,0 +1,36 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.2"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "plrs-sim"
+version = "0.1.0"
+description = "Python simulation harness for the Polaris IMU EKF"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "numpy>=2"]
+
+[tool.scikit-build]
+minimum-version = "0.10"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["plrs_sim"]
+
+[tool.uv]
+# Use the Python provided by the nix devshell, not a uv-downloaded binary.
+# uv's prebuilt CPythons link against the host's libstdc++, which is not
+# on the nix shell's library path and breaks numpy import inside CI.
+python-preference = "only-system"
+python-downloads = "never"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = [".venv", "build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]

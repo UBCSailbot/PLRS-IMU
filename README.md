@@ -164,6 +164,30 @@ time constraints).
 [TinyEKF](https://github.com/simondlevy/TinyEKF): Lightweight C/C++ Extended
 Kalman Filter.
 
+## Tuning
+
+See [docs/tuning.md](docs/tuning.md) for theory, tradeoffs, and the
+record-and-replay workflow. Summary:
+
+The filter has four parameters in `TinyEkfFilter::Config`.
+
+`q_heading_deg2` and `q_bias_deg2_s2` are the load-bearing knobs. Derive
+starting values from the MTi-3 datasheet rather than guessing:
+
+- `q_heading` — gyro noise density (deg/s/√Hz) squared, scaled by dt
+- `q_bias` — in-run bias stability (deg/s, from the Allan deviation plot) squared
+
+`p0_heading_deg2` and `p0_bias_deg2_s2` only affect convergence from startup;
+set them large.
+
+The efficient tuning workflow: capture a session with the serial logger
+(milestone 1), replay it through the Python sim (milestone 2) with different
+configs, then flash once.
+
+To diagnose a live filter, log the innovation (`gnss_heading - filter_heading`).
+Zero-mean innovations indicate a well-tuned filter; persistently large
+innovations mean Q is too small.
+
 ## Hardware
 
 MCU:

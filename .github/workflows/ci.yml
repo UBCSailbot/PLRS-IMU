@@ -5,7 +5,7 @@ on:
 
 jobs:
   format:
-    name: clang-format
+    name: clang-format + ruff
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -15,11 +15,15 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@v8
         with:
           use-flakehub: false
-      - name: Check formatting
+      - name: clang-format
         run: |
           nix develop --no-update-lock-file -c \
             bash -c 'find lib src test -type f \( -name "*.h" -o -name "*.cpp" \) -print0 \
               | xargs -0 clang-format --dry-run --Werror'
+      - name: ruff format + lint
+        run: |
+          nix develop --no-update-lock-file -c \
+            bash -c 'ruff format --check sim && ruff check sim'
 
   test:
     name: PlatformIO native tests
@@ -39,3 +43,26 @@ jobs:
           key: pio-${{ hashFiles('platformio.ini') }}
       - name: Run native tests
         run: nix develop --no-update-lock-file -c pio test -e native
+
+  sim:
+    name: Python sim tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Allow unprivileged user namespaces (bwrap / Nix sandbox on Ubuntu 24.04)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: DeterminateSystems/nix-installer-action@v14
+      - uses: DeterminateSystems/magic-nix-cache-action@v8
+        with:
+          use-flakehub: false
+      - name: Cache uv downloads and sim build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            sim/build
+          key: sim-${{ hashFiles('sim/pyproject.toml', 'sim/CMakeLists.txt', 'sim/src/**', 'lib/fusion/**') }}
+      - name: Run sim tests
+        run: |
+          nix develop --no-update-lock-file -c \
+            bash -c 'cd sim && uv run --extra dev pytest -q'

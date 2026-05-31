@@ -1,0 +1,60 @@
+/**
+ * nanobind module exposing fusion::TinyEkfFilter to Python.
+ *
+ * Thin passthrough: bind the same C++ types the firmware uses, expose
+ * std::chrono::milliseconds timestamps as int milliseconds across the FFI.
+ * All Rust-shaped ergonomics (frozen dataclasses, kw-only construction)
+ * live in the Python wrapper, not here.
+ */
+
+#include "ekf_filter.h"
+#include <nanobind/nanobind.h>
+
+namespace nb = nanobind;
+using namespace fusion;
+
+NB_MODULE(_native, m) {
+  m.doc() = "Native bindings for the Polaris fusion EKF.";
+
+  nb::class_<ImuSample>(m, "ImuSample")
+      .def(nb::init<>())
+      .def_rw("rate_of_turn_x_rad_s", &ImuSample::rate_of_turn_x_rad_s)
+      .def_rw("rate_of_turn_y_rad_s", &ImuSample::rate_of_turn_y_rad_s)
+      .def_rw("rate_of_turn_z_rad_s", &ImuSample::rate_of_turn_z_rad_s)
+      .def_rw("accel_x_ms2", &ImuSample::accel_x_ms2)
+      .def_rw("accel_y_ms2", &ImuSample::accel_y_ms2)
+      .def_rw("accel_z_ms2", &ImuSample::accel_z_ms2)
+      .def_prop_rw(
+          "timestamp_ms",
+          [](const ImuSample &s) { return s.timestamp.count(); },
+          [](ImuSample &s, Ms::rep v) { s.timestamp = Ms{v}; });
+
+  nb::class_<GnssSample>(m, "GnssSample")
+      .def(nb::init<>())
+      .def_rw("heading_deg", &GnssSample::heading_deg)
+      .def_rw("heading_variance_deg2", &GnssSample::heading_variance_deg2)
+      .def_rw("valid", &GnssSample::valid)
+      .def_prop_rw(
+          "timestamp_ms",
+          [](const GnssSample &s) { return s.timestamp.count(); },
+          [](GnssSample &s, Ms::rep v) { s.timestamp = Ms{v}; });
+
+  nb::class_<FusionOutput>(m, "FusionOutput")
+      .def_ro("heading_deg", &FusionOutput::heading_deg)
+      .def_ro("heading_variance_deg2", &FusionOutput::heading_variance_deg2)
+      .def_prop_ro("timestamp_ms",
+                   [](const FusionOutput &s) { return s.timestamp.count(); });
+
+  nb::class_<TinyEkfFilter::Config>(m, "Config")
+      .def(nb::init<>())
+      .def_rw("q_heading_deg2", &TinyEkfFilter::Config::q_heading_deg2)
+      .def_rw("q_bias_deg2_s2", &TinyEkfFilter::Config::q_bias_deg2_s2)
+      .def_rw("p0_heading_deg2", &TinyEkfFilter::Config::p0_heading_deg2)
+      .def_rw("p0_bias_deg2_s2", &TinyEkfFilter::Config::p0_bias_deg2_s2);
+
+  nb::class_<TinyEkfFilter>(m, "TinyEkfFilter")
+      .def(nb::init<TinyEkfFilter::Config>(), nb::arg("cfg"))
+      .def("predict", &TinyEkfFilter::predict, nb::arg("imu"))
+      .def("update", &TinyEkfFilter::update, nb::arg("gnss"))
+      .def("output", &TinyEkfFilter::output);
+}

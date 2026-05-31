@@ -21,9 +21,22 @@
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
           clang-tools
+          cmake
           jq
+          ninja
           platformio
           python3
+          ruff
+          uv
+        ];
+        # PyPI wheels (numpy and the rest of the SciPy stack) link against
+        # libstdc++ at the host's standard path, which on Nix only lives in
+        # the store. Expose the needed libs via LD_LIBRARY_PATH so import
+        # works inside uv-managed venvs. (FHS is the alternative, but
+        # `nix develop -c` doesn't enter its namespace.)
+        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+          pkgs.stdenv.cc.cc.lib
+          pkgs.zlib
         ];
         shellHook = ''
           # Generate compile databases for both environments. `pio compiledb`
@@ -36,6 +49,12 @@
           native=".pio/compile_commands.native.json"
           pico=".pio/compile_commands.pico.json"
           rm -f "$native" "$pico" compile_commands.json
+
+          # Pre-install lib_deps so their include paths appear in the compile
+          # databases. pio run -t compiledb also installs them, but doing it
+          # here makes failures visible independently of the compiledb step.
+          pio pkg install -e native 2>/dev/null || true
+          pio pkg install -e pico 2>/dev/null || true
 
           pio run -e native -t compiledb 2>/dev/null || true
           [ -f compile_commands.json ] && mv compile_commands.json "$native"
@@ -96,3 +115,4 @@ EOF
       };
     };
 }
+
