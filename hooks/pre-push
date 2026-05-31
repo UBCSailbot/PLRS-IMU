@@ -4,6 +4,15 @@ set -euo pipefail
 echo "[pre-push] clang-format..."
 find lib src test -type f \( -name "*.h" -o -name "*.cpp" \) -print0 \
   | xargs -0 clang-format --dry-run --Werror
+
+echo "[pre-push] ruff format + lint..."
+ruff format --check sim
+ruff check sim
+
 echo "[pre-push] pio test -e native..."
 pio test -e native
+
+echo "[pre-push] python sim tests..."
+( cd sim && uv run --extra dev pytest -q )
+
 echo "[pre-push] all checks passed."

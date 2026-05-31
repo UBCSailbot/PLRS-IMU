@@ -21,9 +21,12 @@
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
           clang-tools
+          cmake
           jq
+          ninja
           platformio
           python3
+          ruff
           uv
         ];
         shellHook = ''
