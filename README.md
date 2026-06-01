@@ -132,6 +132,14 @@ sim, so Q values picked offline transfer faithfully. Synthetic
 trajectories, injectable IMU and GNSS noise, and an overlay plot of
 truth / open-loop / GNSS / EKF estimate ship out of the box.
 
+![Sinusoidal scenario with EKF tracking truth inside its +/-1 sigma band](docs/images/sim-sinusoidal.png)
+
+The top axes show the trajectory (truth in black, GNSS samples scattered,
+EKF estimate in blue, open-loop gyro integration as a dashed baseline).
+The bottom axes show the residual against truth with the filter's
++/-1 sigma band centered at zero -- residuals staying inside the band
+mean the filter is consistent with its claimed uncertainty.
+
 Quick start:
 
 ```bash
