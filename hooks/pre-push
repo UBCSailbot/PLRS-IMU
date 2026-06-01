@@ -5,6 +5,12 @@ echo "[pre-push] clang-format..."
 find lib src test -type f \( -name "*.h" -o -name "*.cpp" \) -print0 \
   | xargs -0 clang-format --dry-run --Werror
 
+echo "[pre-push] nixfmt..."
+find . -name '*.nix' -not -path './.git/*' -not -path './.direnv/*' \
+  -not -path './.pio/*' -not -path './sim/.venv/*' -not -path './sim/build/*' \
+  -print0 \
+  | xargs -0 nixfmt --check
+
 echo "[pre-push] ruff format + lint..."
 ruff format --check sim
 ruff check sim
