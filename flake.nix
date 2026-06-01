@@ -39,12 +39,10 @@
           pkgs.stdenv.cc.cc.lib
           pkgs.zlib
         ];
-        # Heavy bash logic lives in scripts/setup-compile-db.sh; keeping
-        # the shellHook a single line means nixfmt has nothing inside `''`
-        # that it can mangle the indentation of.
-        shellHook = ''
-          bash ${./scripts/setup-compile-db.sh}
-        '';
+        # compiledb generation and .clangd setup live in
+        # scripts/setup-compile-db.sh, called from .envrc with a find-newer
+        # guard so they only run when sources change — not on every
+        # `nix develop -c` invocation (e.g. CI).
       };
     };
 }
