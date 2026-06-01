@@ -24,6 +24,7 @@
           cmake
           jq
           ninja
+          nixfmt
           platformio
           python3
           ruff
@@ -38,92 +39,10 @@
           pkgs.stdenv.cc.cc.lib
           pkgs.zlib
         ];
-        shellHook = ''
-          # Generate compile databases for both environments. `pio compiledb`
-          # overwrites the project-root compile_commands.json on each run, so
-          # capture each env's output before invoking the next.
-          # pico build may download the ARM toolchain on first run (~100 MB,
-          # cached afterward). Failures are non-fatal so a cold machine without
-          # network still gets at least the native database.
-          mkdir -p .pio
-          native=".pio/compile_commands.native.json"
-          pico=".pio/compile_commands.pico.json"
-          rm -f "$native" "$pico" compile_commands.json
-
-          # Pre-install lib_deps so their include paths appear in the compile
-          # databases. pio run -t compiledb also installs them, but doing it
-          # here makes failures visible independently of the compiledb step.
-          pio pkg install -e native 2>/dev/null || true
-          pio pkg install -e pico 2>/dev/null || true
-
-          pio run -e native -t compiledb 2>/dev/null || true
-          [ -f compile_commands.json ] && mv compile_commands.json "$native"
-
-          pio run -e pico -t compiledb 2>/dev/null || true
-          [ -f compile_commands.json ] && mv compile_commands.json "$pico"
-
-          # `pio compiledb` only emits an entry for src/main.cpp; test files
-          # need the Unity headers and PIO_UNIT_TESTING define which only
-          # appear in the actual test build command. Capture those by running
-          # the test build in verbose mode (without executing tests) and
-          # parsing the g++ lines that compile each test_main.cpp.
-          # The test .o files are removed first so PIO emits compile commands
-          # even on cached rebuilds.
-          if [ -f "$native" ]; then
-            rm -f .pio/build/native/test/*/test_main.o
-            test_log=$(mktemp)
-            pio test -e native --without-uploading --without-testing -vvv \
-              > "$test_log" 2>&1 || true
-            test_entries=$(grep -E '^g\+\+ .* -c .* test/.*test_main\.cpp$' "$test_log" \
-              | while read -r cmd; do
-                  file=$(printf '%s' "$cmd" | awk '{print $NF}')
-                  output=$(printf '%s' "$cmd" \
-                    | grep -oE -- '-o [^ ]+' \
-                    | head -1 \
-                    | awk '{print $2}')
-                  jq -n --arg dir "$PWD" \
-                        --arg file "$file" \
-                        --arg cmd "$cmd" \
-                        --arg output "$output" \
-                    '{directory: $dir, file: $file, command: $cmd, output: $output}'
-                done | jq -s '.')
-            rm -f "$test_log"
-            if [ -n "$test_entries" ] && [ "$test_entries" != "[]" ]; then
-              jq --argjson new "$test_entries" '. + $new' "$native" > "$native.tmp"
-              mv "$native.tmp" "$native"
-            fi
-          fi
-
-          # Merge both databases into the project root so clangd gets one view
-          # covering native test files (Unity flags) and firmware files (Arduino
-          # headers, ARM defines). clangd uses the entry matching each TU.
-          if [ -f "$native" ] && [ -f "$pico" ]; then
-            jq -s '.[0] + .[1]' "$native" "$pico" > compile_commands.json
-          elif [ -f "$pico" ]; then
-            cp "$pico" compile_commands.json
-          elif [ -f "$native" ]; then
-            cp "$native" compile_commands.json
-          fi
-
-          cat > .clangd <<'EOF'
-Index:
-  Background: Build
-CompileFlags:
-  CompilationDatabase: .
-EOF
-
-          # Inside kitty, render matplotlib plots inline via the kitty
-          # graphics protocol. Outside kitty (or when KITTY_WINDOW_ID is
-          # unset, e.g. tmux without graphics passthrough), let matplotlib
-          # auto-detect -- QtAgg picks up PyQt6 from the sim dev extra.
-          if [ -n "$KITTY_WINDOW_ID" ]; then
-            # The pip package's top-level dir is hyphenated, not underscored;
-            # matplotlib's module:// dispatches through importlib so it
-            # accepts the hyphen form.
-            export MPLBACKEND="module://matplotlib-backend-kitty"
-          fi
-        '';
+        # compiledb generation and .clangd setup live in
+        # scripts/setup-compile-db.sh, called from .envrc with a find-newer
+        # guard so they only run when sources change — not on every
+        # `nix develop -c` invocation (e.g. CI).
       };
     };
 }
-
