@@ -111,6 +111,17 @@ Index:
 CompileFlags:
   CompilationDatabase: .
 EOF
+
+          # Inside kitty, render matplotlib plots inline via the kitty
+          # graphics protocol. Outside kitty (or when KITTY_WINDOW_ID is
+          # unset, e.g. tmux without graphics passthrough), let matplotlib
+          # auto-detect -- QtAgg picks up PyQt6 from the sim dev extra.
+          if [ -n "$KITTY_WINDOW_ID" ]; then
+            # The pip package's top-level dir is hyphenated, not underscored;
+            # matplotlib's module:// dispatches through importlib so it
+            # accepts the hyphen form.
+            export MPLBACKEND="module://matplotlib-backend-kitty"
+          fi
         '';
       };
     };
