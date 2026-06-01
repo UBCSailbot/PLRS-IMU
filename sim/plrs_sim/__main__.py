@@ -49,7 +49,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sim = sub.add_parser("sim", help="run a simulated scenario and plot the result")
     sim.add_argument("scenario", choices=sorted(SCENARIOS.keys()))
-    sim.add_argument("--duration", type=float, default=30.0, metavar="SECONDS")
+    sim.add_argument("--duration", type=float, default=10.0, metavar="SECONDS")
     sim.add_argument("--seed", type=int, default=0)
     sim.add_argument("--imu-rate-hz", type=float, default=100.0)
     sim.add_argument("--gnss-rate-hz", type=float, default=5.0)
