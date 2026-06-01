@@ -124,6 +124,47 @@ make format  # clang-format all sources in-place
 
 Run `make` with no arguments to list all targets.
 
+### Python sim
+
+A Python harness at `sim/` wraps the C++ EKF for offline visualization
+and tuning. The same filter code that ships on the RP2040 runs in the
+sim, so Q values picked offline transfer faithfully. Synthetic
+trajectories, injectable IMU and GNSS noise, and an overlay plot of
+truth / open-loop / GNSS / EKF estimate ship out of the box.
+
+![Sinusoidal scenario with EKF tracking truth inside its +/-1 sigma band](docs/images/sim-sinusoidal.png)
+
+The top axes show the trajectory (truth in black, GNSS samples scattered,
+EKF estimate in blue, open-loop gyro integration as a dashed baseline).
+The bottom axes show the residual against truth with the filter's
++/-1 sigma band centered at zero -- residuals staying inside the band
+mean the filter is consistent with its claimed uncertainty.
+
+Quick start:
+
+```bash
+make sim                          # default: constant_turn scenario
+make sim SCENARIO=sinusoidal      # or step_turns, static
+make sim-example EXAMPLE=static   # canned examples with hand-tuned params
+make sim-test                     # pytest suite
+make sim-format                   # ruff format + check
+```
+
+Tune noise and EKF parameters from the CLI:
+
+```bash
+cd sim
+uv run python -m plrs_sim sim step_turns \
+    --duration 60 --seed 7 \
+    --gyro-bias 0.02 --gnss-std 2.0 \
+    --q-heading 0.05 \
+    --save /tmp/step_turns.png
+```
+
+A `0` for any `--gyro-*` or `--gnss-std` flag disables that effect.
+Pass `--no-show` for headless runs. See `python -m plrs_sim sim --help`
+for the full flag list.
+
 ### Git hooks
 
 Pre-push hooks are tracked in `hooks/` and mirror the CI checks (clang-format
