@@ -15,7 +15,6 @@
 #include "fusion.h"
 #include <cfloat>
 #include <cstddef>
-#include <numbers>
 
 #define EKF_N 2
 #define EKF_M 1
@@ -32,8 +31,6 @@ namespace fusion {
 constexpr std::size_t IDX_HEADING = 0;
 constexpr std::size_t IDX_GYRO_BIAS = 1;
 constexpr std::size_t IDX_GNSS_HEADING = 0;
-
-constexpr float RAD_TO_DEG = 180.0f / std::numbers::pi_v<float>;
 
 /**
  * Observation Jacobian: heading is read directly from x[IDX_HEADING],

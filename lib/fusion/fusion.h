@@ -10,12 +10,15 @@
 #include <cmath>
 #include <concepts>
 #include <expected>
+#include <numbers>
 
 namespace fusion {
 
 using Ms = std::chrono::milliseconds;
 
 constexpr float GRAVITY_MS2 = 9.81f;
+constexpr float RAD_TO_DEG = 180.0f / std::numbers::pi_v<float>;
+constexpr float DEG_TO_RAD = std::numbers::pi_v<float> / 180.0f;
 
 /**
  * Three-component vector.
