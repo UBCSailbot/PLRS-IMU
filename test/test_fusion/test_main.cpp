@@ -144,6 +144,31 @@ void test_predict_grows_variance() {
 }
 
 // ---------------------------------------------------------------------------
+// Forward declarations for tests defined in test_attitude.cpp.
+// ---------------------------------------------------------------------------
+
+void test_unit_quaternion_identity_components();
+void test_unit_quaternion_from_raw_accepts_unit();
+void test_unit_quaternion_from_raw_normalizes_near_unit();
+void test_unit_quaternion_from_raw_rejects_zero();
+void test_unit_quaternion_from_raw_rejects_far_from_unit();
+void test_unit_quaternion_from_raw_rejects_nan();
+void test_unit_quaternion_multiply_with_identity_is_identity_element();
+void test_unit_quaternion_multiply_by_conjugate_is_identity();
+void test_unit_quaternion_double_conjugate_is_self();
+void test_rotate_identity_passes_through();
+void test_rotate_yaw_90_maps_east_to_north();
+void test_rotate_yaw_180_negates_xy();
+void test_euler_identity_is_zero();
+void test_euler_pure_yaw_recovers_yaw_angle();
+void test_euler_pure_pitch_recovers_pitch_angle();
+void test_euler_pure_roll_recovers_roll_angle();
+void test_euler_near_singular_does_not_nan();
+void test_world_angular_velocity_identity_passes_through();
+void test_world_yaw_rate_heeled_boat_projects_by_cos_heel();
+void test_world_yaw_rate_matches_world_angular_velocity_z();
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -155,5 +180,26 @@ int main(int, char **) {
   RUN_TEST(test_first_predict_baseline_only);
   RUN_TEST(test_predict_integrates_gyro);
   RUN_TEST(test_predict_grows_variance);
+
+  RUN_TEST(test_unit_quaternion_identity_components);
+  RUN_TEST(test_unit_quaternion_from_raw_accepts_unit);
+  RUN_TEST(test_unit_quaternion_from_raw_normalizes_near_unit);
+  RUN_TEST(test_unit_quaternion_from_raw_rejects_zero);
+  RUN_TEST(test_unit_quaternion_from_raw_rejects_far_from_unit);
+  RUN_TEST(test_unit_quaternion_from_raw_rejects_nan);
+  RUN_TEST(test_unit_quaternion_multiply_with_identity_is_identity_element);
+  RUN_TEST(test_unit_quaternion_multiply_by_conjugate_is_identity);
+  RUN_TEST(test_unit_quaternion_double_conjugate_is_self);
+  RUN_TEST(test_rotate_identity_passes_through);
+  RUN_TEST(test_rotate_yaw_90_maps_east_to_north);
+  RUN_TEST(test_rotate_yaw_180_negates_xy);
+  RUN_TEST(test_euler_identity_is_zero);
+  RUN_TEST(test_euler_pure_yaw_recovers_yaw_angle);
+  RUN_TEST(test_euler_pure_pitch_recovers_pitch_angle);
+  RUN_TEST(test_euler_pure_roll_recovers_roll_angle);
+  RUN_TEST(test_euler_near_singular_does_not_nan);
+  RUN_TEST(test_world_angular_velocity_identity_passes_through);
+  RUN_TEST(test_world_yaw_rate_heeled_boat_projects_by_cos_heel);
+  RUN_TEST(test_world_yaw_rate_matches_world_angular_velocity_z);
   return UNITY_END();
 }
