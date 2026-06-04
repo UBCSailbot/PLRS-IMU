@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from itertools import pairwise
 
 import pytest
@@ -49,9 +50,9 @@ def test_truth_heading_tracks_trajectory() -> None:
 
 
 def test_no_noise_passes_clean_samples() -> None:
-    src = _bare(ConstantTurn(rate_deg_s=180.0 / 3.14159265), duration_s=0.1)
+    src = _bare(ConstantTurn(rate_deg_s=180.0 / math.pi), duration_s=0.1)
     for tick in src:
-        assert tick.imu.rate_of_turn_z_rad_s == pytest.approx(1.0, rel=1e-4)
+        assert tick.imu.angular_velocity_rad_s.z == pytest.approx(1.0, rel=1e-4)
         if tick.gnss is not None:
             assert tick.gnss.heading_deg == tick.truth_heading_deg
             assert tick.gnss.heading_variance_deg2 == 0.0

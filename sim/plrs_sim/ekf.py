@@ -8,17 +8,17 @@ even though the filter itself is C++.
 from __future__ import annotations
 
 from . import _native
-from .types import EkfConfig, FusionOutput, GnssSample, ImuSample
+from .types import EkfConfig, FusionOutput, GnssSample, ImuSample, Vec3
+
+
+def _to_native_vec3(v: Vec3) -> _native.Vec3:
+    return _native.Vec3(v.x, v.y, v.z)
 
 
 def _to_native_imu(s: ImuSample) -> _native.ImuSample:
     n = _native.ImuSample()
-    n.rate_of_turn_x_rad_s = s.rate_of_turn_x_rad_s
-    n.rate_of_turn_y_rad_s = s.rate_of_turn_y_rad_s
-    n.rate_of_turn_z_rad_s = s.rate_of_turn_z_rad_s
-    n.accel_x_ms2 = s.accel_x_ms2
-    n.accel_y_ms2 = s.accel_y_ms2
-    n.accel_z_ms2 = s.accel_z_ms2
+    n.angular_velocity_rad_s = _to_native_vec3(s.angular_velocity_rad_s)
+    n.accel_ms2 = _to_native_vec3(s.accel_ms2)
     n.timestamp_ms = s.timestamp_ms
     return n
 

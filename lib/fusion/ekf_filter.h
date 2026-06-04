@@ -89,7 +89,7 @@ public:
             .count();
     _last_predict_time = imu.timestamp;
 
-    const float gyro_z_deg_s = imu.rate_of_turn_z_rad_s * RAD_TO_DEG;
+    const float gyro_z_deg_s = imu.angular_velocity_rad_s.z * RAD_TO_DEG;
 
     const float fx[N_STATE] = {
         _ekf.x[IDX_HEADING] + (gyro_z_deg_s - _ekf.x[IDX_GYRO_BIAS]) * dt_s,

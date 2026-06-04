@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from plrs_sim import EkfConfig, GnssSample, ImuSample, TinyEkfFilter
+from plrs_sim import GRAVITY_MS2, EkfConfig, GnssSample, ImuSample, TinyEkfFilter, Vec3
 
 # FusionOutput::heading_variance_deg2 is a C float; uninitialised reads back
 # as the C FLT_MAX, not Python's double-precision sys.float_info.max.
@@ -25,12 +25,8 @@ CFG = EkfConfig(
 
 def make_imu(rate_z_rad_s: float, t_ms: int) -> ImuSample:
     return ImuSample(
-        rate_of_turn_x_rad_s=0.0,
-        rate_of_turn_y_rad_s=0.0,
-        rate_of_turn_z_rad_s=rate_z_rad_s,
-        accel_x_ms2=0.0,
-        accel_y_ms2=0.0,
-        accel_z_ms2=9.81,
+        angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=rate_z_rad_s),
+        accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
         timestamp_ms=t_ms,
     )
 

@@ -16,14 +16,18 @@ using namespace fusion;
 NB_MODULE(_native, m) {
   m.doc() = "Native bindings for the Polaris fusion EKF.";
 
+  nb::class_<Vec3>(m, "Vec3")
+      .def(nb::init<>())
+      .def(nb::init<float, float, float>(), nb::arg("x"), nb::arg("y"),
+           nb::arg("z"))
+      .def_rw("x", &Vec3::x)
+      .def_rw("y", &Vec3::y)
+      .def_rw("z", &Vec3::z);
+
   nb::class_<ImuSample>(m, "ImuSample")
       .def(nb::init<>())
-      .def_rw("rate_of_turn_x_rad_s", &ImuSample::rate_of_turn_x_rad_s)
-      .def_rw("rate_of_turn_y_rad_s", &ImuSample::rate_of_turn_y_rad_s)
-      .def_rw("rate_of_turn_z_rad_s", &ImuSample::rate_of_turn_z_rad_s)
-      .def_rw("accel_x_ms2", &ImuSample::accel_x_ms2)
-      .def_rw("accel_y_ms2", &ImuSample::accel_y_ms2)
-      .def_rw("accel_z_ms2", &ImuSample::accel_z_ms2)
+      .def_rw("angular_velocity_rad_s", &ImuSample::angular_velocity_rad_s)
+      .def_rw("accel_ms2", &ImuSample::accel_ms2)
       .def_prop_rw(
           "timestamp_ms",
           [](const ImuSample &s) { return s.timestamp.count(); },

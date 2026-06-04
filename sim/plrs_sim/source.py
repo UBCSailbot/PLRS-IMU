@@ -20,14 +20,14 @@ import numpy as np
 from .noise import GnssNoise, ImuNoise
 from .truth import Trajectory, gyro_z_at, heading_at
 from .types import (
+    GRAVITY_MS2,
     GnssNoiseModel,
     GnssSample,
     ImuNoiseModel,
     ImuSample,
     Tick,
+    Vec3,
 )
-
-GRAVITY_MS2 = 9.81
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -56,12 +56,8 @@ class SimulatedSource:
             true_gyro = gyro_z_at(self.trajectory, t_ms)
 
             clean_imu = ImuSample(
-                rate_of_turn_x_rad_s=0.0,
-                rate_of_turn_y_rad_s=0.0,
-                rate_of_turn_z_rad_s=true_gyro,
-                accel_x_ms2=0.0,
-                accel_y_ms2=0.0,
-                accel_z_ms2=GRAVITY_MS2,
+                angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=true_gyro),
+                accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
                 timestamp_ms=t_ms,
             )
             corrupted_imu = imu_noise.corrupt(clean_imu, dt_s=imu_dt_s)

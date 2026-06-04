@@ -15,6 +15,17 @@ namespace fusion {
 
 using Ms = std::chrono::milliseconds;
 
+constexpr float GRAVITY_MS2 = 9.81f;
+
+/**
+ * Three-component vector.
+ */
+struct Vec3 {
+  float x;
+  float y;
+  float z;
+};
+
 /**
  * Raw quaternion in {w, x, y, z} order (Xsens / Eigen convention).
  *
@@ -108,12 +119,8 @@ struct MountRotation {
  * One IMU sample from the MTi-3, in SI units.
  */
 struct ImuSample {
-  float rate_of_turn_x_rad_s;
-  float rate_of_turn_y_rad_s;
-  float rate_of_turn_z_rad_s;
-  float accel_x_ms2;
-  float accel_y_ms2;
-  float accel_z_ms2;
+  Vec3 angular_velocity_rad_s;
+  Vec3 accel_ms2;
   UnitQuaternion orientation = UnitQuaternion::identity();
   Ms timestamp;
 };

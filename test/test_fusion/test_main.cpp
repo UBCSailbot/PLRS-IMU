@@ -28,12 +28,8 @@ constexpr TinyEkfFilter::Config kTestConfig{
 
 ImuSample make_imu(float rate_z_rad_s, Ms t) {
   return ImuSample{
-      .rate_of_turn_x_rad_s = 0.0f,
-      .rate_of_turn_y_rad_s = 0.0f,
-      .rate_of_turn_z_rad_s = rate_z_rad_s,
-      .accel_x_ms2 = 0.0f,
-      .accel_y_ms2 = 0.0f,
-      .accel_z_ms2 = 9.81f,
+      .angular_velocity_rad_s = Vec3{0.0f, 0.0f, rate_z_rad_s},
+      .accel_ms2 = Vec3{0.0f, 0.0f, GRAVITY_MS2},
       .timestamp = t,
   };
 }

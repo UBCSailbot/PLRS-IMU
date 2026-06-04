@@ -2,6 +2,7 @@
 
 from .ekf import TinyEkfFilter
 from .types import (
+    GRAVITY_MS2,
     ConstantTurn,
     EkfConfig,
     FusionOutput,
@@ -14,9 +15,11 @@ from .types import (
     StepTurns,
     Tick,
     Trace,
+    Vec3,
 )
 
 __all__ = [
+    "GRAVITY_MS2",
     "ConstantTurn",
     "EkfConfig",
     "FusionOutput",
@@ -30,4 +33,5 @@ __all__ = [
     "Tick",
     "TinyEkfFilter",
     "Trace",
+    "Vec3",
 ]

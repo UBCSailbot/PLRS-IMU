@@ -17,7 +17,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from .types import GnssNoiseModel, GnssSample, ImuNoiseModel, ImuSample
+from .types import GnssNoiseModel, GnssSample, ImuNoiseModel, ImuSample, Vec3
 
 
 class ImuNoise:
@@ -34,9 +34,12 @@ class ImuNoise:
         white_std = self._model.gyro_white_std_rad_s
         noise = self._rng.normal(0.0, white_std) if white_std is not None else 0.0
 
+        gyro = clean.angular_velocity_rad_s
         return replace(
             clean,
-            rate_of_turn_z_rad_s=clean.rate_of_turn_z_rad_s + self._bias + noise,
+            angular_velocity_rad_s=Vec3(
+                x=gyro.x, y=gyro.y, z=gyro.z + self._bias + noise
+            ),
         )
 
     @property

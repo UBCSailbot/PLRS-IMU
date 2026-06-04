@@ -11,15 +11,20 @@ from dataclasses import dataclass
 
 import numpy as np
 
+GRAVITY_MS2 = 9.81
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Vec3:
+    x: float
+    y: float
+    z: float
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ImuSample:
-    rate_of_turn_x_rad_s: float
-    rate_of_turn_y_rad_s: float
-    rate_of_turn_z_rad_s: float
-    accel_x_ms2: float
-    accel_y_ms2: float
-    accel_z_ms2: float
+    angular_velocity_rad_s: Vec3
+    accel_ms2: Vec3
     timestamp_ms: int
 
 
