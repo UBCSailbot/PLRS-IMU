@@ -143,6 +143,10 @@ public:
         .heading_variance_deg2 =
             _initialized ? _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING]
                          : FLT_MAX,
+        .roll_deg = 0.0f,
+        .roll_variance_deg2 = FLT_MAX,
+        .pitch_deg = 0.0f,
+        .pitch_variance_deg2 = FLT_MAX,
         .timestamp = _last_predict_time,
     };
   }
