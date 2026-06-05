@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "attitude.h"
 #include "fusion.h"
 #include <cfloat>
 #include <cstddef>
@@ -46,11 +47,15 @@ public:
   /**
    * Filter tuning parameters. See docs/tuning.md.
    */
+  // TODO: split into FilterTuning + Calibration when PR3 grows the
+  // tuning surface (R for the MTi-quaternion measurement) and the
+  // calibration surface (gyro/accel biases, lever arm).
   struct Config {
     float q_heading_deg2;
     float q_bias_deg2_s2;
     float p0_heading_deg2;
     float p0_bias_deg2_s2;
+    MountRotation mount{};
   };
 
   /**
@@ -75,6 +80,7 @@ public:
    * @param imu. IMU sample.
    */
   void predict(ImuSample imu) {
+    _latest_orientation = imu.orientation;
     if (!_has_predicted) {
       _last_predict_time = imu.timestamp;
       _has_predicted = true;
@@ -86,7 +92,9 @@ public:
             .count();
     _last_predict_time = imu.timestamp;
 
-    const float gyro_z_deg_s = imu.angular_velocity_rad_s.z * RAD_TO_DEG;
+    const float gyro_z_deg_s =
+        world_yaw_rate(imu.orientation, imu.angular_velocity_rad_s) *
+        RAD_TO_DEG;
 
     const float fx[N_STATE] = {
         _ekf.x[IDX_HEADING] + (gyro_z_deg_s - _ekf.x[IDX_GYRO_BIAS]) * dt_s,
@@ -135,14 +143,17 @@ public:
    * the first valid GNSS update; afterward it is P[IDX_HEADING][IDX_HEADING].
    */
   FusionOutput output() const {
+    const UnitQuaternion boat_orientation =
+        UnitQuaternion::multiply(_latest_orientation, _cfg.mount.boat_to_imu);
+    const EulerZyx euler = quaternion_to_euler_zyx(boat_orientation);
     return FusionOutput{
         .heading_deg = _ekf.x[IDX_HEADING],
         .heading_variance_deg2 =
             _initialized ? _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING]
                          : FLT_MAX,
-        .roll_deg = 0.0f,
+        .roll_deg = euler.roll_deg,
         .roll_variance_deg2 = FLT_MAX,
-        .pitch_deg = 0.0f,
+        .pitch_deg = euler.pitch_deg,
         .pitch_variance_deg2 = FLT_MAX,
         .timestamp = _last_predict_time,
     };
@@ -153,6 +164,8 @@ private:
   Config _cfg;
   float _Q[N_STATE * N_STATE];
   Ms _last_predict_time{0};
+  // Scaffold until PR3 promotes attitude to filter state.
+  UnitQuaternion _latest_orientation = UnitQuaternion::identity();
   bool _initialized = false;
   bool _has_predicted = false;
 };
