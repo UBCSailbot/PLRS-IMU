@@ -29,8 +29,8 @@ constexpr TinyEkfFilter::Config kTestConfig{
 
 ImuSample make_imu(float rate_z_rad_s, Ms t) {
   return ImuSample{
-      .angular_velocity_rad_s = Vec3{0.0f, 0.0f, rate_z_rad_s},
-      .accel_ms2 = Vec3{0.0f, 0.0f, GRAVITY_MS2},
+      .angular_velocity_rad_s = plrs::Vec3{0.0f, 0.0f, rate_z_rad_s},
+      .accel_ms2 = plrs::Vec3{0.0f, 0.0f, GRAVITY_MS2},
       .timestamp = t,
   };
 }
@@ -39,14 +39,14 @@ UnitQuaternion axis_angle(float ax, float ay, float az, float angle_rad) {
   const float half = angle_rad * 0.5f;
   const float s = std::sin(half);
   return UnitQuaternion::from_raw(
-             Quaternion{std::cos(half), ax * s, ay * s, az * s})
+             plrs::Quaternion{std::cos(half), ax * s, ay * s, az * s})
       .value();
 }
 
 ImuSample make_heeled_imu(float rate_z_rad_s, float heel_rad, Ms t) {
   return ImuSample{
-      .angular_velocity_rad_s = Vec3{0.0f, 0.0f, rate_z_rad_s},
-      .accel_ms2 = Vec3{0.0f, 0.0f, GRAVITY_MS2},
+      .angular_velocity_rad_s = plrs::Vec3{0.0f, 0.0f, rate_z_rad_s},
+      .accel_ms2 = plrs::Vec3{0.0f, 0.0f, GRAVITY_MS2},
       .orientation = axis_angle(1.0f, 0.0f, 0.0f, heel_rad),
       .timestamp = t,
   };

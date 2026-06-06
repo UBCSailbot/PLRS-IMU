@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "geometry.h"
 #include <chrono>
 #include <cmath>
 #include <concepts>
@@ -19,29 +20,6 @@ using Ms = std::chrono::milliseconds;
 constexpr float GRAVITY_MS2 = 9.81f;
 constexpr float RAD_TO_DEG = 180.0f / std::numbers::pi_v<float>;
 constexpr float DEG_TO_RAD = std::numbers::pi_v<float> / 180.0f;
-
-/**
- * Three-component vector.
- */
-struct Vec3 {
-  float x;
-  float y;
-  float z;
-};
-
-/**
- * Raw quaternion in {w, x, y, z} order (Xsens / Eigen convention).
- *
- * Plain four floats with no invariant; used at wire-level parsing and
- * as a math primitive. Rotation-bearing storage should use
- * `UnitQuaternion` instead, which defends the unit-norm invariant.
- */
-struct Quaternion {
-  float w;
-  float x;
-  float y;
-  float z;
-};
 
 /**
  * Quaternion known to be unit-norm by construction.
@@ -59,7 +37,7 @@ public:
   static constexpr float NORM_TOLERANCE = 0.01f;
 
   static constexpr UnitQuaternion identity() {
-    return UnitQuaternion{Quaternion{1.0f, 0.0f, 0.0f, 0.0f}};
+    return UnitQuaternion{plrs::Quaternion{1.0f, 0.0f, 0.0f, 0.0f}};
   }
 
   /**
@@ -71,14 +49,15 @@ public:
    *   `[1 - NORM_TOLERANCE, 1 + NORM_TOLERANCE]`. NaN inputs are
    *   rejected.
    */
-  static std::expected<UnitQuaternion, const char *> from_raw(Quaternion q) {
+  static std::expected<UnitQuaternion, const char *>
+  from_raw(plrs::Quaternion q) {
     const float norm_sq = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
     const float norm = std::sqrt(norm_sq);
     if (!(norm >= 1.0f - NORM_TOLERANCE && norm <= 1.0f + NORM_TOLERANCE)) {
       return std::unexpected("Quaternion norm not close to 1");
     }
     return UnitQuaternion{
-        Quaternion{q.w / norm, q.x / norm, q.y / norm, q.z / norm}};
+        plrs::Quaternion{q.w / norm, q.x / norm, q.y / norm, q.z / norm}};
   }
 
   /**
@@ -86,9 +65,9 @@ public:
    * renormalize the result.
    */
   static constexpr UnitQuaternion multiply(UnitQuaternion a, UnitQuaternion b) {
-    const Quaternion p = a._q;
-    const Quaternion q = b._q;
-    return UnitQuaternion{Quaternion{
+    const plrs::Quaternion p = a._q;
+    const plrs::Quaternion q = b._q;
+    return UnitQuaternion{plrs::Quaternion{
         p.w * q.w - p.x * q.x - p.y * q.y - p.z * q.z,
         p.w * q.x + p.x * q.w + p.y * q.z - p.z * q.y,
         p.w * q.y - p.x * q.z + p.y * q.w + p.z * q.x,
@@ -100,15 +79,15 @@ public:
    * @brief Conjugate of a unit quaternion.
    */
   constexpr UnitQuaternion conjugate() const {
-    return UnitQuaternion{Quaternion{_q.w, -_q.x, -_q.y, -_q.z}};
+    return UnitQuaternion{plrs::Quaternion{_q.w, -_q.x, -_q.y, -_q.z}};
   }
 
-  constexpr Quaternion components() const { return _q; }
+  constexpr plrs::Quaternion components() const { return _q; }
 
 private:
-  explicit constexpr UnitQuaternion(Quaternion q) : _q(q) {}
+  explicit constexpr UnitQuaternion(plrs::Quaternion q) : _q(q) {}
 
-  Quaternion _q;
+  plrs::Quaternion _q;
 };
 
 /**
@@ -122,8 +101,8 @@ struct MountRotation {
  * One IMU sample from the MTi-3, in SI units.
  */
 struct ImuSample {
-  Vec3 angular_velocity_rad_s;
-  Vec3 accel_ms2;
+  plrs::Vec3 angular_velocity_rad_s;
+  plrs::Vec3 accel_ms2;
   UnitQuaternion orientation = UnitQuaternion::identity();
   Ms timestamp;
 };

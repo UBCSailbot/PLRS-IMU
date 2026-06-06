@@ -27,12 +27,12 @@ struct EulerZyx {
  *
  * @return The rotated vector.
  */
-inline Vec3 rotate(UnitQuaternion q, Vec3 v) {
-  const Quaternion p = q.components();
+inline plrs::Vec3 rotate(UnitQuaternion q, plrs::Vec3 v) {
+  const plrs::Quaternion p = q.components();
   const float tx = 2.0f * (p.y * v.z - p.z * v.y);
   const float ty = 2.0f * (p.z * v.x - p.x * v.z);
   const float tz = 2.0f * (p.x * v.y - p.y * v.x);
-  return Vec3{
+  return plrs::Vec3{
       .x = v.x + p.w * tx + (p.y * tz - p.z * ty),
       .y = v.y + p.w * ty + (p.z * tx - p.x * tz),
       .z = v.z + p.w * tz + (p.x * ty - p.y * tx),
@@ -48,8 +48,8 @@ inline Vec3 rotate(UnitQuaternion q, Vec3 v) {
  *
  * @return Angular velocity in the world frame.
  */
-inline Vec3 world_angular_velocity(UnitQuaternion orientation,
-                                   Vec3 omega_body) {
+inline plrs::Vec3 world_angular_velocity(UnitQuaternion orientation,
+                                         plrs::Vec3 omega_body) {
   return rotate(orientation, omega_body);
 }
 
@@ -62,7 +62,8 @@ inline Vec3 world_angular_velocity(UnitQuaternion orientation,
  *
  * @return Yaw rate in the world frame.
  */
-inline float world_yaw_rate(UnitQuaternion orientation, Vec3 omega_body) {
+inline float world_yaw_rate(UnitQuaternion orientation,
+                            plrs::Vec3 omega_body) {
   return world_angular_velocity(orientation, omega_body).z;
 }
 
@@ -74,7 +75,7 @@ inline float world_yaw_rate(UnitQuaternion orientation, Vec3 omega_body) {
  * @return ZYX Euler angles in degrees.
  */
 inline EulerZyx quaternion_to_euler_zyx(UnitQuaternion q) {
-  const Quaternion p = q.components();
+  const plrs::Quaternion p = q.components();
   const float sin_pitch =
       std::clamp(2.0f * (p.w * p.y - p.z * p.x), -1.0f, 1.0f);
   return EulerZyx{
