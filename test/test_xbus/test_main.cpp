@@ -512,6 +512,51 @@ void test_find_data_truncated_safe() {
   TEST_ASSERT_FALSE(find_data(p, DataId::Quaternion).has_value());
 }
 
+/** @brief read_quaternion round-trips known w/x/y/z floats. */
+void test_read_quaternion_roundtrip() {
+  const plrs::Quaternion expected{0.7071f, 0.0f, 0.7071f, 0.0f};
+  std::vector<uint8_t> qbytes;
+  for (float v : {expected.w, expected.x, expected.y, expected.z}) {
+    auto fb = xtest::be_float(v);
+    qbytes.insert(qbytes.end(), fb.begin(), fb.end());
+  }
+  auto frame = xtest::make_frame(
+      MID::MTData2, xtest::make_subpacket(DataId::Quaternion, qbytes));
+
+  Parser p;
+  auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+
+  auto q = read_quaternion(*pkt);
+  TEST_ASSERT_TRUE(q.has_value());
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.w, q->w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.x, q->x);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.y, q->y);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.z, q->z);
+}
+
+/** @brief No Quaternion sub-packet present: returns nullopt. */
+void test_read_quaternion_missing() {
+  auto frame = xtest::make_frame(
+      MID::MTData2,
+      xtest::make_subpacket(DataId::PacketCounter, {0x00, 0x2A}));
+  Parser p;
+  auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT_FALSE(read_quaternion(*pkt).has_value());
+}
+
+/** @brief Quaternion sub-packet with wrong length is rejected. */
+void test_read_quaternion_wrong_length() {
+  auto frame = xtest::make_frame(
+      MID::MTData2, xtest::make_subpacket(DataId::Quaternion,
+                                          {0x3F, 0x80, 0x00, 0x00}));
+  Parser p;
+  auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT_FALSE(read_quaternion(*pkt).has_value());
+}
+
 /** @brief With multiple sub-packets, the correct one is found by DataId. */
 void test_find_data_multiple_subpackets() {
   const uint8_t raw[] = {
@@ -567,5 +612,8 @@ int main(int, char **) {
   RUN_TEST(test_find_data_not_found);
   RUN_TEST(test_find_data_truncated_safe);
   RUN_TEST(test_find_data_multiple_subpackets);
+  RUN_TEST(test_read_quaternion_roundtrip);
+  RUN_TEST(test_read_quaternion_missing);
+  RUN_TEST(test_read_quaternion_wrong_length);
   return UNITY_END();
 }

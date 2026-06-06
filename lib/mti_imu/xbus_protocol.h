@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "geometry.h"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -348,6 +349,18 @@ struct DataPacket {
  *
  * @return The first sub packet matching 'wanted', or nullopt.
  */
+constexpr std::size_t QUATERNION_BYTES = 16;
+
+/**
+ * @brief Read the Quaternion (0x2010) sub-packet from an MTData2 packet.
+ *
+ * @param packet  The MTData2 packet to search.
+ *
+ * @return The quaternion, or nullopt if no Quaternion sub-packet is present
+ *   or its payload is not exactly 16 bytes (4 x float32).
+ */
+inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet);
+
 inline std::optional<DataPacket> find_data(const Packet &packet,
                                            DataId wanted) {
   ByteSpan s = packet.payload();
@@ -365,6 +378,19 @@ inline std::optional<DataPacket> find_data(const Packet &packet,
     i += SUBPACKET_HEADER + len;
   }
   return std::nullopt;
+}
+
+inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet) {
+  auto sub = find_data(packet, DataId::Quaternion);
+  if (!sub || sub->bytes.size() != QUATERNION_BYTES) {
+    return std::nullopt;
+  }
+  return plrs::Quaternion{
+      .w = read_f32_big_endian(sub->bytes.subspan(0, 4)),
+      .x = read_f32_big_endian(sub->bytes.subspan(4, 4)),
+      .y = read_f32_big_endian(sub->bytes.subspan(8, 4)),
+      .z = read_f32_big_endian(sub->bytes.subspan(12, 4)),
+  };
 }
 
 } // namespace xbus
