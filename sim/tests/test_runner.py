@@ -12,6 +12,7 @@ from plrs_sim import (
     EkfConfig,
     GnssNoiseModel,
     ImuNoiseModel,
+    Scenario,
     Static,
 )
 from plrs_sim.runner import run
@@ -26,7 +27,7 @@ CFG = EkfConfig(
 
 
 def _src(
-    trajectory,
+    yaw,
     *,
     imu_noise: ImuNoiseModel | None = None,
     gnss_noise: GnssNoiseModel | None = None,
@@ -34,7 +35,7 @@ def _src(
     seed: int = 0,
 ) -> SimulatedSource:
     return SimulatedSource(
-        trajectory=trajectory,
+        scenario=Scenario(yaw=yaw),
         imu_noise=imu_noise or ImuNoiseModel(),
         gnss_noise=gnss_noise or GnssNoiseModel(),
         duration_s=duration_s,

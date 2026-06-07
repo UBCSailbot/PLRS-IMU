@@ -3,6 +3,7 @@
 from .ekf import TinyEkfFilter
 from .types import (
     GRAVITY_MS2,
+    Channel,
     ConstantTurn,
     EkfConfig,
     FusionOutput,
@@ -10,6 +11,9 @@ from .types import (
     GnssSample,
     ImuNoiseModel,
     ImuSample,
+    LevelAttitude,
+    Quaternion,
+    Scenario,
     Sinusoidal,
     Static,
     StepTurns,
@@ -20,6 +24,7 @@ from .types import (
 
 __all__ = [
     "GRAVITY_MS2",
+    "Channel",
     "ConstantTurn",
     "EkfConfig",
     "FusionOutput",
@@ -27,6 +32,9 @@ __all__ = [
     "GnssSample",
     "ImuNoiseModel",
     "ImuSample",
+    "LevelAttitude",
+    "Quaternion",
+    "Scenario",
     "Sinusoidal",
     "Static",
     "StepTurns",

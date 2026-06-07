@@ -18,13 +18,14 @@ from dataclasses import dataclass
 import numpy as np
 
 from .noise import GnssNoise, ImuNoise
-from .truth import Trajectory, gyro_z_at, heading_at
+from .truth import sample_attitude, sample_yaw
 from .types import (
     GRAVITY_MS2,
     GnssNoiseModel,
     GnssSample,
     ImuNoiseModel,
     ImuSample,
+    Scenario,
     Tick,
     Vec3,
 )
@@ -32,7 +33,7 @@ from .types import (
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SimulatedSource:
-    trajectory: Trajectory
+    scenario: Scenario
     imu_noise: ImuNoiseModel
     gnss_noise: GnssNoiseModel
     duration_s: float
@@ -52,12 +53,22 @@ class SimulatedSource:
 
         next_gnss_ms = 0
         for t_ms in range(0, end_ms + 1, imu_dt_ms):
-            truth_h = heading_at(self.trajectory, t_ms)
-            true_gyro = gyro_z_at(self.trajectory, t_ms)
+            truth_h, yaw_omega = sample_yaw(self.scenario.yaw, t_ms)
+            orientation, body_omega = sample_attitude(
+                self.scenario.attitude, t_ms
+            )
 
+            # LevelAttitude: body Z == world Z, so the yaw rate goes
+            # straight onto body Z. Heeled scenarios in PR3 will project
+            # yaw_omega through the orientation here.
             clean_imu = ImuSample(
-                angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=true_gyro),
+                angular_velocity_rad_s=Vec3(
+                    x=body_omega.x,
+                    y=body_omega.y,
+                    z=body_omega.z + yaw_omega,
+                ),
                 accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
+                orientation=orientation,
                 timestamp_ms=t_ms,
             )
             corrupted_imu = imu_noise.corrupt(clean_imu, dt_s=imu_dt_s)

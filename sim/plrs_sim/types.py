@@ -22,9 +22,24 @@ class Vec3:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Quaternion:
+    """Mirror of plrs::Quaternion in lib/geometry, {w, x, y, z} order."""
+
+    w: float
+    x: float
+    y: float
+    z: float
+
+    @staticmethod
+    def identity() -> "Quaternion":
+        return Quaternion(w=1.0, x=0.0, y=0.0, z=0.0)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ImuSample:
     angular_velocity_rad_s: Vec3
     accel_ms2: Vec3
+    orientation: Quaternion = Quaternion(w=1.0, x=0.0, y=0.0, z=0.0)
     timestamp_ms: int
 
 
@@ -95,6 +110,32 @@ class StepTurns:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Static:
     heading_deg: float
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LevelAttitude:
+    """The boat sits upright with no roll or pitch motion.
+
+    The placeholder attitude profile used when a scenario does not
+    exercise heel or trim. sample_attitude returns identity for every t.
+    """
+
+
+YawProfile = ConstantTurn | Sinusoidal | StepTurns | Static
+AttitudeProfile = LevelAttitude
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Scenario:
+    """A composition of independent truth profiles, one per quantity.
+
+    Each axis (yaw, attitude, eventually position/velocity) is sampled
+    by its own pure function in truth.py. SimulatedSource composes the
+    samplers into one ImuSample per tick.
+    """
+
+    yaw: YawProfile
+    attitude: AttitudeProfile = LevelAttitude()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -17,6 +17,7 @@ from plrs_sim import (
     EkfConfig,
     GnssNoiseModel,
     ImuNoiseModel,
+    Scenario,
 )
 from plrs_sim.plot import plot_trace
 from plrs_sim.runner import run
@@ -32,7 +33,7 @@ CFG = EkfConfig(
 
 def _trace():
     src = SimulatedSource(
-        trajectory=ConstantTurn(rate_deg_s=5.0),
+        scenario=Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
         imu_noise=ImuNoiseModel(gyro_white_std_rad_s=0.01),
         gnss_noise=GnssNoiseModel(heading_std_deg=1.0),
         duration_s=2.0,

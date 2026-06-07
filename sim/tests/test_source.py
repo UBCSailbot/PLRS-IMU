@@ -11,14 +11,15 @@ from plrs_sim import (
     ConstantTurn,
     GnssNoiseModel,
     ImuNoiseModel,
+    Scenario,
     Static,
 )
 from plrs_sim.source import SimulatedSource
 
 
-def _bare(trajectory, duration_s: float = 1.0, seed: int = 0) -> SimulatedSource:
+def _bare(yaw, duration_s: float = 1.0, seed: int = 0) -> SimulatedSource:
     return SimulatedSource(
-        trajectory=trajectory,
+        scenario=Scenario(yaw=yaw),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),
         duration_s=duration_s,
@@ -61,7 +62,7 @@ def test_no_noise_passes_clean_samples() -> None:
 
 def test_iteration_is_replayable() -> None:
     src = SimulatedSource(
-        trajectory=ConstantTurn(rate_deg_s=5.0),
+        scenario=Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=0.01,
             gyro_constant_bias_rad_s=0.005,
@@ -78,7 +79,7 @@ def test_iteration_is_replayable() -> None:
 
 def test_different_seeds_diverge() -> None:
     cfg = dict(
-        trajectory=Static(heading_deg=0.0),
+        scenario=Scenario(yaw=Static(heading_deg=0.0)),
         imu_noise=ImuNoiseModel(gyro_white_std_rad_s=0.01),
         gnss_noise=GnssNoiseModel(),
         duration_s=0.5,
@@ -90,7 +91,7 @@ def test_different_seeds_diverge() -> None:
 
 def test_custom_rates_respected() -> None:
     src = SimulatedSource(
-        trajectory=Static(heading_deg=0.0),
+        scenario=Scenario(yaw=Static(heading_deg=0.0)),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),
         duration_s=1.0,
