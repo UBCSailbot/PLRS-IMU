@@ -177,22 +177,7 @@ ln -sf ../../hooks/pre-push .git/hooks/pre-push
 
 ## Coding style
 
-Formatting is enforced by CI. Format changed files with `clang-format -i <file>`
-before pushing.
-
-Naming conventions: types and enum members in `PascalCase`, free functions and
-methods in `snake_case`, constants in `UPPER_SNAKE_CASE`, private members with a
-leading underscore (`_state`, `_sum`).
-
-A few design rules worth knowing before contributing:
-
-- `ByteSpan` (`std::span<const uint8_t>`) is preferred to `(ptr, len)` pairs.
-- Outputs are returned, not written through out-parameters.
-- Use `std::expected<T, E>` when failure has a meaningful reason,
-  `std::optional` when it doesn't.
-- `std::bit_cast` for type punning — no pointer casts, no `memcpy`.
-- Named constants for all magic numbers.
-- Statically allocate all memory instead of using malloc.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Overview
 

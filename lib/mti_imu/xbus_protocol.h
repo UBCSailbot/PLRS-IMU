@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "geometry.h"
+#include "common.h"
 #include <array>
 #include <chrono>
 #include <cstddef>

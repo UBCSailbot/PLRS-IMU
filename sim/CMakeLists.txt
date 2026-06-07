@@ -26,7 +26,7 @@ FetchContent_MakeAvailable(tinyekf)
 nanobind_add_module(_native STABLE_ABI src/ekf_bind.cpp)
 target_include_directories(_native PRIVATE
   ${CMAKE_SOURCE_DIR}/../lib/fusion
-  ${CMAKE_SOURCE_DIR}/../lib/geometry
+  ${CMAKE_SOURCE_DIR}/../lib/common
   ${tinyekf_SOURCE_DIR}/src)
 
 install(TARGETS _native LIBRARY DESTINATION plrs_sim)
