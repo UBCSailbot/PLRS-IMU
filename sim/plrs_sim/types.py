@@ -117,13 +117,31 @@ class GnssNoiseModel:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Channel:
+    """One scalar quantity tracked through a run, ready for plotting.
+
+    Optional fields are None when the channel does not have that series:
+    a freshly-added quantity may not yet have an open-loop integrator or
+    a measurement source, and that should not force the plot to invent
+    fake data.
+
+    measurement_t_ms / measurement_deg travel together; the cadence is
+    independent of t_ms because GNSS does not share the IMU rate.
+    """
+
+    name: str
+    unit: str
+    truth: np.ndarray
+    estimate: np.ndarray
+    estimate_std: np.ndarray | None = None
+    openloop: np.ndarray | None = None
+    measurement_t_ms: np.ndarray | None = None
+    measurement: np.ndarray | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Trace:
-    """Captured run output, one column per series, ready for plotting."""
+    """Captured run output: a shared time axis and a channel per quantity."""
 
     t_ms: np.ndarray
-    truth_deg: np.ndarray
-    est_deg: np.ndarray
-    est_std_deg: np.ndarray
-    openloop_deg: np.ndarray
-    gnss_t_ms: np.ndarray
-    gnss_deg: np.ndarray
+    channels: dict[str, Channel]

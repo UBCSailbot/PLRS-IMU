@@ -1,4 +1,4 @@
-"""Smoke tests for plot_heading.
+"""Smoke tests for plot_trace.
 
 Uses the Agg backend (no display required). Asserts the function builds
 a figure without raising and that --save writes a real file.
@@ -18,7 +18,7 @@ from plrs_sim import (
     GnssNoiseModel,
     ImuNoiseModel,
 )
-from plrs_sim.plot import plot_heading
+from plrs_sim.plot import plot_trace
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 
@@ -41,16 +41,16 @@ def _trace():
     return run(src, CFG)
 
 
-def test_plot_heading_runs_headless() -> None:
-    plot_heading(_trace(), show=False)
+def test_plot_trace_runs_headless() -> None:
+    plot_trace(_trace(), show=False)
 
 
-def test_plot_heading_writes_save_path(tmp_path: Path) -> None:
+def test_plot_trace_writes_save_path(tmp_path: Path) -> None:
     out = tmp_path / "heading.png"
-    plot_heading(_trace(), show=False, save=out)
+    plot_trace(_trace(), show=False, save=out)
     assert out.exists()
     assert out.stat().st_size > 0
 
 
-def test_plot_heading_accepts_title() -> None:
-    plot_heading(_trace(), show=False, title="test scenario")
+def test_plot_trace_accepts_title() -> None:
+    plot_trace(_trace(), show=False, title="test scenario")

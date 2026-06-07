@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .plot import plot_heading
+from .plot import plot_trace
 from .runner import run
 from .source import SimulatedSource
 from .truth import Trajectory
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> None:
         p0_heading_deg2=args.p0_heading,
         p0_bias_deg2_s2=args.p0_bias,
     )
-    plot_heading(
+    plot_trace(
         run(src, cfg),
         show=not args.no_show,
         save=args.save,

@@ -8,7 +8,7 @@ from collections.abc import Iterable
 import numpy as np
 
 from .ekf import TinyEkfFilter
-from .types import EkfConfig, Tick, Trace
+from .types import Channel, EkfConfig, Tick, Trace
 
 _RAD_TO_DEG = 180.0 / math.pi
 
@@ -56,12 +56,17 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
 
         prev_t_ms = tick.timestamp_ms
 
+    heading = Channel(
+        name="heading",
+        unit="deg",
+        truth=np.array(truth_deg, dtype=np.float64),
+        estimate=np.array(est_deg, dtype=np.float64),
+        estimate_std=np.array(est_std_deg, dtype=np.float64),
+        openloop=np.array(openloop_deg, dtype=np.float64),
+        measurement_t_ms=np.array(gnss_t_ms, dtype=np.int64),
+        measurement=np.array(gnss_deg, dtype=np.float64),
+    )
     return Trace(
         t_ms=np.array(t_ms, dtype=np.int64),
-        truth_deg=np.array(truth_deg, dtype=np.float64),
-        est_deg=np.array(est_deg, dtype=np.float64),
-        est_std_deg=np.array(est_std_deg, dtype=np.float64),
-        openloop_deg=np.array(openloop_deg, dtype=np.float64),
-        gnss_t_ms=np.array(gnss_t_ms, dtype=np.int64),
-        gnss_deg=np.array(gnss_deg, dtype=np.float64),
+        channels={heading.name: heading},
     )

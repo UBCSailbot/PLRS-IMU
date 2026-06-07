@@ -1,11 +1,11 @@
-"""Heading-overlay plot for a Trace.
+"""Trace plotting.
 
-Two stacked subplots sharing an x-axis:
-- Top: trajectory view. Truth, open-loop gyro integration, GNSS samples,
-  and EKF estimate, all overlaid.
+For each channel asked for, two stacked subplots:
+- Top: trajectory view. Truth, open-loop integration, measurements, and
+  EKF estimate, all overlaid.
 - Bottom: residual view. EKF estimate error against truth with the
-  filter's claimed +/-1 sigma band centered at zero, plus GNSS error
-  scattered. The band is the load-bearing element here -- residuals
+  filter's claimed +/-1 sigma band centered at zero, plus measurement
+  error scattered. The band is the load-bearing element here -- residuals
   staying inside the band mean the filter is consistent with its claimed
   uncertainty; residuals escaping mean overconfidence.
 
@@ -20,114 +20,39 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .types import Trace
+from .types import Channel, Trace
 
-_GNSS_SCATTER_ALPHA = 0.4
+_MEASUREMENT_SCATTER_ALPHA = 0.4
 
 
-def plot_heading(
+def plot_trace(
     trace: Trace,
     *,
+    channels: list[str] | None = None,
     show: bool = True,
     save: Path | None = None,
     title: str | None = None,
 ) -> None:
-    fig, (ax_traj, ax_res) = plt.subplots(
-        2,
+    names = channels if channels is not None else list(trace.channels.keys())
+    n = len(names)
+    fig, axes = plt.subplots(
+        2 * n,
         1,
-        figsize=(10, 7),
+        figsize=(10, 3.5 * n + 0.5),
         sharex=True,
-        gridspec_kw={"height_ratios": [2, 1]},
+        gridspec_kw={"height_ratios": [2, 1] * n},
     )
-
+    axes = np.atleast_1d(axes)
     t_s = trace.t_ms / 1000.0
-    gnss_t_s = trace.gnss_t_ms / 1000.0
 
-    ax_traj.plot(t_s, trace.truth_deg, label="truth", linewidth=2.0, color="black")
-    ax_traj.plot(
-        t_s,
-        trace.openloop_deg,
-        label="open-loop gyro",
-        linewidth=1.0,
-        linestyle="--",
-        color="tab:gray",
-    )
-    if len(gnss_t_s) > 0:
-        ax_traj.scatter(
-            gnss_t_s,
-            trace.gnss_deg,
-            label="GNSS",
-            s=10,
-            color="tab:orange",
-            alpha=_GNSS_SCATTER_ALPHA,
-            zorder=2,
-        )
-    ax_traj.plot(
-        t_s,
-        trace.est_deg,
-        label="EKF estimate",
-        linewidth=1.5,
-        color="tab:blue",
-        zorder=3,
-    )
-    ax_traj.set_ylabel("heading (deg)")
-    if title is not None:
-        ax_traj.set_title(title)
-    ax_traj.legend(loc="best")
-    ax_traj.grid(True, alpha=0.3)
+    for i, name in enumerate(names):
+        ax_traj = axes[2 * i]
+        ax_res = axes[2 * i + 1]
+        _plot_channel(ax_traj, ax_res, t_s, trace.t_ms, trace.channels[name])
+        if i == 0 and title is not None:
+            ax_traj.set_title(title)
 
-    ekf_residual = trace.est_deg - trace.truth_deg
-
-    ax_res.fill_between(
-        t_s,
-        -trace.est_std_deg,
-        trace.est_std_deg,
-        alpha=0.2,
-        color="tab:blue",
-        label="EKF +/-1 sigma",
-    )
-    ax_res.axhline(0, color="black", linewidth=0.8, alpha=0.7)
-    if len(gnss_t_s) > 0:
-        gnss_truth = np.interp(trace.gnss_t_ms, trace.t_ms, trace.truth_deg)
-        ax_res.scatter(
-            gnss_t_s,
-            trace.gnss_deg - gnss_truth,
-            label="GNSS error",
-            s=10,
-            color="tab:orange",
-            alpha=_GNSS_SCATTER_ALPHA,
-            zorder=2,
-        )
-    ax_res.plot(
-        t_s,
-        ekf_residual,
-        label="EKF error",
-        linewidth=1.5,
-        color="tab:blue",
-        zorder=3,
-    )
-
-    # Bound the y-axis so the wide initial P0 sigma band doesn't squash
-    # the steady-state detail. Skip the first 5% of samples for the
-    # bound calculation; that's the transient where p0 dominates.
-    warmup = max(1, len(trace.est_std_deg) // 20)
-    steady_std = trace.est_std_deg[warmup:]
-    steady_std = steady_std[np.isfinite(steady_std)]
-    if len(steady_std) > 0:
-        steady_res = ekf_residual[warmup:]
-        steady_res = steady_res[np.isfinite(steady_res)]
-        bound = 3.0 * max(
-            float(steady_std.max()),
-            float(np.abs(steady_res).max()) if len(steady_res) > 0 else 0.0,
-        )
-        if bound > 0.0:
-            ax_res.set_ylim(-bound, bound)
-
-    ax_res.set_xlabel("time (s)")
-    ax_res.set_ylabel("error (deg)")
-    ax_res.legend(loc="best")
-    ax_res.grid(True, alpha=0.3)
-
+    axes[-1].set_xlabel("time (s)")
     fig.tight_layout()
 
     if save is not None:
@@ -135,3 +60,98 @@ def plot_heading(
     if show:
         plt.show()
     plt.close(fig)
+
+
+def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
+    ax_traj.plot(t_s, ch.truth, label="truth", linewidth=2.0, color="black")
+    if ch.openloop is not None:
+        ax_traj.plot(
+            t_s,
+            ch.openloop,
+            label="open-loop",
+            linewidth=1.0,
+            linestyle="--",
+            color="tab:gray",
+        )
+    has_measurements = (
+        ch.measurement_t_ms is not None
+        and ch.measurement is not None
+        and len(ch.measurement_t_ms) > 0
+    )
+    if has_measurements:
+        assert ch.measurement_t_ms is not None and ch.measurement is not None
+        meas_t_s = ch.measurement_t_ms / 1000.0
+        ax_traj.scatter(
+            meas_t_s,
+            ch.measurement,
+            label="measurement",
+            s=10,
+            color="tab:orange",
+            alpha=_MEASUREMENT_SCATTER_ALPHA,
+            zorder=2,
+        )
+    ax_traj.plot(
+        t_s,
+        ch.estimate,
+        label="EKF estimate",
+        linewidth=1.5,
+        color="tab:blue",
+        zorder=3,
+    )
+    ax_traj.set_ylabel(f"{ch.name} ({ch.unit})")
+    ax_traj.legend(loc="best")
+    ax_traj.grid(True, alpha=0.3)
+
+    residual = ch.estimate - ch.truth
+
+    if ch.estimate_std is not None:
+        ax_res.fill_between(
+            t_s,
+            -ch.estimate_std,
+            ch.estimate_std,
+            alpha=0.2,
+            color="tab:blue",
+            label="EKF +/-1 sigma",
+        )
+    ax_res.axhline(0, color="black", linewidth=0.8, alpha=0.7)
+    if has_measurements:
+        assert ch.measurement is not None and ch.measurement_t_ms is not None
+        meas_t_s = ch.measurement_t_ms / 1000.0
+        meas_truth = np.interp(ch.measurement_t_ms, t_ms, ch.truth)
+        ax_res.scatter(
+            meas_t_s,
+            ch.measurement - meas_truth,
+            label="measurement error",
+            s=10,
+            color="tab:orange",
+            alpha=_MEASUREMENT_SCATTER_ALPHA,
+            zorder=2,
+        )
+    ax_res.plot(
+        t_s,
+        residual,
+        label="EKF error",
+        linewidth=1.5,
+        color="tab:blue",
+        zorder=3,
+    )
+
+    if ch.estimate_std is not None:
+        # Bound y so the wide initial P0 sigma band doesn't squash the
+        # steady-state detail. Skip the first 5% (the P0 transient).
+        warmup = max(1, len(ch.estimate_std) // 20)
+        steady_std = ch.estimate_std[warmup:]
+        steady_std = steady_std[np.isfinite(steady_std)]
+        if len(steady_std) > 0:
+            steady_res = residual[warmup:]
+            steady_res = steady_res[np.isfinite(steady_res)]
+            bound = 3.0 * max(
+                float(steady_std.max()),
+                float(np.abs(steady_res).max()) if len(steady_res) > 0 else 0.0,
+            )
+            if bound > 0.0:
+                ax_res.set_ylim(-bound, bound)
+
+    ax_res.set_ylabel(f"{ch.name} error ({ch.unit})")
+    ax_res.legend(loc="best")
+    ax_res.grid(True, alpha=0.3)
