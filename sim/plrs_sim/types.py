@@ -55,6 +55,10 @@ class GnssSample:
 class FusionOutput:
     heading_deg: float
     heading_variance_deg2: float
+    roll_deg: float
+    roll_variance_deg2: float
+    pitch_deg: float
+    pitch_variance_deg2: float
     timestamp_ms: int
 
 
