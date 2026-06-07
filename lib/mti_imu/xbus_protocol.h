@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "geometry.h"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -76,6 +77,10 @@ constexpr uint8_t twosComplement(const uint8_t num) {
 
 constexpr uint16_t read_u16_big_endian(ByteSpan b) {
   return static_cast<uint16_t>((b[0] << 8) | b[1]);
+}
+
+constexpr std::array<uint8_t, 2> write_u16_big_endian(uint16_t v) {
+  return {static_cast<uint8_t>(v >> 8), static_cast<uint8_t>(v & 0xFF)};
 }
 
 constexpr float read_f32_big_endian(ByteSpan b) {
@@ -178,6 +183,42 @@ struct Encoded {
    */
   constexpr ByteSpan view() const { return {bytes.data(), len}; }
 };
+
+/**
+ * One entry in a SetOutputConfig payload.
+ */
+struct OutputItem {
+  DataId id;
+  uint16_t rate_hz;
+};
+
+constexpr std::size_t OUTPUT_ITEM_BYTES = 4;
+
+/**
+ * @brief Serialize a list of OutputItems into a SetOutputConfig payload.
+ *
+ * Each item is 4 bytes: DataId (big endian, 2) followed by rate_hz
+ * (big endian, 2).
+ *
+ * @param items  Compile-time list of outputs to request.
+ *
+ * @return The packed payload bytes; feed to Packet::command(SetOutputConfig).
+ */
+template <std::size_t N>
+constexpr std::array<uint8_t, N * OUTPUT_ITEM_BYTES>
+build_output_config(const std::array<OutputItem, N> &items) {
+  std::array<uint8_t, N * OUTPUT_ITEM_BYTES> out{};
+  for (std::size_t i = 0; i < N; i++) {
+    const auto id = write_u16_big_endian(static_cast<uint16_t>(items[i].id));
+    const auto rate = write_u16_big_endian(items[i].rate_hz);
+    const std::size_t base = i * OUTPUT_ITEM_BYTES;
+    out[base + 0] = id[0];
+    out[base + 1] = id[1];
+    out[base + 2] = rate[0];
+    out[base + 3] = rate[1];
+  }
+  return out;
+}
 
 /**
  * @brief Encode a packet to send.
@@ -348,6 +389,18 @@ struct DataPacket {
  *
  * @return The first sub packet matching 'wanted', or nullopt.
  */
+constexpr std::size_t QUATERNION_BYTES = 4 * sizeof(float);
+
+/**
+ * @brief Read the Quaternion (0x2010) sub-packet from an MTData2 packet.
+ *
+ * @param packet  The MTData2 packet to search.
+ *
+ * @return The quaternion, or nullopt if no Quaternion sub-packet is present
+ *   or its payload is not exactly 16 bytes (4 x float32).
+ */
+inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet);
+
 inline std::optional<DataPacket> find_data(const Packet &packet,
                                            DataId wanted) {
   ByteSpan s = packet.payload();
@@ -365,6 +418,23 @@ inline std::optional<DataPacket> find_data(const Packet &packet,
     i += SUBPACKET_HEADER + len;
   }
   return std::nullopt;
+}
+
+inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet) {
+  auto sub = find_data(packet, DataId::Quaternion);
+  if (!sub || sub->bytes.size() != QUATERNION_BYTES) {
+    return std::nullopt;
+  }
+  auto take = [&](std::size_t idx) {
+    return read_f32_big_endian(
+        sub->bytes.subspan(idx * sizeof(float), sizeof(float)));
+  };
+  return plrs::Quaternion{
+      .w = take(0),
+      .x = take(1),
+      .y = take(2),
+      .z = take(3),
+  };
 }
 
 } // namespace xbus

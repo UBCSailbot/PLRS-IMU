@@ -1,4 +1,4 @@
-"""Smoke tests for plot_heading.
+"""Smoke tests for plot_trace.
 
 Uses the Agg backend (no display required). Asserts the function builds
 a figure without raising and that --save writes a real file.
@@ -17,8 +17,9 @@ from plrs_sim import (
     EkfConfig,
     GnssNoiseModel,
     ImuNoiseModel,
+    Scenario,
 )
-from plrs_sim.plot import plot_heading
+from plrs_sim.plot import plot_trace
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 
@@ -32,7 +33,7 @@ CFG = EkfConfig(
 
 def _trace():
     src = SimulatedSource(
-        trajectory=ConstantTurn(rate_deg_s=5.0),
+        scenario=Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
         imu_noise=ImuNoiseModel(gyro_white_std_rad_s=0.01),
         gnss_noise=GnssNoiseModel(heading_std_deg=1.0),
         duration_s=2.0,
@@ -41,16 +42,16 @@ def _trace():
     return run(src, CFG)
 
 
-def test_plot_heading_runs_headless() -> None:
-    plot_heading(_trace(), show=False)
+def test_plot_trace_runs_headless() -> None:
+    plot_trace(_trace(), show=False)
 
 
-def test_plot_heading_writes_save_path(tmp_path: Path) -> None:
+def test_plot_trace_writes_save_path(tmp_path: Path) -> None:
     out = tmp_path / "heading.png"
-    plot_heading(_trace(), show=False, save=out)
+    plot_trace(_trace(), show=False, save=out)
     assert out.exists()
     assert out.stat().st_size > 0
 
 
-def test_plot_heading_accepts_title() -> None:
-    plot_heading(_trace(), show=False, title="test scenario")
+def test_plot_trace_accepts_title() -> None:
+    plot_trace(_trace(), show=False, title="test scenario")

@@ -6,23 +6,104 @@
 
 #pragma once
 
+#include "geometry.h"
 #include <chrono>
+#include <cmath>
 #include <concepts>
+#include <expected>
+#include <numbers>
 
 namespace fusion {
 
 using Ms = std::chrono::milliseconds;
 
+constexpr float GRAVITY_MS2 = 9.81f;
+constexpr float RAD_TO_DEG = 180.0f / std::numbers::pi_v<float>;
+constexpr float DEG_TO_RAD = std::numbers::pi_v<float> / 180.0f;
+
+/**
+ * Quaternion known to be unit-norm by construction.
+ *
+ * Built only via `identity()`, `from_raw()`, `multiply()`, or
+ * `conjugate()`. Attitude-consuming functions take this type so
+ * passing an un-validated quaternion is a compile error.
+ */
+class UnitQuaternion {
+public:
+  /**
+   * Tolerance on `|q|` for `from_raw` to accept an input as
+   * approximately unit before normalizing.
+   */
+  static constexpr float NORM_TOLERANCE = 0.01f;
+
+  static constexpr UnitQuaternion identity() {
+    return UnitQuaternion{plrs::Quaternion{1.0f, 0.0f, 0.0f, 0.0f}};
+  }
+
+  /**
+   * @brief Validate that `q` is approximately unit and normalize it.
+   *
+   * @param q  Raw quaternion components.
+   *
+   * @return A unit quaternion, or an error if `|q|` is outside
+   *   `[1 - NORM_TOLERANCE, 1 + NORM_TOLERANCE]`. NaN inputs are
+   *   rejected.
+   */
+  static std::expected<UnitQuaternion, const char *>
+  from_raw(plrs::Quaternion q) {
+    const float norm_sq = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+    const float norm = std::sqrt(norm_sq);
+    if (!(norm >= 1.0f - NORM_TOLERANCE && norm <= 1.0f + NORM_TOLERANCE)) {
+      return std::unexpected("Quaternion norm not close to 1");
+    }
+    return UnitQuaternion{
+        plrs::Quaternion{q.w / norm, q.x / norm, q.y / norm, q.z / norm}};
+  }
+
+  /**
+   * @brief Hamilton product of two unit quaternions. Does not
+   * renormalize the result.
+   */
+  static constexpr UnitQuaternion multiply(UnitQuaternion a, UnitQuaternion b) {
+    const plrs::Quaternion p = a._q;
+    const plrs::Quaternion q = b._q;
+    return UnitQuaternion{plrs::Quaternion{
+        p.w * q.w - p.x * q.x - p.y * q.y - p.z * q.z,
+        p.w * q.x + p.x * q.w + p.y * q.z - p.z * q.y,
+        p.w * q.y - p.x * q.z + p.y * q.w + p.z * q.x,
+        p.w * q.z + p.x * q.y - p.y * q.x + p.z * q.w,
+    }};
+  }
+
+  /**
+   * @brief Conjugate of a unit quaternion.
+   */
+  constexpr UnitQuaternion conjugate() const {
+    return UnitQuaternion{plrs::Quaternion{_q.w, -_q.x, -_q.y, -_q.z}};
+  }
+
+  constexpr plrs::Quaternion components() const { return _q; }
+
+private:
+  explicit constexpr UnitQuaternion(plrs::Quaternion q) : _q(q) {}
+
+  plrs::Quaternion _q;
+};
+
+/**
+ * Static rotation from the boat body frame into the IMU body frame.
+ */
+struct MountRotation {
+  UnitQuaternion boat_to_imu = UnitQuaternion::identity();
+};
+
 /**
  * One IMU sample from the MTi-3, in SI units.
  */
 struct ImuSample {
-  float rate_of_turn_x_rad_s;
-  float rate_of_turn_y_rad_s;
-  float rate_of_turn_z_rad_s;
-  float accel_x_ms2;
-  float accel_y_ms2;
-  float accel_z_ms2;
+  plrs::Vec3 angular_velocity_rad_s;
+  plrs::Vec3 accel_ms2;
+  UnitQuaternion orientation = UnitQuaternion::identity();
   Ms timestamp;
 };
 
@@ -41,11 +122,15 @@ struct GnssSample {
 };
 
 /**
- * Fused heading estimate published after each predict step.
+ * Fused estimate published after each predict step.
  */
 struct FusionOutput {
   float heading_deg;
   float heading_variance_deg2; // P[0][0] from the filter covariance
+  float roll_deg;
+  float roll_variance_deg2;
+  float pitch_deg;
+  float pitch_variance_deg2;
   Ms timestamp;
 };
 

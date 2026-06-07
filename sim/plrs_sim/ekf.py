@@ -8,17 +8,26 @@ even though the filter itself is C++.
 from __future__ import annotations
 
 from . import _native
-from .types import EkfConfig, FusionOutput, GnssSample, ImuSample
+from .types import EkfConfig, FusionOutput, GnssSample, ImuSample, Quaternion, Vec3
+
+
+def _to_native_vec3(v: Vec3) -> _native.Vec3:
+    return _native.Vec3(v.x, v.y, v.z)
+
+
+def _to_native_quaternion(q: Quaternion) -> _native.Quaternion:
+    return _native.Quaternion(q.w, q.x, q.y, q.z)
+
+
+def _to_native_unit_quaternion(q: Quaternion) -> _native.UnitQuaternion:
+    return _native.UnitQuaternion.from_raw(_to_native_quaternion(q))
 
 
 def _to_native_imu(s: ImuSample) -> _native.ImuSample:
     n = _native.ImuSample()
-    n.rate_of_turn_x_rad_s = s.rate_of_turn_x_rad_s
-    n.rate_of_turn_y_rad_s = s.rate_of_turn_y_rad_s
-    n.rate_of_turn_z_rad_s = s.rate_of_turn_z_rad_s
-    n.accel_x_ms2 = s.accel_x_ms2
-    n.accel_y_ms2 = s.accel_y_ms2
-    n.accel_z_ms2 = s.accel_z_ms2
+    n.angular_velocity_rad_s = _to_native_vec3(s.angular_velocity_rad_s)
+    n.accel_ms2 = _to_native_vec3(s.accel_ms2)
+    n.orientation = _to_native_unit_quaternion(s.orientation)
     n.timestamp_ms = s.timestamp_ms
     return n
 
@@ -45,6 +54,10 @@ def _from_native_output(o: _native.FusionOutput) -> FusionOutput:
     return FusionOutput(
         heading_deg=o.heading_deg,
         heading_variance_deg2=o.heading_variance_deg2,
+        roll_deg=o.roll_deg,
+        roll_variance_deg2=o.roll_variance_deg2,
+        pitch_deg=o.pitch_deg,
+        pitch_variance_deg2=o.pitch_variance_deg2,
         timestamp_ms=o.timestamp_ms,
     )
 

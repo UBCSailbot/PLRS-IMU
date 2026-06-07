@@ -11,15 +11,35 @@ from dataclasses import dataclass
 
 import numpy as np
 
+GRAVITY_MS2 = 9.81
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Vec3:
+    x: float
+    y: float
+    z: float
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Quaternion:
+    """Mirror of plrs::Quaternion in lib/geometry, {w, x, y, z} order."""
+
+    w: float
+    x: float
+    y: float
+    z: float
+
+    @staticmethod
+    def identity() -> Quaternion:
+        return Quaternion(w=1.0, x=0.0, y=0.0, z=0.0)
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ImuSample:
-    rate_of_turn_x_rad_s: float
-    rate_of_turn_y_rad_s: float
-    rate_of_turn_z_rad_s: float
-    accel_x_ms2: float
-    accel_y_ms2: float
-    accel_z_ms2: float
+    angular_velocity_rad_s: Vec3
+    accel_ms2: Vec3
+    orientation: Quaternion = Quaternion(w=1.0, x=0.0, y=0.0, z=0.0)
     timestamp_ms: int
 
 
@@ -35,6 +55,10 @@ class GnssSample:
 class FusionOutput:
     heading_deg: float
     heading_variance_deg2: float
+    roll_deg: float
+    roll_variance_deg2: float
+    pitch_deg: float
+    pitch_variance_deg2: float
     timestamp_ms: int
 
 
@@ -93,6 +117,44 @@ class Static:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class LevelAttitude:
+    """The boat sits upright with no roll or pitch motion.
+
+    The placeholder attitude profile used when a scenario does not
+    exercise heel or trim. sample_attitude returns identity for every t.
+    """
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConstantHeel:
+    """The boat sits at a fixed heel angle for the whole run.
+
+    Positive angle is starboard heel (right-hand rotation about body X).
+    No pitch, no time variation; the orientation quaternion is constant
+    and the body-frame angular velocity from attitude motion is zero.
+    """
+
+    angle_deg: float
+
+
+YawProfile = ConstantTurn | Sinusoidal | StepTurns | Static
+AttitudeProfile = LevelAttitude | ConstantHeel
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Scenario:
+    """A composition of independent truth profiles, one per quantity.
+
+    Each axis (yaw, attitude, eventually position/velocity) is sampled
+    by its own pure function in truth.py. SimulatedSource composes the
+    samplers into one ImuSample per tick.
+    """
+
+    yaw: YawProfile
+    attitude: AttitudeProfile = LevelAttitude()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ImuNoiseModel:
     """Additive gyro_z effects. None disables that effect.
 
@@ -112,13 +174,31 @@ class GnssNoiseModel:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Channel:
+    """One scalar quantity tracked through a run, ready for plotting.
+
+    Optional fields are None when the channel does not have that series:
+    a freshly-added quantity may not yet have an open-loop integrator or
+    a measurement source, and that should not force the plot to invent
+    fake data.
+
+    measurement_t_ms / measurement_deg travel together; the cadence is
+    independent of t_ms because GNSS does not share the IMU rate.
+    """
+
+    name: str
+    unit: str
+    truth: np.ndarray
+    estimate: np.ndarray
+    estimate_std: np.ndarray | None = None
+    openloop: np.ndarray | None = None
+    measurement_t_ms: np.ndarray | None = None
+    measurement: np.ndarray | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Trace:
-    """Captured run output, one column per series, ready for plotting."""
+    """Captured run output: a shared time axis and a channel per quantity."""
 
     t_ms: np.ndarray
-    truth_deg: np.ndarray
-    est_deg: np.ndarray
-    est_std_deg: np.ndarray
-    openloop_deg: np.ndarray
-    gnss_t_ms: np.ndarray
-    gnss_deg: np.ndarray
+    channels: dict[str, Channel]

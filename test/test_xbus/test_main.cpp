@@ -512,6 +512,50 @@ void test_find_data_truncated_safe() {
   TEST_ASSERT_FALSE(find_data(p, DataId::Quaternion).has_value());
 }
 
+/** @brief read_quaternion round-trips known w/x/y/z floats. */
+void test_read_quaternion_roundtrip() {
+  const plrs::Quaternion expected{0.7071f, 0.0f, 0.7071f, 0.0f};
+  std::vector<uint8_t> qbytes;
+  for (float v : {expected.w, expected.x, expected.y, expected.z}) {
+    auto fb = xtest::be_float(v);
+    qbytes.insert(qbytes.end(), fb.begin(), fb.end());
+  }
+  auto frame = xtest::make_frame(
+      MID::MTData2, xtest::make_subpacket(DataId::Quaternion, qbytes));
+
+  Parser p;
+  auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+
+  auto q = read_quaternion(*pkt);
+  TEST_ASSERT_TRUE(q.has_value());
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.w, q->w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.x, q->x);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.y, q->y);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, expected.z, q->z);
+}
+
+/** @brief No Quaternion sub-packet present: returns nullopt. */
+void test_read_quaternion_missing() {
+  auto frame = xtest::make_frame(
+      MID::MTData2, xtest::make_subpacket(DataId::PacketCounter, {0x00, 0x2A}));
+  Parser p;
+  auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT_FALSE(read_quaternion(*pkt).has_value());
+}
+
+/** @brief Quaternion sub-packet with wrong length is rejected. */
+void test_read_quaternion_wrong_length() {
+  auto frame = xtest::make_frame(
+      MID::MTData2,
+      xtest::make_subpacket(DataId::Quaternion, {0x3F, 0x80, 0x00, 0x00}));
+  Parser p;
+  auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+  TEST_ASSERT_FALSE(read_quaternion(*pkt).has_value());
+}
+
 /** @brief With multiple sub-packets, the correct one is found by DataId. */
 void test_find_data_multiple_subpackets() {
   const uint8_t raw[] = {
@@ -528,6 +572,67 @@ void test_find_data_multiple_subpackets() {
   TEST_ASSERT_TRUE(dp.has_value());
   TEST_ASSERT(dp->id == DataId::Acceleration);
   TEST_ASSERT_EQUAL_FLOAT(2.0f, read_f32_big_endian(dp->bytes));
+}
+
+// ---------------------------------------------------------------------------
+// build_output_config()
+// ---------------------------------------------------------------------------
+
+namespace {
+constexpr std::array<OutputItem, 1> kOneItem = {{
+    {DataId::Quaternion, 100},
+}};
+constexpr auto kOnePayload = build_output_config(kOneItem);
+static_assert(kOnePayload.size() == OUTPUT_ITEM_BYTES);
+static_assert(kOnePayload[0] == 0x20);
+static_assert(kOnePayload[1] == 0x10);
+static_assert(kOnePayload[2] == 0x00);
+static_assert(kOnePayload[3] == 0x64);
+} // namespace
+
+/** @brief One item encodes to DataId big-endian then rate_hz big-endian. */
+void test_build_output_config_one_item() {
+  constexpr std::array<OutputItem, 1> items = {{
+      {DataId::Quaternion, 100},
+  }};
+  constexpr auto payload = build_output_config(items);
+  const uint8_t expected[] = {0x20, 0x10, 0x00, 0x64};
+  TEST_ASSERT_EQUAL_size_t(OUTPUT_ITEM_BYTES, payload.size());
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, payload.data(), payload.size());
+}
+
+/** @brief Multiple items are concatenated in order. */
+void test_build_output_config_multiple_items() {
+  constexpr std::array<OutputItem, 3> items = {{
+      {DataId::Quaternion, 100},
+      {DataId::FreeAccel, 100},
+      {DataId::StatusWord, 1},
+  }};
+  constexpr auto payload = build_output_config(items);
+  const uint8_t expected[] = {
+      0x20, 0x10, 0x00, 0x64, // Quaternion @ 100Hz
+      0x40, 0x30, 0x00, 0x64, // FreeAccel @ 100Hz
+      0xE0, 0x20, 0x00, 0x01, // StatusWord @ 1Hz
+  };
+  TEST_ASSERT_EQUAL_size_t(sizeof expected, payload.size());
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, payload.data(), payload.size());
+}
+
+/** @brief Payload feeds straight into Packet::command and encode(). */
+void test_build_output_config_round_trips_through_encode() {
+  constexpr std::array<OutputItem, 1> items = {{
+      {DataId::Quaternion, 100},
+  }};
+  constexpr auto payload = build_output_config(items);
+  auto pkt = Packet::command(MID::SetOutputConfig,
+                             ByteSpan(payload.data(), payload.size()));
+  TEST_ASSERT_TRUE(pkt.has_value());
+  auto enc = encode(*pkt);
+  TEST_ASSERT_TRUE(enc.has_value());
+  const uint8_t expected[] = {0xFA, 0xFF, 0xC0, 0x04, 0x20,
+                              0x10, 0x00, 0x64, 0xA9};
+  TEST_ASSERT_EQUAL_size_t(sizeof expected, enc->len);
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, enc->bytes.data(), sizeof expected);
 }
 
 // ---------------------------------------------------------------------------
@@ -567,5 +672,11 @@ int main(int, char **) {
   RUN_TEST(test_find_data_not_found);
   RUN_TEST(test_find_data_truncated_safe);
   RUN_TEST(test_find_data_multiple_subpackets);
+  RUN_TEST(test_read_quaternion_roundtrip);
+  RUN_TEST(test_read_quaternion_missing);
+  RUN_TEST(test_read_quaternion_wrong_length);
+  RUN_TEST(test_build_output_config_one_item);
+  RUN_TEST(test_build_output_config_multiple_items);
+  RUN_TEST(test_build_output_config_round_trips_through_encode);
   return UNITY_END();
 }

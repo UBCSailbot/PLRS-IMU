@@ -5,6 +5,7 @@
 #include "ekf_filter.h"
 #include "fusion.h"
 #include <cfloat>
+#include <cmath>
 #include <unity.h>
 
 using namespace fusion;
@@ -28,12 +29,25 @@ constexpr TinyEkfFilter::Config kTestConfig{
 
 ImuSample make_imu(float rate_z_rad_s, Ms t) {
   return ImuSample{
-      .rate_of_turn_x_rad_s = 0.0f,
-      .rate_of_turn_y_rad_s = 0.0f,
-      .rate_of_turn_z_rad_s = rate_z_rad_s,
-      .accel_x_ms2 = 0.0f,
-      .accel_y_ms2 = 0.0f,
-      .accel_z_ms2 = 9.81f,
+      .angular_velocity_rad_s = plrs::Vec3{0.0f, 0.0f, rate_z_rad_s},
+      .accel_ms2 = plrs::Vec3{0.0f, 0.0f, GRAVITY_MS2},
+      .timestamp = t,
+  };
+}
+
+UnitQuaternion axis_angle(float ax, float ay, float az, float angle_rad) {
+  const float half = angle_rad * 0.5f;
+  const float s = std::sin(half);
+  return UnitQuaternion::from_raw(
+             plrs::Quaternion{std::cos(half), ax * s, ay * s, az * s})
+      .value();
+}
+
+ImuSample make_heeled_imu(float rate_z_rad_s, float heel_rad, Ms t) {
+  return ImuSample{
+      .angular_velocity_rad_s = plrs::Vec3{0.0f, 0.0f, rate_z_rad_s},
+      .accel_ms2 = plrs::Vec3{0.0f, 0.0f, GRAVITY_MS2},
+      .orientation = axis_angle(1.0f, 0.0f, 0.0f, heel_rad),
       .timestamp = t,
   };
 }
@@ -148,6 +162,66 @@ void test_predict_grows_variance() {
 }
 
 // ---------------------------------------------------------------------------
+// Attitude wiring
+// ---------------------------------------------------------------------------
+
+/** @brief At 30 deg heel, body-Z gyro projects into world Z by cos(30). */
+void test_predict_compensates_for_heel() {
+  TinyEkfFilter f(kTestConfig);
+  const float heel_rad = 30.0f * DEG_TO_RAD;
+  f.update(make_gnss(0.0f, 1.0f, Ms{1000}));
+  f.predict(make_heeled_imu(0.0f, heel_rad, Ms{1000})); // baseline
+  f.predict(make_heeled_imu(1.0f, heel_rad, Ms{2000})); // 1 rad/s * 1 s
+  auto out = f.output();
+  const float expected_deg = std::cos(heel_rad) * RAD_TO_DEG;
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, expected_deg, out.heading_deg);
+}
+
+/** @brief output().roll_deg reflects the latest orientation. */
+void test_output_exposes_roll_from_orientation() {
+  TinyEkfFilter f(kTestConfig);
+  const float heel_rad = 20.0f * DEG_TO_RAD;
+  f.predict(make_heeled_imu(0.0f, heel_rad, Ms{1000}));
+  auto out = f.output();
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.0f, out.roll_deg);
+}
+
+/** @brief boat_to_imu mount rotation flows into output().roll_deg. */
+void test_output_applies_mount_rotation() {
+  TinyEkfFilter::Config cfg = kTestConfig;
+  cfg.mount.boat_to_imu = axis_angle(1.0f, 0.0f, 0.0f, 10.0f * DEG_TO_RAD);
+  TinyEkfFilter f(cfg);
+  f.predict(make_imu(0.0f, Ms{1000}));
+  auto out = f.output();
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, out.roll_deg);
+}
+
+// ---------------------------------------------------------------------------
+// Forward declarations for tests defined in test_attitude.cpp.
+// ---------------------------------------------------------------------------
+
+void test_unit_quaternion_identity_components();
+void test_unit_quaternion_from_raw_accepts_unit();
+void test_unit_quaternion_from_raw_normalizes_near_unit();
+void test_unit_quaternion_from_raw_rejects_zero();
+void test_unit_quaternion_from_raw_rejects_far_from_unit();
+void test_unit_quaternion_from_raw_rejects_nan();
+void test_unit_quaternion_multiply_with_identity_is_identity_element();
+void test_unit_quaternion_multiply_by_conjugate_is_identity();
+void test_unit_quaternion_double_conjugate_is_self();
+void test_rotate_identity_passes_through();
+void test_rotate_yaw_90_maps_east_to_north();
+void test_rotate_yaw_180_negates_xy();
+void test_euler_identity_is_zero();
+void test_euler_pure_yaw_recovers_yaw_angle();
+void test_euler_pure_pitch_recovers_pitch_angle();
+void test_euler_pure_roll_recovers_roll_angle();
+void test_euler_near_singular_does_not_nan();
+void test_world_angular_velocity_identity_passes_through();
+void test_world_yaw_rate_heeled_boat_projects_by_cos_heel();
+void test_world_yaw_rate_matches_world_angular_velocity_z();
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -159,5 +233,29 @@ int main(int, char **) {
   RUN_TEST(test_first_predict_baseline_only);
   RUN_TEST(test_predict_integrates_gyro);
   RUN_TEST(test_predict_grows_variance);
+  RUN_TEST(test_predict_compensates_for_heel);
+  RUN_TEST(test_output_exposes_roll_from_orientation);
+  RUN_TEST(test_output_applies_mount_rotation);
+
+  RUN_TEST(test_unit_quaternion_identity_components);
+  RUN_TEST(test_unit_quaternion_from_raw_accepts_unit);
+  RUN_TEST(test_unit_quaternion_from_raw_normalizes_near_unit);
+  RUN_TEST(test_unit_quaternion_from_raw_rejects_zero);
+  RUN_TEST(test_unit_quaternion_from_raw_rejects_far_from_unit);
+  RUN_TEST(test_unit_quaternion_from_raw_rejects_nan);
+  RUN_TEST(test_unit_quaternion_multiply_with_identity_is_identity_element);
+  RUN_TEST(test_unit_quaternion_multiply_by_conjugate_is_identity);
+  RUN_TEST(test_unit_quaternion_double_conjugate_is_self);
+  RUN_TEST(test_rotate_identity_passes_through);
+  RUN_TEST(test_rotate_yaw_90_maps_east_to_north);
+  RUN_TEST(test_rotate_yaw_180_negates_xy);
+  RUN_TEST(test_euler_identity_is_zero);
+  RUN_TEST(test_euler_pure_yaw_recovers_yaw_angle);
+  RUN_TEST(test_euler_pure_pitch_recovers_pitch_angle);
+  RUN_TEST(test_euler_pure_roll_recovers_roll_angle);
+  RUN_TEST(test_euler_near_singular_does_not_nan);
+  RUN_TEST(test_world_angular_velocity_identity_passes_through);
+  RUN_TEST(test_world_yaw_rate_heeled_boat_projects_by_cos_heel);
+  RUN_TEST(test_world_yaw_rate_matches_world_angular_velocity_z);
   return UNITY_END();
 }

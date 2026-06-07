@@ -11,18 +11,21 @@ import math
 import numpy as np
 import pytest
 
-from plrs_sim import GnssNoiseModel, GnssSample, ImuNoiseModel, ImuSample
+from plrs_sim import (
+    GRAVITY_MS2,
+    GnssNoiseModel,
+    GnssSample,
+    ImuNoiseModel,
+    ImuSample,
+    Vec3,
+)
 from plrs_sim.noise import GnssNoise, ImuNoise
 
 
 def _imu(rate_z: float = 0.5) -> ImuSample:
     return ImuSample(
-        rate_of_turn_x_rad_s=0.0,
-        rate_of_turn_y_rad_s=0.0,
-        rate_of_turn_z_rad_s=rate_z,
-        accel_x_ms2=0.0,
-        accel_y_ms2=0.0,
-        accel_z_ms2=9.81,
+        angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=rate_z),
+        accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
         timestamp_ms=0,
     )
 
@@ -47,14 +50,17 @@ def test_imu_constant_bias_added_each_call() -> None:
     n = ImuNoise(ImuNoiseModel(gyro_constant_bias_rad_s=0.1), np.random.default_rng(0))
     for _ in range(5):
         out = n.corrupt(_imu(0.5), dt_s=0.01)
-        assert out.rate_of_turn_z_rad_s == pytest.approx(0.6)
+        assert out.angular_velocity_rad_s.z == pytest.approx(0.6)
 
 
 def test_imu_white_noise_mean_and_std() -> None:
     std = 0.05
     n = ImuNoise(ImuNoiseModel(gyro_white_std_rad_s=std), np.random.default_rng(42))
     samples = np.array(
-        [n.corrupt(_imu(0.0), dt_s=0.01).rate_of_turn_z_rad_s for _ in range(10_000)]
+        [
+            n.corrupt(_imu(0.0), dt_s=0.01).angular_velocity_rad_s.z
+            for _ in range(10_000)
+        ]
     )
     assert abs(samples.mean()) < 0.005
     assert abs(samples.std() - std) / std < 0.05

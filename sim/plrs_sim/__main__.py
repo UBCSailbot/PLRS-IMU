@@ -13,33 +13,46 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .plot import plot_heading
+from .plot import plot_trace
 from .runner import run
 from .source import SimulatedSource
-from .truth import Trajectory
 from .types import (
+    ConstantHeel,
     ConstantTurn,
     EkfConfig,
     GnssNoiseModel,
     ImuNoiseModel,
+    Scenario,
     Sinusoidal,
     Static,
     StepTurns,
 )
 
-SCENARIOS: dict[str, Trajectory] = {
-    "constant_turn": ConstantTurn(rate_deg_s=5.0),
-    "sinusoidal": Sinusoidal(amplitude_deg=30.0, period_s=20.0),
-    "step_turns": StepTurns(
-        legs=(
-            (10.0, 0.0),
-            (2.0, 45.0),
-            (10.0, 0.0),
-            (2.0, -45.0),
-            (10.0, 0.0),
+SCENARIOS: dict[str, Scenario] = {
+    "constant_turn": Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
+    "sinusoidal": Scenario(yaw=Sinusoidal(amplitude_deg=30.0, period_s=20.0)),
+    "step_turns": Scenario(
+        yaw=StepTurns(
+            legs=(
+                (10.0, 0.0),
+                (2.0, 45.0),
+                (10.0, 0.0),
+                (2.0, -45.0),
+                (10.0, 0.0),
+            ),
         ),
     ),
-    "static": Static(heading_deg=0.0),
+    "static": Scenario(yaw=Static(heading_deg=0.0)),
+    "heeling_tack": Scenario(
+        yaw=StepTurns(
+            legs=(
+                (5.0, 0.0),
+                (3.0, 60.0),
+                (15.0, 0.0),
+            ),
+        ),
+        attitude=ConstantHeel(angle_deg=20.0),
+    ),
 }
 
 
@@ -110,7 +123,7 @@ def main(argv: list[str] | None = None) -> None:
     args = _build_parser().parse_args(argv)
 
     src = SimulatedSource(
-        trajectory=SCENARIOS[args.scenario],
+        scenario=SCENARIOS[args.scenario],
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=_zero_to_none(args.gyro_white),
             gyro_constant_bias_rad_s=_zero_to_none(args.gyro_bias),
@@ -131,7 +144,7 @@ def main(argv: list[str] | None = None) -> None:
         p0_heading_deg2=args.p0_heading,
         p0_bias_deg2_s2=args.p0_bias,
     )
-    plot_heading(
+    plot_trace(
         run(src, cfg),
         show=not args.no_show,
         save=args.save,

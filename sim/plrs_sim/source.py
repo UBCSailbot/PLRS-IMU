@@ -17,22 +17,24 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .attitude import world_to_body
 from .noise import GnssNoise, ImuNoise
-from .truth import Trajectory, gyro_z_at, heading_at
+from .truth import sample_attitude, sample_yaw
 from .types import (
+    GRAVITY_MS2,
     GnssNoiseModel,
     GnssSample,
     ImuNoiseModel,
     ImuSample,
+    Scenario,
     Tick,
+    Vec3,
 )
-
-GRAVITY_MS2 = 9.81
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SimulatedSource:
-    trajectory: Trajectory
+    scenario: Scenario
     imu_noise: ImuNoiseModel
     gnss_noise: GnssNoiseModel
     duration_s: float
@@ -52,16 +54,25 @@ class SimulatedSource:
 
         next_gnss_ms = 0
         for t_ms in range(0, end_ms + 1, imu_dt_ms):
-            truth_h = heading_at(self.trajectory, t_ms)
-            true_gyro = gyro_z_at(self.trajectory, t_ms)
+            truth_h, yaw_omega = sample_yaw(self.scenario.yaw, t_ms)
+            orientation, attitude_body_omega = sample_attitude(
+                self.scenario.attitude, t_ms
+            )
+
+            # Yaw is a world-frame angular velocity about world Z. The
+            # gyro sees it in the body frame; rotate through the inverse
+            # orientation. Under level attitude this collapses to body Z;
+            # under heel, world Z splits into body Y and Z components.
+            yaw_body = world_to_body(orientation, Vec3(x=0.0, y=0.0, z=yaw_omega))
 
             clean_imu = ImuSample(
-                rate_of_turn_x_rad_s=0.0,
-                rate_of_turn_y_rad_s=0.0,
-                rate_of_turn_z_rad_s=true_gyro,
-                accel_x_ms2=0.0,
-                accel_y_ms2=0.0,
-                accel_z_ms2=GRAVITY_MS2,
+                angular_velocity_rad_s=Vec3(
+                    x=attitude_body_omega.x + yaw_body.x,
+                    y=attitude_body_omega.y + yaw_body.y,
+                    z=attitude_body_omega.z + yaw_body.z,
+                ),
+                accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
+                orientation=orientation,
                 timestamp_ms=t_ms,
             )
             corrupted_imu = imu_noise.corrupt(clean_imu, dt_s=imu_dt_s)

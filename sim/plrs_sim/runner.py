@@ -7,8 +7,9 @@ from collections.abc import Iterable
 
 import numpy as np
 
+from .attitude import quaternion_to_euler_zyx
 from .ekf import TinyEkfFilter
-from .types import EkfConfig, Tick, Trace
+from .types import Channel, EkfConfig, Tick, Trace
 
 _RAD_TO_DEG = 180.0 / math.pi
 
@@ -21,12 +22,16 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
     ekf = TinyEkfFilter(cfg)
 
     t_ms: list[int] = []
-    truth_deg: list[float] = []
-    est_deg: list[float] = []
-    est_std_deg: list[float] = []
-    openloop_deg: list[float] = []
+    truth_heading_deg: list[float] = []
+    est_heading_deg: list[float] = []
+    est_heading_std_deg: list[float] = []
+    openloop_heading_deg: list[float] = []
     gnss_t_ms: list[int] = []
-    gnss_deg: list[float] = []
+    gnss_heading_deg: list[float] = []
+    truth_roll_deg: list[float] = []
+    est_roll_deg: list[float] = []
+    truth_pitch_deg: list[float] = []
+    est_pitch_deg: list[float] = []
 
     openloop: float | None = None
     prev_t_ms: int | None = None
@@ -36,32 +41,54 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
         if tick.gnss is not None:
             ekf.update(tick.gnss)
             gnss_t_ms.append(tick.gnss.timestamp_ms)
-            gnss_deg.append(tick.gnss.heading_deg)
+            gnss_heading_deg.append(tick.gnss.heading_deg)
             if openloop is None:
                 openloop = tick.gnss.heading_deg
 
         if openloop is not None and prev_t_ms is not None:
             dt_s = (tick.timestamp_ms - prev_t_ms) / 1000.0
-            openloop += tick.imu.rate_of_turn_z_rad_s * _RAD_TO_DEG * dt_s
+            openloop += tick.imu.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
 
         out = ekf.output()
+        truth_roll, truth_pitch, _ = quaternion_to_euler_zyx(tick.imu.orientation)
         t_ms.append(tick.timestamp_ms)
-        truth_deg.append(tick.truth_heading_deg)
-        est_deg.append(out.heading_deg)
+        truth_heading_deg.append(tick.truth_heading_deg)
+        est_heading_deg.append(out.heading_deg)
         var = out.heading_variance_deg2
-        est_std_deg.append(
+        est_heading_std_deg.append(
             math.sqrt(max(var, 0.0)) if var < _UNINITIALIZED_VAR_THRESHOLD else math.nan
         )
-        openloop_deg.append(openloop if openloop is not None else math.nan)
+        openloop_heading_deg.append(openloop if openloop is not None else math.nan)
+        truth_roll_deg.append(truth_roll)
+        est_roll_deg.append(out.roll_deg)
+        truth_pitch_deg.append(truth_pitch)
+        est_pitch_deg.append(out.pitch_deg)
 
         prev_t_ms = tick.timestamp_ms
 
+    heading = Channel(
+        name="heading",
+        unit="deg",
+        truth=np.array(truth_heading_deg, dtype=np.float64),
+        estimate=np.array(est_heading_deg, dtype=np.float64),
+        estimate_std=np.array(est_heading_std_deg, dtype=np.float64),
+        openloop=np.array(openloop_heading_deg, dtype=np.float64),
+        measurement_t_ms=np.array(gnss_t_ms, dtype=np.int64),
+        measurement=np.array(gnss_heading_deg, dtype=np.float64),
+    )
+    roll = Channel(
+        name="roll",
+        unit="deg",
+        truth=np.array(truth_roll_deg, dtype=np.float64),
+        estimate=np.array(est_roll_deg, dtype=np.float64),
+    )
+    pitch = Channel(
+        name="pitch",
+        unit="deg",
+        truth=np.array(truth_pitch_deg, dtype=np.float64),
+        estimate=np.array(est_pitch_deg, dtype=np.float64),
+    )
     return Trace(
         t_ms=np.array(t_ms, dtype=np.int64),
-        truth_deg=np.array(truth_deg, dtype=np.float64),
-        est_deg=np.array(est_deg, dtype=np.float64),
-        est_std_deg=np.array(est_std_deg, dtype=np.float64),
-        openloop_deg=np.array(openloop_deg, dtype=np.float64),
-        gnss_t_ms=np.array(gnss_t_ms, dtype=np.int64),
-        gnss_deg=np.array(gnss_deg, dtype=np.float64),
+        channels={c.name: c for c in (heading, roll, pitch)},
     )
