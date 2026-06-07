@@ -8,7 +8,7 @@
  */
 
 #include "ekf_filter.h"
-#include "geometry.h"
+#include "common.h"
 #include <nanobind/nanobind.h>
 
 namespace nb = nanobind;
