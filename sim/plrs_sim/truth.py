@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import math
 
+from .attitude import from_axis_angle
 from .types import (
     AttitudeProfile,
+    ConstantHeel,
     ConstantTurn,
     LevelAttitude,
     Quaternion,
@@ -29,6 +31,7 @@ from .types import (
 )
 
 DEG_TO_RAD = math.pi / 180.0
+_BODY_X = Vec3(x=1.0, y=0.0, z=0.0)
 
 
 def sample_yaw(profile: YawProfile, t_ms: int) -> tuple[float, float]:
@@ -59,6 +62,11 @@ def sample_attitude(
     match profile:
         case LevelAttitude():
             return Quaternion.identity(), Vec3(x=0.0, y=0.0, z=0.0)
+        case ConstantHeel(angle_deg=angle):
+            return (
+                from_axis_angle(_BODY_X, angle * DEG_TO_RAD),
+                Vec3(x=0.0, y=0.0, z=0.0),
+            )
 
 
 def _step_heading_at(

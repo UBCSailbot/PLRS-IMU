@@ -121,8 +121,20 @@ class LevelAttitude:
     """
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConstantHeel:
+    """The boat sits at a fixed heel angle for the whole run.
+
+    Positive angle is starboard heel (right-hand rotation about body X).
+    No pitch, no time variation; the orientation quaternion is constant
+    and the body-frame angular velocity from attitude motion is zero.
+    """
+
+    angle_deg: float
+
+
 YawProfile = ConstantTurn | Sinusoidal | StepTurns | Static
-AttitudeProfile = LevelAttitude
+AttitudeProfile = LevelAttitude | ConstantHeel
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

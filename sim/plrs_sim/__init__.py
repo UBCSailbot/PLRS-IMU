@@ -4,6 +4,7 @@ from .ekf import TinyEkfFilter
 from .types import (
     GRAVITY_MS2,
     Channel,
+    ConstantHeel,
     ConstantTurn,
     EkfConfig,
     FusionOutput,
@@ -25,6 +26,7 @@ from .types import (
 __all__ = [
     "GRAVITY_MS2",
     "Channel",
+    "ConstantHeel",
     "ConstantTurn",
     "EkfConfig",
     "FusionOutput",
