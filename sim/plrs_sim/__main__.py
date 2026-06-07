@@ -17,6 +17,7 @@ from .plot import plot_trace
 from .runner import run
 from .source import SimulatedSource
 from .types import (
+    ConstantHeel,
     ConstantTurn,
     EkfConfig,
     GnssNoiseModel,
@@ -42,6 +43,16 @@ SCENARIOS: dict[str, Scenario] = {
         ),
     ),
     "static": Scenario(yaw=Static(heading_deg=0.0)),
+    "heeling_tack": Scenario(
+        yaw=StepTurns(
+            legs=(
+                (5.0, 0.0),
+                (3.0, 60.0),
+                (15.0, 0.0),
+            ),
+        ),
+        attitude=ConstantHeel(angle_deg=20.0),
+    ),
 }
 
 
