@@ -538,8 +538,7 @@ void test_read_quaternion_roundtrip() {
 /** @brief No Quaternion sub-packet present: returns nullopt. */
 void test_read_quaternion_missing() {
   auto frame = xtest::make_frame(
-      MID::MTData2,
-      xtest::make_subpacket(DataId::PacketCounter, {0x00, 0x2A}));
+      MID::MTData2, xtest::make_subpacket(DataId::PacketCounter, {0x00, 0x2A}));
   Parser p;
   auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
   TEST_ASSERT_TRUE(pkt.has_value());
@@ -549,8 +548,8 @@ void test_read_quaternion_missing() {
 /** @brief Quaternion sub-packet with wrong length is rejected. */
 void test_read_quaternion_wrong_length() {
   auto frame = xtest::make_frame(
-      MID::MTData2, xtest::make_subpacket(DataId::Quaternion,
-                                          {0x3F, 0x80, 0x00, 0x00}));
+      MID::MTData2,
+      xtest::make_subpacket(DataId::Quaternion, {0x3F, 0x80, 0x00, 0x00}));
   Parser p;
   auto pkt = feed_frame(p, ByteSpan(frame.data(), frame.size()));
   TEST_ASSERT_TRUE(pkt.has_value());

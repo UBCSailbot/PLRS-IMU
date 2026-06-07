@@ -31,7 +31,7 @@ class Quaternion:
     z: float
 
     @staticmethod
-    def identity() -> "Quaternion":
+    def identity() -> Quaternion:
         return Quaternion(w=1.0, x=0.0, y=0.0, z=0.0)
 
 

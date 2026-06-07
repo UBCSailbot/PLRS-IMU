@@ -62,8 +62,7 @@ inline plrs::Vec3 world_angular_velocity(UnitQuaternion orientation,
  *
  * @return Yaw rate in the world frame.
  */
-inline float world_yaw_rate(UnitQuaternion orientation,
-                            plrs::Vec3 omega_body) {
+inline float world_yaw_rate(UnitQuaternion orientation, plrs::Vec3 omega_body) {
   return world_angular_velocity(orientation, omega_body).z;
 }
 

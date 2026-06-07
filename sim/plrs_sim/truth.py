@@ -55,9 +55,7 @@ def sample_yaw(profile: YawProfile, t_ms: int) -> tuple[float, float]:
             return h, 0.0
 
 
-def sample_attitude(
-    profile: AttitudeProfile, t_ms: int
-) -> tuple[Quaternion, Vec3]:
+def sample_attitude(profile: AttitudeProfile, t_ms: int) -> tuple[Quaternion, Vec3]:
     """Return (world<-body orientation, body-frame omega from attitude motion)."""
     match profile:
         case LevelAttitude():

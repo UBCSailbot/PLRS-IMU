@@ -84,9 +84,7 @@ def test_step_turns_clamps_past_final_leg() -> None:
 
 
 def test_step_turns_empty_returns_heading0() -> None:
-    assert _heading(StepTurns(legs=(), heading0_deg=12.5), 1234) == pytest.approx(
-        12.5
-    )
+    assert _heading(StepTurns(legs=(), heading0_deg=12.5), 1234) == pytest.approx(12.5)
 
 
 def test_step_turns_gyro_is_leg_rate() -> None:

@@ -77,7 +77,9 @@ def test_estimate_converges_to_truth_without_noise() -> None:
         _src(ConstantTurn(rate_deg_s=5.0), duration_s=10.0),
         CFG,
     )
-    final_error = abs(trace.channels["heading"].estimate[-1] - trace.channels["heading"].truth[-1])
+    final_error = abs(
+        trace.channels["heading"].estimate[-1] - trace.channels["heading"].truth[-1]
+    )
     assert final_error < 0.5
 
 
@@ -107,16 +109,24 @@ def test_ekf_cancels_bias_better_than_openloop() -> None:
         ),
         CFG,
     )
-    ekf_error = abs(trace.channels["heading"].estimate[-1] - trace.channels["heading"].truth[-1])
-    openloop_error = abs(trace.channels["heading"].openloop[-1] - trace.channels["heading"].truth[-1])
+    ekf_error = abs(
+        trace.channels["heading"].estimate[-1] - trace.channels["heading"].truth[-1]
+    )
+    openloop_error = abs(
+        trace.channels["heading"].openloop[-1] - trace.channels["heading"].truth[-1]
+    )
     assert ekf_error < openloop_error / 5.0
 
 
 def test_run_is_deterministic_for_same_seed() -> None:
     a = run(_src(ConstantTurn(rate_deg_s=10.0), duration_s=1.0, seed=7), CFG)
     b = run(_src(ConstantTurn(rate_deg_s=10.0), duration_s=1.0, seed=7), CFG)
-    assert np.array_equal(a.channels["heading"].estimate, b.channels["heading"].estimate)
-    assert np.array_equal(a.channels["heading"].measurement, b.channels["heading"].measurement)
+    assert np.array_equal(
+        a.channels["heading"].estimate, b.channels["heading"].estimate
+    )
+    assert np.array_equal(
+        a.channels["heading"].measurement, b.channels["heading"].measurement
+    )
 
 
 def test_openloop_nan_before_first_gnss() -> None:
@@ -129,4 +139,6 @@ def test_openloop_nan_before_first_gnss() -> None:
         ),
         CFG,
     )
-    assert pytest.approx(0, abs=0) == np.sum(np.isfinite(trace.channels["heading"].openloop))
+    assert pytest.approx(0, abs=0) == np.sum(
+        np.isfinite(trace.channels["heading"].openloop)
+    )
