@@ -15,12 +15,21 @@ dev = [
     "matplotlib>=3.9",
     "pyqt6>=6.6",
     "matplotlib-backend-kitty>=2.1",
+    # Build backend, installed into the venv so the extension builds without
+    # isolation (see [tool.uv] below) and editable.rebuild can re-invoke it.
+    "scikit-build-core>=0.10",
+    "nanobind>=2.2",
 ]
 
 [tool.scikit-build]
 minimum-version = "0.10"
 build-dir = "build/{wheel_tag}"
 wheel.packages = ["plrs_sim"]
+# Rebuild the native extension on import whenever the C++ sources change, so an
+# editable install never imports a stale binding (the scikit-build-core/uv
+# editable hardlink quirk). Keeps `uv run pytest` honest with no manual copy.
+editable.rebuild = true
+editable.verbose = false
 
 [tool.uv]
 # Use the Python provided by the nix devshell, not a uv-downloaded binary.
@@ -28,6 +37,11 @@ wheel.packages = ["plrs_sim"]
 # on the nix shell's library path and breaks numpy import inside CI.
 python-preference = "only-system"
 python-downloads = "never"
+# Build the extension against the project venv, not an ephemeral isolated one.
+# With isolation, uv bakes a throwaway temp-venv python path into the CMake
+# cache and deletes it, so any later rebuild (editable.rebuild) fails to find
+# Python. Building in-venv keeps the cached interpreter path valid.
+no-build-isolation-package = ["plrs-sim"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

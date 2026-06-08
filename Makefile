@@ -10,7 +10,7 @@ help:
 	@echo "  build        compile firmware (pio run -e pico)"
 	@echo "  upload       build and flash the RP2040 (pio run -e pico -t upload)"
 	@echo ""
-	@echo "Python sim targets:"
+	@echo "Python sim targets (the native binding rebuilds on import as needed):"
 	@echo "  sim          run CLI scenario (SCENARIO=constant_turn|sinusoidal|step_turns|static)"
 	@echo "  sim-example  run example script (EXAMPLE=constant_turn|sinusoidal|step_turns|static)"
 	@echo "  sim-test     run sim pytest suite"
@@ -30,13 +30,13 @@ upload:
 	pio run -e pico -t upload
 
 sim:
-	cd sim && uv run python -m plrs_sim sim $(SCENARIO)
+	cd sim && uv run --extra dev python -m plrs_sim sim $(SCENARIO)
 
 sim-example:
-	cd sim && uv run python examples/$(EXAMPLE).py
+	cd sim && uv run --extra dev python examples/$(EXAMPLE).py
 
 sim-test:
-	cd sim && uv run pytest
+	cd sim && uv run --extra dev pytest
 
 sim-format:
 	cd sim && uv run ruff format . && uv run ruff check .
