@@ -182,3 +182,66 @@ void test_world_yaw_rate_matches_world_angular_velocity_z() {
   float yaw_rate = world_yaw_rate(orientation, omega_body);
   TEST_ASSERT_EQUAL_FLOAT(omega_world.z, yaw_rate);
 }
+
+void test_euler_rates_level_pass_through_gyro() {
+  plrs::Vec3 omega{0.1f, -0.2f, 0.3f};
+  EulerRates r = euler_rates_zyx(0.0f, 0.0f, omega);
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, omega.x, r.roll_dot);
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, omega.y, r.pitch_dot);
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, omega.z, r.yaw_dot);
+}
+
+void test_euler_rates_heeled_body_z_splits_into_yaw_and_pitch() {
+  const float heel_rad = 30.0f * DEG_TO_RAD;
+  EulerRates r = euler_rates_zyx(heel_rad, 0.0f, plrs::Vec3{0.0f, 0.0f, 1.0f});
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, r.roll_dot);
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -std::sin(heel_rad), r.pitch_dot);
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, std::cos(heel_rad), r.yaw_dot);
+}
+
+void test_euler_rates_yaw_matches_world_yaw_rate_at_zero_pitch() {
+  const float roll_rad = 25.0f * DEG_TO_RAD;
+  plrs::Vec3 omega{0.1f, 0.2f, 0.3f};
+  EulerRates r = euler_rates_zyx(roll_rad, 0.0f, omega);
+  float expected =
+      world_yaw_rate(axis_angle(1.0f, 0.0f, 0.0f, roll_rad), omega);
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, expected, r.yaw_dot);
+}
+
+void test_euler_rates_jacobian_matches_finite_difference() {
+  const float roll = 0.3f;
+  const float pitch = 0.2f;
+  const plrs::Vec3 omega{0.1f, 0.2f, 0.3f};
+  const float h = 1e-3f;
+  EulerRatesJacobian j = euler_rates_jacobian(roll, pitch, omega);
+
+  EulerRates roll_hi = euler_rates_zyx(roll + h, pitch, omega);
+  EulerRates roll_lo = euler_rates_zyx(roll - h, pitch, omega);
+  EulerRates pitch_hi = euler_rates_zyx(roll, pitch + h, omega);
+  EulerRates pitch_lo = euler_rates_zyx(roll, pitch - h, omega);
+
+  const float fd_tol = 1e-3f;
+  TEST_ASSERT_FLOAT_WITHIN(
+      fd_tol, (roll_hi.roll_dot - roll_lo.roll_dot) / (2 * h), j.droll_droll);
+  TEST_ASSERT_FLOAT_WITHIN(fd_tol,
+                           (pitch_hi.roll_dot - pitch_lo.roll_dot) / (2 * h),
+                           j.droll_dpitch);
+  TEST_ASSERT_FLOAT_WITHIN(fd_tol,
+                           (roll_hi.pitch_dot - roll_lo.pitch_dot) / (2 * h),
+                           j.dpitch_droll);
+  TEST_ASSERT_FLOAT_WITHIN(fd_tol,
+                           (pitch_hi.pitch_dot - pitch_lo.pitch_dot) / (2 * h),
+                           j.dpitch_dpitch);
+  TEST_ASSERT_FLOAT_WITHIN(
+      fd_tol, (roll_hi.yaw_dot - roll_lo.yaw_dot) / (2 * h), j.dyaw_droll);
+  TEST_ASSERT_FLOAT_WITHIN(
+      fd_tol, (pitch_hi.yaw_dot - pitch_lo.yaw_dot) / (2 * h), j.dyaw_dpitch);
+}
+
+void test_wrap180_wraps_into_range() {
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 10.0f, wrap180(370.0f));
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -170.0f, wrap180(190.0f));
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 170.0f, wrap180(-190.0f));
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, wrap180(0.0f));
+  TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 45.0f, wrap180(45.0f));
+}
