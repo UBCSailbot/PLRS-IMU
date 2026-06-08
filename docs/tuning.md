@@ -18,6 +18,10 @@ measurements. P0 only affects convergence from startup and can be set large.
 GNSS heading noise is not tuned here -- the receiver reports it per fix as
 `heading_variance_deg2`.
 
+The `[gnss]` section of `tuning.toml` is calibration, not filter tuning: the
+antenna baseline offset and a fallback heading variance, both covered in
+`docs/gnss.md`.
+
 ## Deriving Q from the MTi-3 datasheet
 
 Rather than tuning Q blind, two datasheet specs map directly to the Q diagonal.
