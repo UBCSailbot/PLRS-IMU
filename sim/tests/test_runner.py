@@ -66,6 +66,28 @@ def test_timestamps_are_monotone() -> None:
     assert np.all(np.diff(trace.t_ms) > 0)
 
 
+def test_heading_channel_is_marked_circular() -> None:
+    trace = run(_src(Static(heading_deg=0.0), duration_s=1.0), CFG)
+    assert trace.channels["heading"].wrap is True
+    assert trace.channels["roll"].wrap is False
+
+
+def test_filter_tracks_heading_across_the_180_seam() -> None:
+    # Turn from 0 through +180 and out the other side. The estimate stays on
+    # truth the whole way: the wrapped residual never blows up at the seam.
+    src = _src(
+        ConstantTurn(rate_deg_s=10.0),
+        gnss_noise=GnssNoiseModel(heading_std_deg=1.0),
+        duration_s=40.0,
+    )
+    ch = run(src, CFG).channels["heading"]
+    residual = (ch.estimate - ch.truth + 180.0) % 360.0 - 180.0
+    # Skip the cold-start transient; after convergence the error is small and,
+    # crucially, has no spike where truth crosses 180 deg (~36 s in).
+    steady = residual[len(residual) // 4 :]
+    assert np.max(np.abs(steady)) < 5.0
+
+
 def test_est_std_finite_after_first_gnss() -> None:
     trace = run(_src(Static(heading_deg=45.0), duration_s=1.0), CFG)
     # GNSS at t=0 seeds the filter; std should be finite from index 0.

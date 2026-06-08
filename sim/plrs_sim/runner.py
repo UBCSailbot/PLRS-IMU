@@ -82,6 +82,7 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
         openloop=np.array(openloop_heading_deg, dtype=np.float64),
         measurement_t_ms=np.array(gnss_t_ms, dtype=np.int64),
         measurement=np.array(gnss_heading_deg, dtype=np.float64),
+        wrap=True,
     )
     roll = Channel(
         name="roll",
