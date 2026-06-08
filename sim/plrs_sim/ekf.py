@@ -8,7 +8,20 @@ even though the filter itself is C++.
 from __future__ import annotations
 
 from . import _native
-from .types import EkfConfig, FusionOutput, GnssSample, ImuSample, Quaternion, Vec3
+from .types import (
+    EkfConfig,
+    FusionOutput,
+    GnssAttitudeMount,
+    GnssSample,
+    ImuSample,
+    Quaternion,
+    Vec3,
+)
+
+# AttEuler mode codes: 0 is no attitude solution, 2 is heading + pitch from a
+# fixed-ambiguity two-antenna baseline (see lib/septentrio_gnss/sbf_blocks.h).
+_ATT_MODE_NO_ATTITUDE = 0
+_ATT_MODE_HEADING_PITCH = 2
 
 
 def _to_native_vec3(v: Vec3) -> _native.Vec3:
@@ -54,6 +67,44 @@ def _to_native_config(c: EkfConfig) -> _native.Config:
     n.mti_roll_variance_deg2 = c.mti_roll_variance_deg2
     n.mti_pitch_variance_deg2 = c.mti_pitch_variance_deg2
     return n
+
+
+def _to_native_mount(m: GnssAttitudeMount) -> _native.GnssAttitudeMount:
+    n = _native.GnssAttitudeMount()
+    n.baseline_offset_deg = m.baseline_offset_deg
+    n.fallback_heading_variance_deg2 = m.fallback_heading_variance_deg2
+    return n
+
+
+def gnss_sample_from_attitude(
+    *,
+    heading_deg: float,
+    heading_variance_deg2: float,
+    valid: bool,
+    tow_ms: int,
+    mount: GnssAttitudeMount,
+) -> GnssSample:
+    """Run an antenna-baseline heading through the real C++ bridge.
+
+    heading_deg is in the antenna-baseline frame; the bridge subtracts the
+    mount offset and wraps to +-180. valid=False emits a no-attitude block
+    so the bridge marks the result invalid, mirroring a GNSS dropout.
+    """
+    att = _native.AttEuler()
+    att.tow = tow_ms
+    att.mode = _ATT_MODE_HEADING_PITCH if valid else _ATT_MODE_NO_ATTITUDE
+    att.heading = heading_deg
+    cov = _native.AttCovEuler()
+    cov.cov_headhead = heading_variance_deg2
+    s = _native.att_euler_to_gnss_sample(
+        att=att, cov=cov, mount=_to_native_mount(mount)
+    )
+    return GnssSample(
+        heading_deg=s.heading_deg,
+        heading_variance_deg2=s.heading_variance_deg2,
+        timestamp_ms=s.timestamp_ms,
+        valid=s.valid,
+    )
 
 
 def _from_native_output(o: _native.FusionOutput) -> FusionOutput:

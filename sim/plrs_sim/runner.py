@@ -46,11 +46,13 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
     for tick in source:
         ekf.predict(tick.imu)
         if tick.gnss is not None:
+            # update() skips invalid samples; only plot the ones it accepts.
             ekf.update(tick.gnss)
-            gnss_t_ms.append(tick.gnss.timestamp_ms)
-            gnss_heading_deg.append(tick.gnss.heading_deg)
-            if openloop is None:
-                openloop = tick.gnss.heading_deg
+            if tick.gnss.valid:
+                gnss_t_ms.append(tick.gnss.timestamp_ms)
+                gnss_heading_deg.append(tick.gnss.heading_deg)
+                if openloop is None:
+                    openloop = tick.gnss.heading_deg
 
         if openloop is not None and prev_t_ms is not None:
             dt_s = (tick.timestamp_ms - prev_t_ms) / 1000.0

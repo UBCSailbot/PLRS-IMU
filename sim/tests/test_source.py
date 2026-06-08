@@ -9,6 +9,7 @@ import pytest
 
 from plrs_sim import (
     ConstantTurn,
+    GnssAttitudeMount,
     GnssNoiseModel,
     ImuNoiseModel,
     Scenario,
@@ -103,3 +104,32 @@ def test_custom_rates_respected() -> None:
     assert ticks[1].timestamp_ms - ticks[0].timestamp_ms == 20
     gnss_ts = [t.timestamp_ms for t in ticks if t.gnss is not None]
     assert gnss_ts[1] - gnss_ts[0] == 100
+
+
+def test_baseline_offset_round_trips_to_boat_heading() -> None:
+    # A nonzero mount offset is added in the baseline frame and removed by the
+    # bridge, so the GNSS heading the filter sees is boat-forward truth again.
+    src = SimulatedSource(
+        scenario=Scenario(yaw=ConstantTurn(rate_deg_s=10.0)),
+        imu_noise=ImuNoiseModel(),
+        gnss_noise=GnssNoiseModel(),
+        duration_s=0.5,
+        seed=0,
+        mount=GnssAttitudeMount(baseline_offset_deg=30.0),
+    )
+    for tick in src:
+        if tick.gnss is not None:
+            assert tick.gnss.heading_deg == pytest.approx(tick.truth_heading_deg)
+
+
+def test_dropout_emits_an_invalid_sample() -> None:
+    src = SimulatedSource(
+        scenario=Scenario(yaw=Static(heading_deg=0.0)),
+        imu_noise=ImuNoiseModel(),
+        gnss_noise=GnssNoiseModel(dropout_prob=1.0),
+        duration_s=0.5,
+        seed=0,
+    )
+    scheduled = [t.gnss for t in src if t.gnss is not None]
+    assert scheduled  # samples are still scheduled, just invalid
+    assert all(not g.valid for g in scheduled)

@@ -13,15 +13,17 @@ twice produces identical output.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from .attitude import quaternion_to_euler_zyx, world_to_body
+from .ekf import gnss_sample_from_attitude
 from .noise import GnssNoise, ImuNoise
 from .truth import sample_attitude, sample_yaw
 from .types import (
     GRAVITY_MS2,
+    GnssAttitudeMount,
     GnssNoiseModel,
     GnssSample,
     ImuNoiseModel,
@@ -39,6 +41,7 @@ class SimulatedSource:
     gnss_noise: GnssNoiseModel
     duration_s: float
     seed: int
+    mount: GnssAttitudeMount = field(default_factory=GnssAttitudeMount)
     imu_rate_hz: float = 100.0
     gnss_rate_hz: float = 5.0
 
@@ -79,13 +82,28 @@ class SimulatedSource:
 
             gnss: GnssSample | None = None
             if t_ms >= next_gnss_ms:
+                # Measure in the antenna-baseline frame, corrupt there, then
+                # run through the real bridge so it undoes the offset and the
+                # filter sees the same path as on hardware.
+                baseline_heading = truth_h + self.mount.baseline_offset_deg
                 clean_gnss = GnssSample(
-                    heading_deg=truth_h,
+                    heading_deg=baseline_heading,
                     heading_variance_deg2=0.0,
                     timestamp_ms=t_ms,
                     valid=True,
                 )
-                gnss = gnss_noise.corrupt(clean_gnss)
+                noisy = gnss_noise.corrupt(clean_gnss)
+                gnss = gnss_sample_from_attitude(
+                    heading_deg=baseline_heading
+                    if noisy is None
+                    else noisy.heading_deg,
+                    heading_variance_deg2=0.0
+                    if noisy is None
+                    else noisy.heading_variance_deg2,
+                    valid=noisy is not None,
+                    tow_ms=t_ms,
+                    mount=self.mount,
+                )
                 next_gnss_ms += gnss_dt_ms
 
             truth_roll, truth_pitch, _ = quaternion_to_euler_zyx(orientation)
