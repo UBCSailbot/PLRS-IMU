@@ -17,7 +17,15 @@ from dataclasses import replace
 
 import numpy as np
 
-from .types import GnssNoiseModel, GnssSample, ImuNoiseModel, ImuSample, Vec3
+from .attitude import from_axis_angle, multiply
+from .types import (
+    GnssNoiseModel,
+    GnssSample,
+    ImuNoiseModel,
+    ImuSample,
+    Quaternion,
+    Vec3,
+)
 
 
 class ImuNoise:
@@ -40,7 +48,25 @@ class ImuNoise:
             angular_velocity_rad_s=Vec3(
                 x=gyro.x, y=gyro.y, z=gyro.z + self._bias + noise
             ),
+            orientation=self._perturb(clean.orientation),
         )
+
+    def _perturb(self, orientation: Quaternion) -> Quaternion:
+        att_std = self._model.mti_attitude_std_deg
+        if att_std is None or att_std <= 0.0:
+            return orientation
+        std_rad = math.radians(att_std)
+        delta = multiply(
+            multiply(
+                from_axis_angle(Vec3(x=1.0, y=0.0, z=0.0), self._draw(std_rad)),
+                from_axis_angle(Vec3(x=0.0, y=1.0, z=0.0), self._draw(std_rad)),
+            ),
+            from_axis_angle(Vec3(x=0.0, y=0.0, z=1.0), self._draw(std_rad)),
+        )
+        return multiply(orientation, delta)
+
+    def _draw(self, std_rad: float) -> float:
+        return float(self._rng.normal(0.0, std_rad))
 
     @property
     def bias_rad_s(self) -> float:

@@ -19,6 +19,7 @@ from plrs_sim import (
     ImuSample,
     Vec3,
 )
+from plrs_sim.attitude import quaternion_to_euler_zyx
 from plrs_sim.noise import GnssNoise, ImuNoise
 
 
@@ -83,11 +84,33 @@ def test_imu_bias_random_walk_grows_with_time() -> None:
     assert abs(observed_std - expected_std) / expected_std < 0.15
 
 
+def test_imu_no_attitude_noise_leaves_orientation_identity() -> None:
+    n = ImuNoise(ImuNoiseModel(), np.random.default_rng(0))
+    o = n.corrupt(_imu(0.0), dt_s=0.01).orientation
+    assert (o.w, o.x, o.y, o.z) == (1.0, 0.0, 0.0, 0.0)
+
+
+def test_imu_attitude_noise_perturbs_roll_and_pitch() -> None:
+    std = 1.0
+    n = ImuNoise(ImuNoiseModel(mti_attitude_std_deg=std), np.random.default_rng(5))
+    rolls, pitches = [], []
+    for _ in range(10_000):
+        roll, pitch, _ = quaternion_to_euler_zyx(
+            n.corrupt(_imu(0.0), dt_s=0.01).orientation
+        )
+        rolls.append(roll)
+        pitches.append(pitch)
+    assert abs(float(np.mean(rolls))) < 0.1
+    assert abs(float(np.std(rolls)) - std) / std < 0.1
+    assert abs(float(np.std(pitches)) - std) / std < 0.1
+
+
 def test_imu_same_seed_same_output() -> None:
     cfg = ImuNoiseModel(
         gyro_white_std_rad_s=0.01,
         gyro_constant_bias_rad_s=0.005,
         gyro_bias_walk_std_rad_s_sqrt_s=0.001,
+        mti_attitude_std_deg=1.0,
     )
     a = ImuNoise(cfg, np.random.default_rng(123))
     b = ImuNoise(cfg, np.random.default_rng(123))

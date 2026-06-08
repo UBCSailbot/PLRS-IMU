@@ -44,9 +44,15 @@ def _to_native_gnss(s: GnssSample) -> _native.GnssSample:
 def _to_native_config(c: EkfConfig) -> _native.Config:
     n = _native.Config()
     n.q_heading_deg2 = c.q_heading_deg2
+    n.q_roll_deg2 = c.q_roll_deg2
+    n.q_pitch_deg2 = c.q_pitch_deg2
     n.q_bias_deg2_s2 = c.q_bias_deg2_s2
     n.p0_heading_deg2 = c.p0_heading_deg2
+    n.p0_roll_deg2 = c.p0_roll_deg2
+    n.p0_pitch_deg2 = c.p0_pitch_deg2
     n.p0_bias_deg2_s2 = c.p0_bias_deg2_s2
+    n.mti_roll_variance_deg2 = c.mti_roll_variance_deg2
+    n.mti_pitch_variance_deg2 = c.mti_pitch_variance_deg2
     return n
 
 
