@@ -312,6 +312,13 @@ void test_euler_rates_yaw_matches_world_yaw_rate_at_zero_pitch();
 void test_euler_rates_jacobian_matches_finite_difference();
 void test_wrap180_wraps_into_range();
 
+void test_bridge_passes_heading_and_variance_through();
+void test_bridge_subtracts_baseline_offset();
+void test_bridge_wraps_heading_into_plus_minus_180();
+void test_bridge_dnu_heading_is_invalid();
+void test_bridge_no_attitude_mode_is_invalid();
+void test_bridge_dnu_covariance_uses_fallback();
+
 // ---------------------------------------------------------------------------
 
 int main(int, char **) {
@@ -358,5 +365,12 @@ int main(int, char **) {
   RUN_TEST(test_euler_rates_yaw_matches_world_yaw_rate_at_zero_pitch);
   RUN_TEST(test_euler_rates_jacobian_matches_finite_difference);
   RUN_TEST(test_wrap180_wraps_into_range);
+
+  RUN_TEST(test_bridge_passes_heading_and_variance_through);
+  RUN_TEST(test_bridge_subtracts_baseline_offset);
+  RUN_TEST(test_bridge_wraps_heading_into_plus_minus_180);
+  RUN_TEST(test_bridge_dnu_heading_is_invalid);
+  RUN_TEST(test_bridge_no_attitude_mode_is_invalid);
+  RUN_TEST(test_bridge_dnu_covariance_uses_fallback);
   return UNITY_END();
 }
