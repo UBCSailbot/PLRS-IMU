@@ -768,6 +768,58 @@ void test_dollar_R_without_kind_char_is_nmea() {
 }
 
 // ---------------------------------------------------------------------------
+// Config command builders
+// ---------------------------------------------------------------------------
+
+namespace {
+using septentrio_gnss::Connection;
+using septentrio_gnss::GnssAttitudeMode;
+using septentrio_gnss::SbfBlock;
+using septentrio_gnss::SbfInterval;
+using septentrio_gnss::SbfStream;
+using septentrio_gnss::set_gnss_attitude;
+using septentrio_gnss::set_sbf_output;
+
+constexpr std::array<SbfBlock, 2> kAttBlocks{SbfBlock::AttEuler,
+                                             SbfBlock::AttCovEuler};
+
+// Framing is pinned at compile time; the runtime tests below just exercise
+// the same builders through the suite.
+constexpr auto kAttitudeCmd = set_gnss_attitude(GnssAttitudeMode::MovingBase);
+static_assert(kAttitudeCmd.has_value());
+static_assert(kAttitudeCmd->view() == "setGNSSAttitude,MovingBase\r");
+
+constexpr auto kSbfOutputCmd = set_sbf_output(
+    SbfStream::Stream1, Connection::COM1, kAttBlocks, SbfInterval::Msec100);
+static_assert(kSbfOutputCmd.has_value());
+static_assert(kSbfOutputCmd->view() ==
+              "setSBFOutput,Stream1,COM1,AttEuler+AttCovEuler,msec100\r");
+} // namespace
+
+/** @brief setGNSSAttitude selects the moving-base attitude source. */
+void test_set_gnss_attitude_moving_base() {
+  auto cmd = set_gnss_attitude(GnssAttitudeMode::MovingBase);
+  TEST_ASSERT_TRUE(cmd.has_value());
+  TEST_ASSERT_TRUE(cmd->view() == "setGNSSAttitude,MovingBase\r");
+}
+
+/** @brief setSBFOutput joins the requested blocks with '+'. */
+void test_set_sbf_output_joins_blocks() {
+  auto cmd = set_sbf_output(SbfStream::Stream1, Connection::COM1, kAttBlocks,
+                            SbfInterval::Msec100);
+  TEST_ASSERT_TRUE(cmd.has_value());
+  TEST_ASSERT_TRUE(cmd->view() ==
+                   "setSBFOutput,Stream1,COM1,AttEuler+AttCovEuler,msec100\r");
+}
+
+/** @brief setAttitudeOffset formats its float arguments. */
+void test_set_attitude_offset_formats_floats() {
+  auto cmd = septentrio_gnss::set_attitude_offset(0.0f, -1.5f);
+  TEST_ASSERT_TRUE(cmd.has_value());
+  TEST_ASSERT_TRUE(cmd->view() == "setAttitudeOffset,0,-1.5\r");
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -806,6 +858,9 @@ int main(int, char **) {
   RUN_TEST(test_dollar_mid_nmea_then_sbf_dispatches);
   RUN_TEST(test_command_build_appends_cr);
   RUN_TEST(test_command_build_rejects_oversize);
+  RUN_TEST(test_set_gnss_attitude_moving_base);
+  RUN_TEST(test_set_sbf_output_joins_blocks);
+  RUN_TEST(test_set_attitude_offset_formats_floats);
   RUN_TEST(test_parse_clean_reply_ok);
   RUN_TEST(test_parse_reply_err);
   RUN_TEST(test_parse_reply_info);
