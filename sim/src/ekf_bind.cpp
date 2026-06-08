@@ -9,6 +9,7 @@
 
 #include "common.h"
 #include "ekf_filter.h"
+#include "gnss_bridge.h"
 #include <nanobind/nanobind.h>
 
 namespace nb = nanobind;
@@ -107,4 +108,32 @@ NB_MODULE(_native, m) {
       .def("predict", &TinyEkfFilter::predict, nb::arg("imu"))
       .def("update", &TinyEkfFilter::update, nb::arg("gnss"))
       .def("output", &TinyEkfFilter::output);
+
+  // GNSS dual-antenna attitude bridge. The sim builds these from truth,
+  // perturbs them, and runs them through the real bridge so the path it
+  // exercises is the one the firmware ships.
+  nb::class_<sbf::AttEuler>(m, "AttEuler")
+      .def(nb::init<>())
+      .def_rw("tow", &sbf::AttEuler::tow)
+      .def_rw("error", &sbf::AttEuler::error)
+      .def_rw("mode", &sbf::AttEuler::mode)
+      .def_rw("heading", &sbf::AttEuler::heading)
+      .def_rw("pitch", &sbf::AttEuler::pitch)
+      .def_rw("roll", &sbf::AttEuler::roll)
+      .def_rw("heading_dot", &sbf::AttEuler::heading_dot);
+
+  nb::class_<sbf::AttCovEuler>(m, "AttCovEuler")
+      .def(nb::init<>())
+      .def_rw("cov_headhead", &sbf::AttCovEuler::cov_headhead)
+      .def_rw("cov_pitchpitch", &sbf::AttCovEuler::cov_pitchpitch)
+      .def_rw("cov_rollroll", &sbf::AttCovEuler::cov_rollroll);
+
+  nb::class_<GnssAttitudeMount>(m, "GnssAttitudeMount")
+      .def(nb::init<>())
+      .def_rw("baseline_offset_deg", &GnssAttitudeMount::baseline_offset_deg)
+      .def_rw("fallback_heading_variance_deg2",
+              &GnssAttitudeMount::fallback_heading_variance_deg2);
+
+  m.def("att_euler_to_gnss_sample", &att_euler_to_gnss_sample, nb::arg("att"),
+        nb::arg("cov"), nb::arg("mount"));
 }

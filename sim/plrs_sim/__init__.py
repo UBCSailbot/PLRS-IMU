@@ -1,7 +1,7 @@
 """Polaris IMU simulation harness."""
 
-from .ekf import TinyEkfFilter
-from .tuning import load_tuning
+from .ekf import TinyEkfFilter, gnss_sample_from_attitude
+from .tuning import load_mount, load_tuning
 from .types import (
     GRAVITY_MS2,
     Channel,
@@ -9,6 +9,7 @@ from .types import (
     ConstantTurn,
     EkfConfig,
     FusionOutput,
+    GnssAttitudeMount,
     GnssNoiseModel,
     GnssSample,
     ImuNoiseModel,
@@ -31,6 +32,7 @@ __all__ = [
     "ConstantTurn",
     "EkfConfig",
     "FusionOutput",
+    "GnssAttitudeMount",
     "GnssNoiseModel",
     "GnssSample",
     "ImuNoiseModel",
@@ -45,5 +47,7 @@ __all__ = [
     "TinyEkfFilter",
     "Trace",
     "Vec3",
+    "gnss_sample_from_attitude",
+    "load_mount",
     "load_tuning",
 ]

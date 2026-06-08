@@ -17,7 +17,7 @@ from pathlib import Path
 from .plot import plot_trace
 from .runner import run
 from .source import SimulatedSource
-from .tuning import load_tuning
+from .tuning import load_mount, load_tuning
 from .types import (
     ConstantHeel,
     ConstantTurn,
@@ -110,6 +110,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sim.add_argument("--q-bias", type=float, default=None)
     sim.add_argument("--p0-heading", type=float, default=None)
     sim.add_argument("--p0-bias", type=float, default=None)
+    sim.add_argument(
+        "--baseline-offset",
+        type=float,
+        default=None,
+        metavar="DEG",
+        help="GNSS antenna baseline offset from boat-forward; overrides tuning.toml",
+    )
 
     sim.add_argument(
         "--save",
@@ -130,6 +137,10 @@ def _zero_to_none(x: float) -> float | None:
 def main(argv: list[str] | None = None) -> None:
     args = _build_parser().parse_args(argv)
 
+    mount = load_mount()
+    if args.baseline_offset is not None:
+        mount = replace(mount, baseline_offset_deg=args.baseline_offset)
+
     src = SimulatedSource(
         scenario=SCENARIOS[args.scenario],
         imu_noise=ImuNoiseModel(
@@ -144,6 +155,7 @@ def main(argv: list[str] | None = None) -> None:
         ),
         duration_s=args.duration,
         seed=args.seed,
+        mount=mount,
         imu_rate_hz=args.imu_rate_hz,
         gnss_rate_hz=args.gnss_rate_hz,
     )

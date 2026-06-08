@@ -52,6 +52,20 @@ class GnssSample:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class GnssAttitudeMount:
+    """Static baseline-to-boat calibration; mirrors fusion::GnssAttitudeMount.
+
+    baseline_offset_deg is the antenna baseline heading measured clockwise
+    from boat-forward; the bridge subtracts it to recover boat heading.
+    fallback_heading_variance_deg2 is used when the receiver covariance is
+    Do-Not-Use.
+    """
+
+    baseline_offset_deg: float = 0.0
+    fallback_heading_variance_deg2: float = 0.0
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class FusionOutput:
     heading_deg: float
     heading_variance_deg2: float

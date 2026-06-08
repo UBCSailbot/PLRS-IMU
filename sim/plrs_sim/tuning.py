@@ -1,11 +1,11 @@
-"""Load EKF tuning from tuning.toml into an EkfConfig."""
+"""Load EKF tuning and GNSS calibration from tuning.toml."""
 
 from __future__ import annotations
 
 import tomllib
 from pathlib import Path
 
-from .types import EkfConfig
+from .types import EkfConfig, GnssAttitudeMount
 
 # tuning.toml lives at the repo root, shared with the (future) firmware build.
 DEFAULT_PATH = Path(__file__).resolve().parents[2] / "tuning.toml"
@@ -26,4 +26,14 @@ def load_tuning(path: Path = DEFAULT_PATH) -> EkfConfig:
         p0_bias_deg2_s2=init["gyro_bias_deg2_s2"],
         mti_roll_variance_deg2=mti["roll_deg2"],
         mti_pitch_variance_deg2=mti["pitch_deg2"],
+    )
+
+
+def load_mount(path: Path = DEFAULT_PATH) -> GnssAttitudeMount:
+    with path.open("rb") as f:
+        t = tomllib.load(f)
+    gnss = t["gnss"]
+    return GnssAttitudeMount(
+        baseline_offset_deg=gnss["baseline_offset_deg"],
+        fallback_heading_variance_deg2=gnss["fallback_heading_variance_deg2"],
     )
