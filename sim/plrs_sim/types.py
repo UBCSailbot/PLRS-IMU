@@ -222,6 +222,9 @@ class Channel:
     openloop: np.ndarray | None = None
     measurement_t_ms: np.ndarray | None = None
     measurement: np.ndarray | None = None
+    # True for a circular quantity (heading): residuals are taken the short
+    # way around the +-180 seam and the trajectory line breaks across it.
+    wrap: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
