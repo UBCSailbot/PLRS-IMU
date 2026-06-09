@@ -17,7 +17,9 @@ calibration; how the filter estimates them is in `ekf.md`.
 - **IMU body**: boat body rotated by the static mount.
 
 `MountRotation::boat_to_imu` is the unit quaternion taking boat-body vectors to
-IMU-body. It is identity until calibrated.
+IMU-body. The filter rotates the MTi quaternion by it to recover boat attitude.
+It comes from the `[imu_mount]` section of `tuning.toml` (as ZYX Euler offsets)
+and is identity until calibrated.
 
 ## Why heel couples into heading
 
@@ -37,6 +39,12 @@ is in `lib/fusion/attitude.h`, mirrored in `sim/plrs_sim/attitude.py`.
 
 1. Tie up on flat water. The boat is level by construction.
 2. Log the MTi quaternion at 100 Hz for ~10 s, average, renormalize.
-3. Store the inverse as `MountRotation::boat_to_imu`.
+3. Read off the roll, pitch, and yaw of that average and store them as
+   `mount_roll_deg`, `mount_pitch_deg`, `mount_yaw_deg` under `[imu_mount]` in
+   `tuning.toml`.
 
 If the boat moves during logging, the calibration absorbs the motion.
+
+The sim exercises the mount: it tilts the synthesized MTi reading by the same
+offset, so a run with a nonzero mount confirms the filter recovers boat
+attitude (`python -m plrs_sim sim heeling_tack --mount-roll 10`).

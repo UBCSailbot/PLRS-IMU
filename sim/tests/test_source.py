@@ -8,6 +8,7 @@ from itertools import pairwise
 import pytest
 
 from plrs_sim import (
+    ConstantHeel,
     ConstantTurn,
     GnssAttitudeMount,
     GnssNoiseModel,
@@ -15,6 +16,7 @@ from plrs_sim import (
     Scenario,
     Static,
 )
+from plrs_sim.attitude import euler_to_quaternion, multiply, quaternion_to_euler_zyx
 from plrs_sim.source import SimulatedSource
 
 
@@ -133,3 +135,28 @@ def test_dropout_emits_an_invalid_sample() -> None:
     scheduled = [t.gnss for t in src if t.gnss is not None]
     assert scheduled  # samples are still scheduled, just invalid
     assert all(not g.valid for g in scheduled)
+
+
+def test_imu_mount_tilts_the_reported_orientation() -> None:
+    # An 8 deg roll mount: the MTi reports the boat attitude pre-rotated by the
+    # inverse mount, so re-applying the mount (as the filter does) recovers it.
+    mount = euler_to_quaternion(8.0, 0.0, 0.0)
+    src = SimulatedSource(
+        scenario=Scenario(
+            yaw=Static(heading_deg=0.0), attitude=ConstantHeel(angle_deg=20.0)
+        ),
+        imu_noise=ImuNoiseModel(),
+        gnss_noise=GnssNoiseModel(),
+        duration_s=0.1,
+        seed=0,
+        imu_mount=mount,
+    )
+    tick = next(iter(src))
+    recovered_roll, recovered_pitch, _ = quaternion_to_euler_zyx(
+        multiply(tick.imu.orientation, mount)
+    )
+    assert recovered_roll == pytest.approx(tick.truth_roll_deg, abs=1e-6)
+    assert recovered_pitch == pytest.approx(tick.truth_pitch_deg, abs=1e-6)
+    # The raw MTi reading is tilted away from the true boat roll.
+    raw_roll, _, _ = quaternion_to_euler_zyx(tick.imu.orientation)
+    assert abs(raw_roll - tick.truth_roll_deg) > 1.0

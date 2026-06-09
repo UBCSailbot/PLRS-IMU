@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .attitude import quaternion_to_euler_zyx, world_to_body
+from .attitude import conjugate, multiply, quaternion_to_euler_zyx, world_to_body
 from .ekf import gnss_sample_from_attitude
 from .noise import GnssNoise, ImuNoise
 from .truth import sample_attitude, sample_yaw
@@ -28,6 +28,7 @@ from .types import (
     GnssSample,
     ImuNoiseModel,
     ImuSample,
+    Quaternion,
     Scenario,
     Tick,
     Vec3,
@@ -42,6 +43,10 @@ class SimulatedSource:
     duration_s: float
     seed: int
     mount: GnssAttitudeMount = field(default_factory=GnssAttitudeMount)
+    # boat_to_imu rotation: the synthesized MTi orientation is the boat
+    # attitude pre-rotated by this, so the filter (configured with the same
+    # mount) recovers boat attitude. Identity leaves the IMU square.
+    imu_mount: Quaternion = field(default_factory=Quaternion.identity)
     imu_rate_hz: float = 100.0
     gnss_rate_hz: float = 5.0
 
@@ -68,6 +73,10 @@ class SimulatedSource:
             # under heel, world Z splits into body Y and Z components.
             yaw_body = world_to_body(orientation, Vec3(x=0.0, y=0.0, z=yaw_omega))
 
+            # The MTi sits in the IMU frame: report the boat attitude rotated
+            # by the inverse mount. The gyro stays in boat axes, matching the
+            # filter, which corrects the quaternion but not the rates.
+            mti_orientation = multiply(orientation, conjugate(self.imu_mount))
             clean_imu = ImuSample(
                 angular_velocity_rad_s=Vec3(
                     x=attitude_body_omega.x + yaw_body.x,
@@ -75,7 +84,7 @@ class SimulatedSource:
                     z=attitude_body_omega.z + yaw_body.z,
                 ),
                 accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
-                orientation=orientation,
+                orientation=mti_orientation,
                 timestamp_ms=t_ms,
             )
             corrupted_imu = imu_noise.corrupt(clean_imu, dt_s=imu_dt_s)

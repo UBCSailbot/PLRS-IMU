@@ -8,6 +8,7 @@ even though the filter itself is C++.
 from __future__ import annotations
 
 from . import _native
+from .attitude import euler_to_quaternion
 from .types import (
     EkfConfig,
     FusionOutput,
@@ -66,6 +67,11 @@ def _to_native_config(c: EkfConfig) -> _native.Config:
     n.p0_bias_deg2_s2 = c.p0_bias_deg2_s2
     n.mti_roll_variance_deg2 = c.mti_roll_variance_deg2
     n.mti_pitch_variance_deg2 = c.mti_pitch_variance_deg2
+    mount = _native.MountRotation()
+    mount.boat_to_imu = _to_native_unit_quaternion(
+        euler_to_quaternion(c.mount_roll_deg, c.mount_pitch_deg, c.mount_yaw_deg)
+    )
+    n.mount = mount
     return n
 
 

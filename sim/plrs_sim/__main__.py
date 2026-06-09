@@ -14,6 +14,7 @@ import argparse
 from dataclasses import replace
 from pathlib import Path
 
+from .attitude import euler_to_quaternion
 from .plot import plot_trace
 from .runner import run
 from .source import SimulatedSource
@@ -117,6 +118,9 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="DEG",
         help="GNSS antenna baseline offset from boat-forward; overrides tuning.toml",
     )
+    sim.add_argument("--mount-roll", type=float, default=None, metavar="DEG")
+    sim.add_argument("--mount-pitch", type=float, default=None, metavar="DEG")
+    sim.add_argument("--mount-yaw", type=float, default=None, metavar="DEG")
 
     sim.add_argument(
         "--save",
@@ -141,6 +145,24 @@ def main(argv: list[str] | None = None) -> None:
     if args.baseline_offset is not None:
         mount = replace(mount, baseline_offset_deg=args.baseline_offset)
 
+    overrides = {
+        "q_heading_deg2": args.q_heading,
+        "q_bias_deg2_s2": args.q_bias,
+        "p0_heading_deg2": args.p0_heading,
+        "p0_bias_deg2_s2": args.p0_bias,
+        "mount_roll_deg": args.mount_roll,
+        "mount_pitch_deg": args.mount_pitch,
+        "mount_yaw_deg": args.mount_yaw,
+    }
+    cfg = replace(
+        load_tuning(), **{k: v for k, v in overrides.items() if v is not None}
+    )
+
+    # Tilt the synthesized IMU by the same mount the filter corrects for.
+    imu_mount = euler_to_quaternion(
+        cfg.mount_roll_deg, cfg.mount_pitch_deg, cfg.mount_yaw_deg
+    )
+
     src = SimulatedSource(
         scenario=SCENARIOS[args.scenario],
         imu_noise=ImuNoiseModel(
@@ -156,17 +178,9 @@ def main(argv: list[str] | None = None) -> None:
         duration_s=args.duration,
         seed=args.seed,
         mount=mount,
+        imu_mount=imu_mount,
         imu_rate_hz=args.imu_rate_hz,
         gnss_rate_hz=args.gnss_rate_hz,
-    )
-    overrides = {
-        "q_heading_deg2": args.q_heading,
-        "q_bias_deg2_s2": args.q_bias,
-        "p0_heading_deg2": args.p0_heading,
-        "p0_bias_deg2_s2": args.p0_bias,
-    }
-    cfg = replace(
-        load_tuning(), **{k: v for k, v in overrides.items() if v is not None}
     )
     plot_trace(
         run(src, cfg),

@@ -90,6 +90,12 @@ class EkfConfig:
     p0_pitch_deg2: float = 1000.0
     mti_roll_variance_deg2: float = 1.0
     mti_pitch_variance_deg2: float = 1.0
+    # Boat-to-IMU mounting offset as ZYX Euler angles. The filter rotates the
+    # MTi quaternion by this to recover boat attitude; identity when the IMU
+    # is bolted square to the boat axes.
+    mount_roll_deg: float = 0.0
+    mount_pitch_deg: float = 0.0
+    mount_yaw_deg: float = 0.0
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

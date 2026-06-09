@@ -9,6 +9,7 @@ import pytest
 from plrs_sim import Quaternion, Vec3
 from plrs_sim.attitude import (
     conjugate,
+    euler_to_quaternion,
     from_axis_angle,
     multiply,
     quaternion_to_euler_zyx,
@@ -96,3 +97,13 @@ def test_euler_pure_pitch_recovers_pitch() -> None:
     q = from_axis_angle(Vec3(x=0.0, y=1.0, z=0.0), 30.0 * DEG_TO_RAD)
     roll, pitch, yaw = quaternion_to_euler_zyx(q)
     assert (roll, pitch, yaw) == pytest.approx((0.0, 30.0, 0.0), abs=1e-6)
+
+
+def test_euler_to_quaternion_inverts_decomposition() -> None:
+    for roll, pitch, yaw in [
+        (0.0, 0.0, 0.0),
+        (15.0, -8.0, 40.0),
+        (-30.0, 20.0, -120.0),
+    ]:
+        q = euler_to_quaternion(roll, pitch, yaw)
+        assert quaternion_to_euler_zyx(q) == pytest.approx((roll, pitch, yaw), abs=1e-6)

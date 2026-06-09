@@ -73,3 +73,17 @@ def quaternion_to_euler_zyx(q: Quaternion) -> tuple[float, float, float]:
     )
     rad_to_deg = 180.0 / math.pi
     return roll * rad_to_deg, pitch * rad_to_deg, yaw * rad_to_deg
+
+
+def euler_to_quaternion(
+    roll_deg: float, pitch_deg: float, yaw_deg: float
+) -> Quaternion:
+    """Inverse of quaternion_to_euler_zyx: ZYX intrinsic angles to a quaternion.
+
+    Composes the principal rotations as Rz(yaw) * Ry(pitch) * Rx(roll).
+    """
+    deg_to_rad = math.pi / 180.0
+    qx = from_axis_angle(Vec3(x=1.0, y=0.0, z=0.0), roll_deg * deg_to_rad)
+    qy = from_axis_angle(Vec3(x=0.0, y=1.0, z=0.0), pitch_deg * deg_to_rad)
+    qz = from_axis_angle(Vec3(x=0.0, y=0.0, z=1.0), yaw_deg * deg_to_rad)
+    return multiply(multiply(qz, qy), qx)
