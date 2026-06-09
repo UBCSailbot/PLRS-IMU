@@ -50,9 +50,15 @@ class FusionOutput:
 
 class Config:
     q_heading_deg2: float
+    q_roll_deg2: float
+    q_pitch_deg2: float
     q_bias_deg2_s2: float
     p0_heading_deg2: float
+    p0_roll_deg2: float
+    p0_pitch_deg2: float
     p0_bias_deg2_s2: float
+    mti_roll_variance_deg2: float
+    mti_pitch_variance_deg2: float
     mount: MountRotation
     def __init__(self) -> None: ...
 

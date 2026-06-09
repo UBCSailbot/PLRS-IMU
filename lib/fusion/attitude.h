@@ -67,6 +67,88 @@ inline float world_yaw_rate(UnitQuaternion orientation, plrs::Vec3 omega_body) {
 }
 
 /**
+ * ZYX intrinsic Euler-angle rates, radians per second.
+ */
+struct EulerRates {
+  float roll_dot;
+  float pitch_dot;
+  float yaw_dot;
+};
+
+/**
+ * @brief ZYX Euler-angle rates from a body-frame angular velocity.
+ *
+ * Inverts the Euler kinematic matrix E(roll, pitch). The yaw row is the
+ * heel-aware heading rate; at zero pitch it equals world_yaw_rate. Singular
+ * at pitch = +-90 deg (cos pitch -> 0), which trim never reaches.
+ *
+ * @param roll_rad    Roll angle (radians).
+ * @param pitch_rad   Pitch angle (radians).
+ * @param omega_body  Body-frame angular velocity (rad/s).
+ *
+ * @return Euler-angle rates (rad/s).
+ */
+inline EulerRates euler_rates_zyx(float roll_rad, float pitch_rad,
+                                  plrs::Vec3 omega_body) {
+  const float sr = std::sin(roll_rad);
+  const float cr = std::cos(roll_rad);
+  const float sec_pitch = 1.0f / std::cos(pitch_rad);
+  const float tan_pitch = std::tan(pitch_rad);
+  const float a = omega_body.y * sr + omega_body.z * cr;
+  return EulerRates{
+      .roll_dot = omega_body.x + a * tan_pitch,
+      .pitch_dot = omega_body.y * cr - omega_body.z * sr,
+      .yaw_dot = a * sec_pitch,
+  };
+}
+
+/**
+ * Partials of the ZYX Euler rates with respect to roll and pitch, per
+ * radian. Yaw drops out of the kinematic matrix, so only these two columns
+ * are non-trivial; they populate the off-diagonal terms of the EKF Jacobian.
+ */
+struct EulerRatesJacobian {
+  float droll_droll;
+  float droll_dpitch;
+  float dpitch_droll;
+  float dpitch_dpitch;
+  float dyaw_droll;
+  float dyaw_dpitch;
+};
+
+/**
+ * @brief Analytic Jacobian of euler_rates_zyx in roll and pitch.
+ *
+ * @param roll_rad    Roll angle (radians).
+ * @param pitch_rad   Pitch angle (radians).
+ * @param omega_body  Body-frame angular velocity (rad/s).
+ *
+ * @return Partial derivatives of the Euler rates (per radian).
+ */
+inline EulerRatesJacobian euler_rates_jacobian(float roll_rad, float pitch_rad,
+                                               plrs::Vec3 omega_body) {
+  const float sr = std::sin(roll_rad);
+  const float cr = std::cos(roll_rad);
+  const float sec_pitch = 1.0f / std::cos(pitch_rad);
+  const float tan_pitch = std::tan(pitch_rad);
+  const float a = omega_body.y * sr + omega_body.z * cr;
+  const float a_droll = omega_body.y * cr - omega_body.z * sr;
+  return EulerRatesJacobian{
+      .droll_droll = a_droll * tan_pitch,
+      .droll_dpitch = a * sec_pitch * sec_pitch,
+      .dpitch_droll = -a,
+      .dpitch_dpitch = 0.0f,
+      .dyaw_droll = a_droll * sec_pitch,
+      .dyaw_dpitch = a * sec_pitch * tan_pitch,
+  };
+}
+
+/**
+ * @brief Wrap an angle in degrees to the range (-180, 180].
+ */
+inline float wrap180(float deg) { return std::remainder(deg, 360.0f); }
+
+/**
  * @brief Decompose a unit quaternion into ZYX intrinsic Euler angles.
  *
  * @param q  Unit quaternion to decompose.

@@ -1,0 +1,26 @@
+# EKF tuning: how much the filter trusts the gyro versus the measurements.
+# This is the one place those numbers live. The sim reads it directly; the
+# firmware will get a generated header from it once the MTi task lands, so the
+# value you tune here is the value that ships. See docs/tuning.md.
+
+# Process noise: how much each state is allowed to drift per step, as a
+# variance. Larger means trust the gyro less and the measurements more.
+[process_noise]
+heading_deg2 = 0.01           # heading
+roll_deg2 = 0.01              # roll
+pitch_deg2 = 0.01             # pitch
+gyro_bias_deg2_s2 = 0.0001    # slow drift of the vertical gyro, (deg/s)^2
+
+# Startup uncertainty. Large is fine: it washes out within a few measurements,
+# so this only sets how fast the filter converges from a cold start.
+[initial_covariance]
+heading_deg2 = 1000.0
+roll_deg2 = 1000.0
+pitch_deg2 = 1000.0
+gyro_bias_deg2_s2 = 1.0
+
+# How much to trust the MTi's reported roll and pitch on each sample. (GNSS
+# heading noise is not here -- the receiver reports it per fix.)
+[mti_noise]
+roll_deg2 = 1.0
+pitch_deg2 = 1.0

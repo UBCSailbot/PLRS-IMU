@@ -68,6 +68,14 @@ class EkfConfig:
     q_bias_deg2_s2: float
     p0_heading_deg2: float
     p0_bias_deg2_s2: float
+    # Attitude tuning defaults to sensible starting points so heading-only
+    # scenarios need not restate it; see docs/tuning.md.
+    q_roll_deg2: float = 0.01
+    q_pitch_deg2: float = 0.01
+    p0_roll_deg2: float = 1000.0
+    p0_pitch_deg2: float = 1000.0
+    mti_roll_variance_deg2: float = 1.0
+    mti_pitch_variance_deg2: float = 1.0
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -75,12 +83,15 @@ class Tick:
     """One step in a sample-source iteration.
 
     gnss is None on IMU ticks that do not coincide with a GNSS sample.
-    truth_heading_deg is the noise-free heading from the trajectory at
-    timestamp_ms; the runner records it so the plot can show ground truth.
+    The truth_* fields are the noise-free heading, roll, and pitch at
+    timestamp_ms; the runner records them so the plot can show ground truth
+    even when the IMU sample's own orientation is corrupted by noise.
     """
 
     timestamp_ms: int
     truth_heading_deg: float
+    truth_roll_deg: float
+    truth_pitch_deg: float
     imu: ImuSample
     gnss: GnssSample | None
 
@@ -165,6 +176,9 @@ class ImuNoiseModel:
     gyro_white_std_rad_s: float | None = None
     gyro_constant_bias_rad_s: float | None = None
     gyro_bias_walk_std_rad_s_sqrt_s: float | None = None
+    # Std of a small random rotation added to the MTi orientation each
+    # sample, in degrees. None leaves the quaternion noise-free.
+    mti_attitude_std_deg: float | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

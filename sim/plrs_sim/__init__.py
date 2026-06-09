@@ -1,6 +1,7 @@
 """Polaris IMU simulation harness."""
 
 from .ekf import TinyEkfFilter
+from .tuning import load_tuning
 from .types import (
     GRAVITY_MS2,
     Channel,
@@ -44,4 +45,5 @@ __all__ = [
     "TinyEkfFilter",
     "Trace",
     "Vec3",
+    "load_tuning",
 ]

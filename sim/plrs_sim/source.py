@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .attitude import world_to_body
+from .attitude import quaternion_to_euler_zyx, world_to_body
 from .noise import GnssNoise, ImuNoise
 from .truth import sample_attitude, sample_yaw
 from .types import (
@@ -88,9 +88,12 @@ class SimulatedSource:
                 gnss = gnss_noise.corrupt(clean_gnss)
                 next_gnss_ms += gnss_dt_ms
 
+            truth_roll, truth_pitch, _ = quaternion_to_euler_zyx(orientation)
             yield Tick(
                 timestamp_ms=t_ms,
                 truth_heading_deg=truth_h,
+                truth_roll_deg=truth_roll,
+                truth_pitch_deg=truth_pitch,
                 imu=corrupted_imu,
                 gnss=gnss,
             )

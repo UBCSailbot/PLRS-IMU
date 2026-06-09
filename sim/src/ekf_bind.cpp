@@ -7,8 +7,8 @@
  * live in the Python wrapper, not here.
  */
 
-#include "ekf_filter.h"
 #include "common.h"
+#include "ekf_filter.h"
 #include <nanobind/nanobind.h>
 
 namespace nb = nanobind;
@@ -89,9 +89,17 @@ NB_MODULE(_native, m) {
   nb::class_<TinyEkfFilter::Config>(m, "Config")
       .def(nb::init<>())
       .def_rw("q_heading_deg2", &TinyEkfFilter::Config::q_heading_deg2)
+      .def_rw("q_roll_deg2", &TinyEkfFilter::Config::q_roll_deg2)
+      .def_rw("q_pitch_deg2", &TinyEkfFilter::Config::q_pitch_deg2)
       .def_rw("q_bias_deg2_s2", &TinyEkfFilter::Config::q_bias_deg2_s2)
       .def_rw("p0_heading_deg2", &TinyEkfFilter::Config::p0_heading_deg2)
+      .def_rw("p0_roll_deg2", &TinyEkfFilter::Config::p0_roll_deg2)
+      .def_rw("p0_pitch_deg2", &TinyEkfFilter::Config::p0_pitch_deg2)
       .def_rw("p0_bias_deg2_s2", &TinyEkfFilter::Config::p0_bias_deg2_s2)
+      .def_rw("mti_roll_variance_deg2",
+              &TinyEkfFilter::Config::mti_roll_variance_deg2)
+      .def_rw("mti_pitch_variance_deg2",
+              &TinyEkfFilter::Config::mti_pitch_variance_deg2)
       .def_rw("mount", &TinyEkfFilter::Config::mount);
 
   nb::class_<TinyEkfFilter>(m, "TinyEkfFilter")

@@ -11,15 +11,16 @@ A flag value of 0.0 for any noise std/bias disables that effect entirely.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 from .plot import plot_trace
 from .runner import run
 from .source import SimulatedSource
+from .tuning import load_tuning
 from .types import (
     ConstantHeel,
     ConstantTurn,
-    EkfConfig,
     GnssNoiseModel,
     ImuNoiseModel,
     Scenario,
@@ -47,7 +48,7 @@ SCENARIOS: dict[str, Scenario] = {
         yaw=StepTurns(
             legs=(
                 (5.0, 0.0),
-                (3.0, 60.0),
+                (3.0, 30.0),
                 (15.0, 0.0),
             ),
         ),
@@ -86,6 +87,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="gyro bias random-walk std (rad/s/sqrt(s)); 0 disables",
     )
     sim.add_argument(
+        "--mti-attitude-std",
+        type=float,
+        default=1.0,
+        help="MTi roll/pitch noise std (deg); 0 disables",
+    )
+    sim.add_argument(
         "--gnss-std",
         type=float,
         default=1.0,
@@ -98,10 +105,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="GNSS dropout probability [0,1]",
     )
 
-    sim.add_argument("--q-heading", type=float, default=0.01)
-    sim.add_argument("--q-bias", type=float, default=0.0001)
-    sim.add_argument("--p0-heading", type=float, default=1000.0)
-    sim.add_argument("--p0-bias", type=float, default=1.0)
+    # These override the matching value from tuning.toml when given.
+    sim.add_argument("--q-heading", type=float, default=None)
+    sim.add_argument("--q-bias", type=float, default=None)
+    sim.add_argument("--p0-heading", type=float, default=None)
+    sim.add_argument("--p0-bias", type=float, default=None)
 
     sim.add_argument(
         "--save",
@@ -128,6 +136,7 @@ def main(argv: list[str] | None = None) -> None:
             gyro_white_std_rad_s=_zero_to_none(args.gyro_white),
             gyro_constant_bias_rad_s=_zero_to_none(args.gyro_bias),
             gyro_bias_walk_std_rad_s_sqrt_s=_zero_to_none(args.gyro_walk),
+            mti_attitude_std_deg=_zero_to_none(args.mti_attitude_std),
         ),
         gnss_noise=GnssNoiseModel(
             heading_std_deg=_zero_to_none(args.gnss_std),
@@ -138,11 +147,14 @@ def main(argv: list[str] | None = None) -> None:
         imu_rate_hz=args.imu_rate_hz,
         gnss_rate_hz=args.gnss_rate_hz,
     )
-    cfg = EkfConfig(
-        q_heading_deg2=args.q_heading,
-        q_bias_deg2_s2=args.q_bias,
-        p0_heading_deg2=args.p0_heading,
-        p0_bias_deg2_s2=args.p0_bias,
+    overrides = {
+        "q_heading_deg2": args.q_heading,
+        "q_bias_deg2_s2": args.q_bias,
+        "p0_heading_deg2": args.p0_heading,
+        "p0_bias_deg2_s2": args.p0_bias,
+    }
+    cfg = replace(
+        load_tuning(), **{k: v for k, v in overrides.items() if v is not None}
     )
     plot_trace(
         run(src, cfg),

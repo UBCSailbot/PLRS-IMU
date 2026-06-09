@@ -2,17 +2,21 @@
 
 ## Parameters
 
-The filter exposes four values in `TinyEkfFilter::Config`:
+The values live in `tuning.toml`, the one place they are set. Each maps to a
+field of `TinyEkfFilter::Config`:
 
 | Parameter | Physical meaning |
 |---|---|
 | `q_heading_deg2` | Heading process noise per step (deg^2) |
+| `q_roll_deg2` / `q_pitch_deg2` | Roll / pitch process noise per step (deg^2) |
 | `q_bias_deg2_s2` | Gyro bias random walk per step ((deg/s)^2) |
-| `p0_heading_deg2` | Initial heading uncertainty (deg^2) |
-| `p0_bias_deg2_s2` | Initial bias uncertainty ((deg/s)^2) |
+| `p0_*` | Initial uncertainty for each state; only affects startup convergence |
+| `mti_roll_variance_deg2` / `mti_pitch_variance_deg2` | Trust in the MTi's roll / pitch each sample (deg^2) |
 
-Q controls how much the filter trusts the gyro integration relative to GNSS
-corrections. P0 only affects convergence from startup and can be set large.
+Q controls how much the filter trusts the gyro integration relative to the
+measurements. P0 only affects convergence from startup and can be set large.
+GNSS heading noise is not tuned here -- the receiver reports it per fix as
+`heading_variance_deg2`.
 
 ## Deriving Q from the MTi-3 datasheet
 
