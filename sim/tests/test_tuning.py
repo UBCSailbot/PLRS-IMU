@@ -58,3 +58,33 @@ def test_load_mount_reads_a_custom_file(tmp_path) -> None:
     mount = load_mount(path)
     assert mount.baseline_offset_deg == 17.5
     assert mount.fallback_heading_variance_deg2 == 9.0
+
+
+def test_default_tuning_has_zero_imu_mount() -> None:
+    cfg = load_tuning()
+    assert (cfg.mount_roll_deg, cfg.mount_pitch_deg, cfg.mount_yaw_deg) == (
+        0.0,
+        0.0,
+        0.0,
+    )
+
+
+def test_load_tuning_reads_imu_mount_section(tmp_path) -> None:
+    path = tmp_path / "custom.toml"
+    path.write_text(
+        "[process_noise]\n"
+        "heading_deg2 = 0.01\nroll_deg2 = 0.01\npitch_deg2 = 0.01\n"
+        "gyro_bias_deg2_s2 = 0.0001\n"
+        "[initial_covariance]\n"
+        "heading_deg2 = 1000.0\nroll_deg2 = 1000.0\npitch_deg2 = 1000.0\n"
+        "gyro_bias_deg2_s2 = 1.0\n"
+        "[mti_noise]\nroll_deg2 = 1.0\npitch_deg2 = 1.0\n"
+        "[imu_mount]\n"
+        "mount_roll_deg = 3.0\nmount_pitch_deg = -2.0\nmount_yaw_deg = 5.0\n"
+    )
+    cfg = load_tuning(path)
+    assert (cfg.mount_roll_deg, cfg.mount_pitch_deg, cfg.mount_yaw_deg) == (
+        3.0,
+        -2.0,
+        5.0,
+    )
