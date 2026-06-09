@@ -118,6 +118,9 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="DEG",
         help="GNSS antenna baseline offset from boat-forward; overrides tuning.toml",
     )
+    sim.add_argument("--mount-roll", type=float, default=None, metavar="DEG")
+    sim.add_argument("--mount-pitch", type=float, default=None, metavar="DEG")
+    sim.add_argument("--mount-yaw", type=float, default=None, metavar="DEG")
 
     sim.add_argument(
         "--save",
@@ -147,6 +150,9 @@ def main(argv: list[str] | None = None) -> None:
         "q_bias_deg2_s2": args.q_bias,
         "p0_heading_deg2": args.p0_heading,
         "p0_bias_deg2_s2": args.p0_bias,
+        "mount_roll_deg": args.mount_roll,
+        "mount_pitch_deg": args.mount_pitch,
+        "mount_yaw_deg": args.mount_yaw,
     }
     cfg = replace(
         load_tuning(), **{k: v for k, v in overrides.items() if v is not None}

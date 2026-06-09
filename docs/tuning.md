@@ -18,9 +18,10 @@ measurements. P0 only affects convergence from startup and can be set large.
 GNSS heading noise is not tuned here -- the receiver reports it per fix as
 `heading_variance_deg2`.
 
-The `[gnss]` section of `tuning.toml` is calibration, not filter tuning: the
-antenna baseline offset and a fallback heading variance, both covered in
-`docs/gnss.md`.
+Two sections of `tuning.toml` are calibration, not filter tuning: `[gnss]` (the
+antenna baseline offset and a fallback heading variance, covered in
+`docs/gnss.md`) and `[imu_mount]` (the boat-to-IMU mounting offset, covered in
+`docs/attitude.md`).
 
 ## Deriving Q from the MTi-3 datasheet
 
