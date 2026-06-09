@@ -67,3 +67,28 @@ class TinyEkfFilter:
     def predict(self, imu: ImuSample) -> None: ...
     def update(self, gnss: GnssSample) -> None: ...
     def output(self) -> FusionOutput: ...
+
+class AttEuler:
+    tow: int
+    error: int
+    mode: int
+    heading: float
+    pitch: float
+    roll: float
+    heading_dot: float
+    def __init__(self) -> None: ...
+
+class AttCovEuler:
+    cov_headhead: float
+    cov_pitchpitch: float
+    cov_rollroll: float
+    def __init__(self) -> None: ...
+
+class GnssAttitudeMount:
+    baseline_offset_deg: float
+    fallback_heading_variance_deg2: float
+    def __init__(self) -> None: ...
+
+def att_euler_to_gnss_sample(
+    att: AttEuler, cov: AttCovEuler, mount: GnssAttitudeMount
+) -> GnssSample: ...

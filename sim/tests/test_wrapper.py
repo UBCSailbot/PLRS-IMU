@@ -15,10 +15,12 @@ from plrs_sim import (
     GRAVITY_MS2,
     EkfConfig,
     FusionOutput,
+    GnssAttitudeMount,
     GnssSample,
     ImuSample,
     TinyEkfFilter,
     Vec3,
+    gnss_sample_from_attitude,
 )
 
 CFG = EkfConfig(
@@ -102,3 +104,29 @@ def test_input_dataclass_unaffected_by_filter_call() -> None:
     f.predict(imu)
     assert imu.angular_velocity_rad_s.z == 0.5
     assert imu.timestamp_ms == 2500
+
+
+def test_bridge_wrapper_subtracts_offset_and_wraps() -> None:
+    mount = GnssAttitudeMount(baseline_offset_deg=20.0)
+    s = gnss_sample_from_attitude(
+        heading_deg=350.0,  # baseline frame; 350 - 20 = 330 -> -30
+        heading_variance_deg2=4.0,
+        valid=True,
+        tow_ms=1000,
+        mount=mount,
+    )
+    assert isinstance(s, GnssSample)
+    assert s.valid is True
+    assert s.heading_deg == pytest.approx(-30.0)
+    assert s.heading_variance_deg2 == pytest.approx(4.0)
+
+
+def test_bridge_wrapper_dropout_is_invalid() -> None:
+    s = gnss_sample_from_attitude(
+        heading_deg=45.0,
+        heading_variance_deg2=0.0,
+        valid=False,
+        tow_ms=1000,
+        mount=GnssAttitudeMount(),
+    )
+    assert s.valid is False

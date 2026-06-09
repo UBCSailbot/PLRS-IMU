@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from plrs_sim import load_tuning
+from plrs_sim import load_mount, load_tuning
 from plrs_sim.tuning import DEFAULT_PATH
 
 
@@ -42,3 +42,19 @@ def test_load_tuning_reads_a_custom_file(tmp_path) -> None:
     assert cfg.q_heading_deg2 == 0.5
     assert cfg.p0_pitch_deg2 == 30.0
     assert cfg.mti_pitch_variance_deg2 == 4.0
+
+
+def test_load_mount_reads_gnss_section() -> None:
+    mount = load_mount()
+    assert mount.baseline_offset_deg == 0.0
+    assert mount.fallback_heading_variance_deg2 == 4.0
+
+
+def test_load_mount_reads_a_custom_file(tmp_path) -> None:
+    path = tmp_path / "custom.toml"
+    path.write_text(
+        "[gnss]\nbaseline_offset_deg = 17.5\nfallback_heading_variance_deg2 = 9.0\n"
+    )
+    mount = load_mount(path)
+    assert mount.baseline_offset_deg == 17.5
+    assert mount.fallback_heading_variance_deg2 == 9.0
