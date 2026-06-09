@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from plrs_sim import (
+    ConstantHeel,
     ConstantTurn,
     EkfConfig,
     GnssNoiseModel,
@@ -15,6 +16,7 @@ from plrs_sim import (
     Scenario,
     Static,
 )
+from plrs_sim.attitude import euler_to_quaternion
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 
@@ -86,6 +88,32 @@ def test_filter_tracks_heading_across_the_180_seam() -> None:
     # crucially, has no spike where truth crosses 180 deg (~36 s in).
     steady = residual[len(residual) // 4 :]
     assert np.max(np.abs(steady)) < 5.0
+
+
+def test_filter_recovers_attitude_through_a_tilted_mount() -> None:
+    # The IMU is bolted 8 deg out of square; the boat sits at 20 deg heel.
+    # With the matching mount in its config, the filter un-rotates the MTi
+    # quaternion and the fused roll tracks the true heel, not the tilted read.
+    cfg = EkfConfig(
+        q_heading_deg2=0.01,
+        q_bias_deg2_s2=0.0001,
+        p0_heading_deg2=1000.0,
+        p0_bias_deg2_s2=1.0,
+        mount_roll_deg=8.0,
+    )
+    src = SimulatedSource(
+        scenario=Scenario(
+            yaw=Static(heading_deg=0.0), attitude=ConstantHeel(angle_deg=20.0)
+        ),
+        imu_noise=ImuNoiseModel(),
+        gnss_noise=GnssNoiseModel(),
+        duration_s=2.0,
+        seed=0,
+        imu_mount=euler_to_quaternion(8.0, 0.0, 0.0),
+    )
+    ch = run(src, cfg).channels["roll"]
+    assert ch.truth[-1] == pytest.approx(20.0, abs=1e-6)
+    assert ch.estimate[-1] == pytest.approx(20.0, abs=0.5)
 
 
 def test_est_std_finite_after_first_gnss() -> None:
