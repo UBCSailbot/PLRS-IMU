@@ -158,15 +158,17 @@ arrow, so a misconfigured mount is visible at a glance:
 Quick start:
 
 ```bash
-make sim                          # default: constant_turn scenario
-make sim SCENARIO=wave_tack       # or sinusoidal, step_turns, static, heeling_tack
+make sim                          # interactive scenario/view picker
+make sim SCENARIO=wave_tack VIEW=pose   # or constant_turn, sinusoidal, step_turns, static, heeling_tack
 make sim-test                     # pytest suite
 make sim-format                   # ruff format + check
 ```
 
-Run `python -m plrs_sim` with no scenario for an arrow-key picker, or drive
-it directly. Pick a view with `--view {timeseries,mounting,pose}` and tune
-noise, EKF, and calibration from the CLI:
+`make sim` with no arguments drops into an arrow-key picker; pass `SCENARIO`
+(and optionally `VIEW`) to skip it. The same is available directly as
+`python -m plrs_sim` (picker) or `python -m plrs_sim sim <scenario> --view
+{timeseries,mounting,pose}`, which also takes noise, EKF, and calibration
+flags:
 
 ```bash
 cd sim
