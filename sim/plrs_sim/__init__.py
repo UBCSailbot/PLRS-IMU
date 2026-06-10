@@ -23,6 +23,7 @@ from .types import (
     Tick,
     Trace,
     Vec3,
+    WaveMotion,
 )
 
 __all__ = [
@@ -47,6 +48,7 @@ __all__ = [
     "TinyEkfFilter",
     "Trace",
     "Vec3",
+    "WaveMotion",
     "gnss_sample_from_attitude",
     "load_mount",
     "load_tuning",

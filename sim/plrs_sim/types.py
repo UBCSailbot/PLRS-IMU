@@ -168,8 +168,24 @@ class ConstantHeel:
     angle_deg: float
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WaveMotion:
+    """Roll and pitch oscillate sinusoidally, as in a seaway.
+
+    Each axis is an independent sine of its own amplitude and period;
+    unlike ConstantHeel the orientation moves, so the body-frame angular
+    velocity from attitude motion is nonzero. Heading is left to the yaw
+    profile. A zero amplitude disables that axis.
+    """
+
+    roll_amplitude_deg: float
+    roll_period_s: float
+    pitch_amplitude_deg: float
+    pitch_period_s: float
+
+
 YawProfile = ConstantTurn | Sinusoidal | StepTurns | Static
-AttitudeProfile = LevelAttitude | ConstantHeel
+AttitudeProfile = LevelAttitude | ConstantHeel | WaveMotion
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

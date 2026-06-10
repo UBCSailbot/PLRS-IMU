@@ -18,7 +18,9 @@ from plrs_sim import (
     Sinusoidal,
     Static,
     StepTurns,
+    WaveMotion,
 )
+from plrs_sim.attitude import conjugate, multiply
 from plrs_sim.truth import DEG_TO_RAD, sample_attitude, sample_yaw
 
 
@@ -112,3 +114,47 @@ def test_level_attitude_is_identity_at_all_times() -> None:
     q2, omega2 = sample_attitude(LevelAttitude(), 999999)
     assert q2 == Quaternion.identity()
     assert omega2.x == 0.0 and omega2.y == 0.0 and omega2.z == 0.0
+
+
+def test_wave_motion_amplitudes_and_phase() -> None:
+    # Roll peaks a quarter period in; pitch is independent.
+    w = WaveMotion(
+        roll_amplitude_deg=15.0,
+        roll_period_s=4.0,
+        pitch_amplitude_deg=5.0,
+        pitch_period_s=3.0,
+    )
+    q0, omega0 = sample_attitude(w, 0)
+    assert q0 == Quaternion.identity()  # both sines zero at t=0
+    # Roll rate is maximal at t=0, pitch rate too; both positive.
+    assert omega0.x == pytest.approx(15.0 * (2 * math.pi / 4.0) * DEG_TO_RAD)
+    assert omega0.y == pytest.approx(5.0 * (2 * math.pi / 3.0) * DEG_TO_RAD)
+    assert omega0.z == pytest.approx(0.0, abs=1e-12)
+
+
+def test_wave_motion_body_rate_matches_orientation_derivative() -> None:
+    # The returned omega must be the true body angular velocity of the
+    # returned orientation: recover it by central-differencing q(t) and
+    # using dq/dt = 0.5 * q (x) (0, omega).
+    w = WaveMotion(
+        roll_amplitude_deg=15.0,
+        roll_period_s=4.0,
+        pitch_amplitude_deg=5.0,
+        pitch_period_s=3.0,
+    )
+    h_ms = 1
+    h_s = h_ms / 1000.0
+    for t_ms in (250, 800, 1500, 2300):
+        q, omega = sample_attitude(w, t_ms)
+        q_plus, _ = sample_attitude(w, t_ms + h_ms)
+        q_minus, _ = sample_attitude(w, t_ms - h_ms)
+        dqdt = Quaternion(
+            w=(q_plus.w - q_minus.w) / (2 * h_s),
+            x=(q_plus.x - q_minus.x) / (2 * h_s),
+            y=(q_plus.y - q_minus.y) / (2 * h_s),
+            z=(q_plus.z - q_minus.z) / (2 * h_s),
+        )
+        recovered = multiply(conjugate(q), dqdt)
+        assert 2.0 * recovered.x == pytest.approx(omega.x, abs=1e-3)
+        assert 2.0 * recovered.y == pytest.approx(omega.y, abs=1e-3)
+        assert 2.0 * recovered.z == pytest.approx(omega.z, abs=1e-3)
