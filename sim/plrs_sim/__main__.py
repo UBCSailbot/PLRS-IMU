@@ -15,7 +15,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from .attitude import euler_to_quaternion
-from .plot import plot_trace
+from .boat3d import plot_mounting
+from .plot import plot_pose, plot_trace
 from .runner import run
 from .source import SimulatedSource
 from .tuning import load_mount, load_tuning
@@ -28,7 +29,10 @@ from .types import (
     Sinusoidal,
     Static,
     StepTurns,
+    WaveMotion,
 )
+
+VIEWS = ("timeseries", "mounting", "pose")
 
 SCENARIOS: dict[str, Scenario] = {
     "constant_turn": Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
@@ -55,15 +59,37 @@ SCENARIOS: dict[str, Scenario] = {
         ),
         attitude=ConstantHeel(angle_deg=20.0),
     ),
+    "wave_tack": Scenario(
+        yaw=StepTurns(
+            legs=(
+                (5.0, 0.0),
+                (3.0, 30.0),
+                (15.0, 0.0),
+            ),
+        ),
+        attitude=WaveMotion(
+            roll_amplitude_deg=15.0,
+            roll_period_s=4.0,
+            pitch_amplitude_deg=4.0,
+            pitch_period_s=3.0,
+        ),
+    ),
 }
 
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m plrs_sim")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    # Optional: a bare invocation drops into the interactive selector.
+    sub = p.add_subparsers(dest="cmd", required=False)
 
     sim = sub.add_parser("sim", help="run a simulated scenario and plot the result")
     sim.add_argument("scenario", choices=sorted(SCENARIOS.keys()))
+    sim.add_argument(
+        "--view",
+        choices=VIEWS,
+        default="timeseries",
+        help="timeseries plot, mounting geometry, or truth-vs-estimate pose",
+    )
     sim.add_argument("--duration", type=float, default=10.0, metavar="SECONDS")
     sim.add_argument("--seed", type=int, default=0)
     sim.add_argument("--imu-rate-hz", type=float, default=100.0)
@@ -138,9 +164,26 @@ def _zero_to_none(x: float) -> float | None:
     return x if x > 0.0 else None
 
 
-def main(argv: list[str] | None = None) -> None:
-    args = _build_parser().parse_args(argv)
+def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace:
+    """Arrow-key prompt for scenario + view; returns parsed args with defaults."""
+    import questionary
 
+    scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
+    view = questionary.select("View", choices=list(VIEWS)).ask()
+    if scenario is None or view is None:  # user pressed Ctrl-C
+        raise SystemExit(0)
+    return parser.parse_args(["sim", scenario, "--view", view])
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.cmd is None:
+        args = _select_interactively(parser)
+    _run_view(args)
+
+
+def _run_view(args: argparse.Namespace) -> None:
     mount = load_mount()
     if args.baseline_offset is not None:
         mount = replace(mount, baseline_offset_deg=args.baseline_offset)
@@ -157,6 +200,11 @@ def main(argv: list[str] | None = None) -> None:
     cfg = replace(
         load_tuning(), **{k: v for k, v in overrides.items() if v is not None}
     )
+
+    # Mounting is pure config geometry -- no run needed.
+    if args.view == "mounting":
+        plot_mounting(cfg, mount, show=not args.no_show, save=args.save)
+        return
 
     # Tilt the synthesized IMU by the same mount the filter corrects for.
     imu_mount = euler_to_quaternion(
@@ -182,12 +230,12 @@ def main(argv: list[str] | None = None) -> None:
         imu_rate_hz=args.imu_rate_hz,
         gnss_rate_hz=args.gnss_rate_hz,
     )
-    plot_trace(
-        run(src, cfg),
-        show=not args.no_show,
-        save=args.save,
-        title=f"{args.scenario} (seed={args.seed})",
-    )
+    trace = run(src, cfg)
+    title = f"{args.scenario} (seed={args.seed})"
+    if args.view == "pose":
+        plot_pose(trace, show=not args.no_show, save=args.save, title=title)
+    else:
+        plot_trace(trace, show=not args.no_show, save=args.save, title=title)
 
 
 if __name__ == "__main__":

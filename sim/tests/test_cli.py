@@ -58,3 +58,23 @@ def test_cli_zero_flag_disables_noise(tmp_path: Path) -> None:
 def test_cli_missing_scenario_errors() -> None:
     with pytest.raises(SystemExit):
         main(["sim"])
+
+
+@pytest.mark.parametrize("view", ["mounting", "pose"])
+def test_cli_alternate_views(tmp_path: Path, view: str) -> None:
+    out = tmp_path / f"{view}.png"
+    main(
+        [
+            "sim",
+            "wave_tack",
+            "--duration",
+            "2.0",
+            "--view",
+            view,
+            "--no-show",
+            "--save",
+            str(out),
+        ]
+    )
+    assert out.exists()
+    assert out.stat().st_size > 0
