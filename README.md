@@ -129,41 +129,58 @@ Run `make` with no arguments to list all targets.
 A Python harness at `sim/` wraps the C++ EKF for offline visualization
 and tuning. The same filter code that ships on the RP2040 runs in the
 sim, so Q values picked offline transfer faithfully. Synthetic
-trajectories, injectable IMU and GNSS noise, and an overlay plot of
-truth / open-loop / GNSS / EKF estimate ship out of the box.
+trajectories (yaw plus heel and pitch), injectable IMU and GNSS noise,
+and three rendered views ship out of the box.
+
+The default **timeseries** view plots one channel each for heading, roll,
+and pitch:
 
 ![Sinusoidal scenario with EKF tracking truth inside its +/-1 sigma band](docs/images/sim-sinusoidal.png)
 
-The top axes show the trajectory (truth in black, GNSS samples scattered,
-EKF estimate in blue, open-loop gyro integration as a dashed baseline).
-The bottom axes show the residual against truth with the filter's
-+/-1 sigma band centered at zero -- residuals staying inside the band
-mean the filter is consistent with its claimed uncertainty.
+Per channel, the top axes show the trajectory (truth in black, GNSS
+samples scattered, EKF estimate in blue, open-loop gyro integration as a
+dashed baseline) and the bottom axes show the residual against truth with
+the filter's +/-1 sigma band centered at zero -- residuals staying inside
+the band mean the filter is consistent with its claimed uncertainty.
+
+The **pose** view is a filmstrip of the boat through the run, the true
+hull (blue) with the EKF estimate ghosted (orange) -- tracking reads as
+the two boats overlapping:
+
+![Pose filmstrip of a tack in waves](docs/images/sim-pose.png)
+
+The **mounting** view is pure calibration geometry: a level boat with the
+IMU axis triad rotated by the mount offset and the GNSS antenna baseline
+arrow, so a misconfigured mount is visible at a glance:
+
+![Mounting view showing a tilted IMU triad and offset GNSS baseline](docs/images/sim-mounting.png)
 
 Quick start:
 
 ```bash
 make sim                          # default: constant_turn scenario
-make sim SCENARIO=sinusoidal      # or step_turns, static
-make sim-example EXAMPLE=static   # canned examples with hand-tuned params
+make sim SCENARIO=wave_tack       # or sinusoidal, step_turns, static, heeling_tack
 make sim-test                     # pytest suite
 make sim-format                   # ruff format + check
 ```
 
-Tune noise and EKF parameters from the CLI:
+Run `python -m plrs_sim` with no scenario for an arrow-key picker, or drive
+it directly. Pick a view with `--view {timeseries,mounting,pose}` and tune
+noise, EKF, and calibration from the CLI:
 
 ```bash
 cd sim
-uv run python -m plrs_sim sim step_turns \
-    --duration 60 --seed 7 \
-    --gyro-bias 0.02 --gnss-std 2.0 \
+uv run python -m plrs_sim sim wave_tack --view pose \
+    --duration 30 --seed 7 \
+    --gyro-bias 0.02 --gnss-std 2.0 --gnss-dropout 0.1 \
     --q-heading 0.05 \
-    --save /tmp/step_turns.png
+    --mount-roll 8 --baseline-offset 20 \
+    --save /tmp/wave_tack.png
 ```
 
-A `0` for any `--gyro-*` or `--gnss-std` flag disables that effect.
-Pass `--no-show` for headless runs. See `python -m plrs_sim sim --help`
-for the full flag list.
+A `0` for any `--gyro-*`, `--gnss-std`, or `--mti-attitude-std` flag disables
+that effect. Pass `--no-show` for headless runs. See
+`python -m plrs_sim sim --help` for the full flag list.
 
 ### Git hooks
 
