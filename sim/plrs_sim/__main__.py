@@ -190,7 +190,8 @@ def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace
     scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
     if scenario is None:
         return None
-    return parser.parse_args(["sim", scenario, "--view", view])
+    duration = ["--duration", "50"] if view == "simulate" else []
+    return parser.parse_args(["sim", scenario, "--view", view, *duration])
 
 
 def main(argv: list[str] | None = None) -> None:

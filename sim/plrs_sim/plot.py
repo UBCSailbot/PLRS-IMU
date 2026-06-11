@@ -171,7 +171,7 @@ def plot_animate(
     fps = max(1, round(1000 / _interval_ms))
 
     # GIF rendering is slow (Agg 3D per-frame); cap at 40 frames and lower DPI.
-    _GIF_MAX = 40
+    _GIF_MAX = 200
     _GIF_FPS = 12
     _GIF_DPI = 72
     gif_step = max(1, len(indices) // _GIF_MAX)
@@ -268,9 +268,8 @@ def plot_animate(
                 _write_gif(tmp)
                 gif_path = tmp
             try:
-                print("(press any key to return to the menu)")
                 subprocess.run(
-                    ["kitty", "+kitten", "icat", "--hold", str(gif_path)], check=False
+                    ["kitty", "+kitten", "icat", str(gif_path)], check=False
                 )
             finally:
                 if tmp is not None:
