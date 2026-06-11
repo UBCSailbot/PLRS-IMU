@@ -190,6 +190,12 @@ def plot_animate(
     if title is not None:
         fig.suptitle(title)
 
+    _has_imu_raw = (
+        roll.openloop is not None
+        and pitch.openloop is not None
+        and heading.openloop is not None
+    )
+
     def draw_frame(i: int) -> None:
         ax.cla()
         draw_boat(
@@ -206,9 +212,19 @@ def plot_animate(
             pitch.estimate[i],
             heading.estimate[i],
             color="tab:orange",
-            alpha=0.4,
-            label="estimate",
+            alpha=0.5,
+            label="EKF estimate",
         )
+        if _has_imu_raw and not np.isnan(heading.openloop[i]):  # type: ignore[index]
+            draw_boat(
+                ax,
+                roll.openloop[i],   # type: ignore[index]
+                pitch.openloop[i],  # type: ignore[index]
+                heading.openloop[i],  # type: ignore[index]
+                color="tab:green",
+                alpha=0.4,
+                label="IMU raw",
+            )
         set_equal_3d(ax)
         ax.legend(loc="upper left", fontsize=8)
         ax.set_title(

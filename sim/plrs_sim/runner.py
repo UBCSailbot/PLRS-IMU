@@ -7,6 +7,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
+from .attitude import quaternion_to_euler_zyx
 from .ekf import TinyEkfFilter
 from .types import Channel, EkfConfig, Tick, Trace
 
@@ -39,6 +40,8 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
     truth_pitch_deg: list[float] = []
     est_pitch_deg: list[float] = []
     est_pitch_std_deg: list[float] = []
+    imu_roll_deg: list[float] = []
+    imu_pitch_deg: list[float] = []
 
     openloop: float | None = None
     prev_t_ms: int | None = None
@@ -70,6 +73,9 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
         truth_pitch_deg.append(tick.truth_pitch_deg)
         est_pitch_deg.append(out.pitch_deg)
         est_pitch_std_deg.append(_std_or_nan(out.pitch_variance_deg2))
+        imu_r, imu_p, _ = quaternion_to_euler_zyx(tick.imu.orientation)
+        imu_roll_deg.append(imu_r)
+        imu_pitch_deg.append(imu_p)
 
         prev_t_ms = tick.timestamp_ms
 
@@ -90,6 +96,7 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
         truth=np.array(truth_roll_deg, dtype=np.float64),
         estimate=np.array(est_roll_deg, dtype=np.float64),
         estimate_std=np.array(est_roll_std_deg, dtype=np.float64),
+        openloop=np.array(imu_roll_deg, dtype=np.float64),
     )
     pitch = Channel(
         name="pitch",
@@ -97,6 +104,7 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
         truth=np.array(truth_pitch_deg, dtype=np.float64),
         estimate=np.array(est_pitch_deg, dtype=np.float64),
         estimate_std=np.array(est_pitch_std_deg, dtype=np.float64),
+        openloop=np.array(imu_pitch_deg, dtype=np.float64),
     )
     return Trace(
         t_ms=np.array(t_ms, dtype=np.int64),
