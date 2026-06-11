@@ -152,6 +152,8 @@ def plot_animate(
     Subsamples the trace to ~20 fps so playback runs at approximately real time.
     Loops until the window is closed.
     """
+    import matplotlib
+
     heading = trace.channels["heading"]
     roll = trace.channels["roll"]
     pitch = trace.channels["pitch"]
@@ -161,6 +163,13 @@ def plot_animate(
     dt_ms = float(np.mean(np.diff(trace.t_ms))) if n > 1 else _interval_ms
     step = max(1, round(_interval_ms / dt_ms))
     indices = np.arange(0, n, step)
+
+    # Terminal backends (e.g. matplotlib-backend-kitty) render static images;
+    # they cannot drive an animation loop. Switch to Qt6Agg for a real window.
+    _prev_backend = matplotlib.get_backend()
+    _switched = show and _prev_backend.startswith("module://")
+    if _switched:
+        plt.switch_backend("Qt6Agg")
 
     fig = plt.figure(figsize=(7, 6))
     ax = fig.add_subplot(projection="3d")
@@ -201,24 +210,27 @@ def plot_animate(
         fps = max(1, round(1000 / _interval_ms))
         if str(save).endswith(".gif"):
             from matplotlib.animation import PillowWriter
-            writer = PillowWriter(fps=fps)
+            writer: object = PillowWriter(fps=fps)
         else:
             from matplotlib.animation import FFMpegWriter
             writer = FFMpegWriter(fps=fps)
-        with writer.saving(fig, save, dpi=120):
+        with writer.saving(fig, save, dpi=120):  # type: ignore[union-attr]
             for k in range(len(indices)):
                 draw_frame(k)
-                writer.grab_frame()
+                writer.grab_frame()  # type: ignore[union-attr]
 
-    if show:
-        while plt.fignum_exists(fig.number):
-            for k in range(len(indices)):
-                if not plt.fignum_exists(fig.number):
-                    break
-                draw_frame(k)
-                plt.pause(_interval_ms / 1000.0)
-
-    plt.close(fig)
+    try:
+        if show:
+            while plt.fignum_exists(fig.number):
+                for k in range(len(indices)):
+                    if not plt.fignum_exists(fig.number):
+                        break
+                    draw_frame(k)
+                    plt.pause(_interval_ms / 1000.0)
+    finally:
+        plt.close(fig)
+        if _switched:
+            plt.switch_backend(_prev_backend)
 
 
 def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
