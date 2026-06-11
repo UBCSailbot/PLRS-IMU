@@ -169,7 +169,7 @@ def plot_animate(
     _prev_backend = matplotlib.get_backend()
     _switched = show and _prev_backend.startswith("module://")
     if _switched:
-        plt.switch_backend("Qt6Agg")
+        plt.switch_backend("QtAgg")
 
     fig = plt.figure(figsize=(7, 6))
     ax = fig.add_subplot(projection="3d")
