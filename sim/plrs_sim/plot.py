@@ -150,9 +150,14 @@ def plot_animate(
     """Animated 3D boat: truth hull (solid blue) vs EKF estimate (ghost orange).
 
     Subsamples the trace to ~20 fps so playback runs at approximately real time.
-    Loops until the window is closed.
+
+    On terminal backends (e.g. matplotlib-backend-kitty), renders a GIF and
+    displays it with `kitty +kitten icat --hold`; press any key to continue.
+    On GUI backends, opens a Qt window that loops until closed.
     """
     import matplotlib
+    import subprocess
+    import tempfile
 
     heading = trace.channels["heading"]
     roll = trace.channels["roll"]
@@ -163,13 +168,15 @@ def plot_animate(
     dt_ms = float(np.mean(np.diff(trace.t_ms))) if n > 1 else _interval_ms
     step = max(1, round(_interval_ms / dt_ms))
     indices = np.arange(0, n, step)
+    fps = max(1, round(1000 / _interval_ms))
 
-    # Terminal backends (e.g. matplotlib-backend-kitty) render static images;
-    # they cannot drive an animation loop. Switch to Qt6Agg for a real window.
     _prev_backend = matplotlib.get_backend()
-    _switched = show and _prev_backend.startswith("module://")
-    if _switched:
-        plt.switch_backend("QtAgg")
+    _is_terminal = _prev_backend.startswith("module://")
+
+    # Use Agg (headless) for terminal backends so savefig works for GIF
+    # rendering; use QtAgg for an interactive window otherwise.
+    if show:
+        plt.switch_backend("agg" if _is_terminal else "QtAgg")
 
     fig = plt.figure(figsize=(7, 6))
     ax = fig.add_subplot(projection="3d")
@@ -206,21 +213,44 @@ def plot_animate(
             fontsize=9,
         )
 
-    if save is not None:
-        fps = max(1, round(1000 / _interval_ms))
-        if str(save).endswith(".gif"):
-            from matplotlib.animation import PillowWriter
-            writer: object = PillowWriter(fps=fps)
-        else:
-            from matplotlib.animation import FFMpegWriter
-            writer = FFMpegWriter(fps=fps)
-        with writer.saving(fig, save, dpi=120):  # type: ignore[union-attr]
+    def _write_gif(path: Path) -> None:
+        from matplotlib.animation import PillowWriter
+        w = PillowWriter(fps=fps)
+        with w.saving(fig, path, dpi=100):
             for k in range(len(indices)):
                 draw_frame(k)
-                writer.grab_frame()  # type: ignore[union-attr]
+                w.grab_frame()
+
+    if save is not None:
+        if str(save).endswith(".gif"):
+            _write_gif(save)
+        else:
+            from matplotlib.animation import FFMpegWriter
+            w = FFMpegWriter(fps=fps)
+            with w.saving(fig, save, dpi=120):
+                for k in range(len(indices)):
+                    draw_frame(k)
+                    w.grab_frame()
 
     try:
-        if show:
+        if show and _is_terminal:
+            # Reuse an already-rendered save gif; otherwise write a temp one.
+            gif_path: Path | None = save if (save is not None and str(save).endswith(".gif")) else None
+            tmp: Path | None = None
+            if gif_path is None:
+                with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as f:
+                    tmp = Path(f.name)
+                _write_gif(tmp)
+                gif_path = tmp
+            try:
+                print("(press any key to return to the menu)")
+                subprocess.run(
+                    ["kitty", "+kitten", "icat", "--hold", str(gif_path)], check=False
+                )
+            finally:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+        elif show:
             while plt.fignum_exists(fig.number):
                 for k in range(len(indices)):
                     if not plt.fignum_exists(fig.number):
@@ -229,7 +259,7 @@ def plot_animate(
                     plt.pause(_interval_ms / 1000.0)
     finally:
         plt.close(fig)
-        if _switched:
+        if show:
             plt.switch_backend(_prev_backend)
 
 
