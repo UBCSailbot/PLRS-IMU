@@ -22,7 +22,7 @@ from plrs_sim import (
     ImuNoiseModel,
     Scenario,
 )
-from plrs_sim.plot import _seam_broken, _wrap180, plot_pose, plot_trace
+from plrs_sim.plot import _seam_broken, _wrap180, plot_animate, plot_pose, plot_trace
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 
@@ -62,6 +62,11 @@ def test_plot_trace_accepts_title() -> None:
 
 def test_plot_pose_runs_headless() -> None:
     plot_pose(_trace(), frames=3, show=False)
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_plot_animate_runs_headless() -> None:
+    plot_animate(_trace(), show=False)
 
 
 def test_plot_pose_writes_save_path(tmp_path: Path) -> None:

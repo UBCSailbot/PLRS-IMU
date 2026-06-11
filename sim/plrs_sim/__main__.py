@@ -164,14 +164,18 @@ def _zero_to_none(x: float) -> float | None:
     return x if x > 0.0 else None
 
 
-def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace:
-    """Arrow-key prompt for scenario + view; returns parsed args with defaults."""
+def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
+    """Arrow-key prompt for scenario + view; returns parsed args, or None to quit."""
     import questionary
 
-    scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
+    scenario = questionary.select(
+        "Scenario", choices=[*sorted(SCENARIOS), "quit"]
+    ).ask()
+    if scenario is None or scenario == "quit":  # Ctrl-C or explicit quit
+        return None
     view = questionary.select("View", choices=list(VIEWS)).ask()
-    if scenario is None or view is None:  # user pressed Ctrl-C
-        raise SystemExit(0)
+    if view is None:  # Ctrl-C
+        return None
     return parser.parse_args(["sim", scenario, "--view", view])
 
 
@@ -179,8 +183,13 @@ def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd is None:
-        args = _select_interactively(parser)
-    _run_view(args)
+        while True:
+            args = _select_interactively(parser)
+            if args is None:
+                break
+            _run_view(args)
+    else:
+        _run_view(args)
 
 
 def _run_view(args: argparse.Namespace) -> None:

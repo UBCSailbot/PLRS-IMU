@@ -140,6 +140,76 @@ def plot_pose(
     plt.close(fig)
 
 
+def plot_animate(
+    trace: Trace,
+    *,
+    show: bool = True,
+    save: Path | None = None,
+    title: str | None = None,
+) -> None:
+    """Animated 3D boat: truth hull (solid blue) vs EKF estimate (ghost orange).
+
+    Subsamples the trace to ~20 fps so playback runs at approximately real time.
+    """
+    from matplotlib.animation import FuncAnimation
+
+    heading = trace.channels["heading"]
+    roll = trace.channels["roll"]
+    pitch = trace.channels["pitch"]
+    n = len(trace.t_ms)
+
+    _interval_ms = 50
+    dt_ms = float(np.mean(np.diff(trace.t_ms))) if n > 1 else _interval_ms
+    step = max(1, round(_interval_ms / dt_ms))
+    indices = np.arange(0, n, step)
+
+    fig = plt.figure(figsize=(7, 6))
+    ax = fig.add_subplot(projection="3d")
+    if title is not None:
+        fig.suptitle(title)
+
+    def update(k: int) -> None:
+        ax.cla()
+        i = indices[k]
+        draw_boat(
+            ax,
+            roll.truth[i],
+            pitch.truth[i],
+            heading.truth[i],
+            color="tab:blue",
+            label="truth",
+        )
+        draw_boat(
+            ax,
+            roll.estimate[i],
+            pitch.estimate[i],
+            heading.estimate[i],
+            color="tab:orange",
+            alpha=0.4,
+            label="estimate",
+        )
+        set_equal_3d(ax)
+        ax.legend(loc="upper left", fontsize=8)
+        ax.set_title(
+            f"t={trace.t_ms[i] / 1000.0:.1f}s  "
+            f"hdg {heading.truth[i]:.0f}  "
+            f"roll {roll.truth[i]:.0f}  "
+            f"pitch {pitch.truth[i]:.0f}",
+            fontsize=9,
+        )
+
+    ani = FuncAnimation(
+        fig, update, frames=len(indices), interval=_interval_ms, repeat=True
+    )
+
+    if save is not None:
+        writer = "pillow" if str(save).endswith(".gif") else "ffmpeg"
+        ani.save(save, writer=writer)
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
 def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
     # For a circular channel, display every series in the same +-180 frame and
     # break the lines at the seam; otherwise plot the raw values.
