@@ -249,7 +249,7 @@ def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
         color="tab:blue",
         zorder=3,
     )
-    ax_traj.set_ylabel(f"{ch.name} ({ch.unit})")
+    ax_traj.set_ylabel(f"{ch.name} [{ch.unit}]")
     ax_traj.legend(loc="best")
     ax_traj.grid(True, alpha=0.3)
 
@@ -308,6 +308,6 @@ def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
             if bound > 0.0:
                 ax_res.set_ylim(-bound, bound)
 
-    ax_res.set_ylabel(f"{ch.name} error ({ch.unit})")
+    ax_res.set_ylabel(f"{ch.name} error [{ch.unit}]")
     ax_res.legend(loc="best")
     ax_res.grid(True, alpha=0.3)

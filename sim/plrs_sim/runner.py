@@ -74,7 +74,7 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
         prev_t_ms = tick.timestamp_ms
 
     heading = Channel(
-        name="heading",
+        name="heading (yaw)",
         unit="deg",
         truth=np.array(truth_heading_deg, dtype=np.float64),
         estimate=np.array(est_heading_deg, dtype=np.float64),
@@ -100,5 +100,5 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
     )
     return Trace(
         t_ms=np.array(t_ms, dtype=np.int64),
-        channels={c.name: c for c in (heading, roll, pitch)},
+        channels={"heading": heading, "roll": roll, "pitch": pitch},
     )
