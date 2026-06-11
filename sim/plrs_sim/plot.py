@@ -150,9 +150,8 @@ def plot_animate(
     """Animated 3D boat: truth hull (solid blue) vs EKF estimate (ghost orange).
 
     Subsamples the trace to ~20 fps so playback runs at approximately real time.
+    Loops until the window is closed.
     """
-    from matplotlib.animation import FuncAnimation
-
     heading = trace.channels["heading"]
     roll = trace.channels["roll"]
     pitch = trace.channels["pitch"]
@@ -168,7 +167,7 @@ def plot_animate(
     if title is not None:
         fig.suptitle(title)
 
-    def update(k: int) -> None:
+    def draw_frame(k: int) -> None:
         ax.cla()
         i = indices[k]
         draw_boat(
@@ -198,15 +197,27 @@ def plot_animate(
             fontsize=9,
         )
 
-    ani = FuncAnimation(
-        fig, update, frames=len(indices), interval=_interval_ms, repeat=True
-    )
-
     if save is not None:
-        writer = "pillow" if str(save).endswith(".gif") else "ffmpeg"
-        ani.save(save, writer=writer)
+        fps = max(1, round(1000 / _interval_ms))
+        if str(save).endswith(".gif"):
+            from matplotlib.animation import PillowWriter
+            writer = PillowWriter(fps=fps)
+        else:
+            from matplotlib.animation import FFMpegWriter
+            writer = FFMpegWriter(fps=fps)
+        with writer.saving(fig, save, dpi=120):
+            for k in range(len(indices)):
+                draw_frame(k)
+                writer.grab_frame()
+
     if show:
-        plt.show()
+        while plt.fignum_exists(fig.number):
+            for k in range(len(indices)):
+                if not plt.fignum_exists(fig.number):
+                    break
+                draw_frame(k)
+                plt.pause(_interval_ms / 1000.0)
+
     plt.close(fig)
 
 

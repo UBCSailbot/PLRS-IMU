@@ -64,7 +64,6 @@ def test_plot_pose_runs_headless() -> None:
     plot_pose(_trace(), frames=3, show=False)
 
 
-@pytest.mark.filterwarnings("ignore::UserWarning")
 def test_plot_animate_runs_headless() -> None:
     plot_animate(_trace(), show=False)
 
