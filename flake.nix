@@ -30,14 +30,26 @@
           ruff
           uv
         ];
-        # PyPI wheels (numpy and the rest of the SciPy stack) link against
-        # libstdc++ at the host's standard path, which on Nix only lives in
-        # the store. Expose the needed libs via LD_LIBRARY_PATH so import
-        # works inside uv-managed venvs. (FHS is the alternative, but
-        # `nix develop -c` doesn't enter its namespace.)
+        # PyPI wheels link against system libs that on Nix only live in the
+        # store. Expose them via LD_LIBRARY_PATH. (FHS is the alternative but
+        # `nix develop -c` does not enter its namespace.)
+        #
+        # stdenv.cc.cc.lib + zlib: libstdc++/libgcc for numpy and the SciPy
+        # stack.
+        # zstd, glib, fontconfig, freetype, dbus, libxkbcommon, xorg.libX11,
+        # libGL: system libs that the PyPI PyQt6 wheel's bundled Qt6 links
+        # against transitively (Qt6Core, Qt6Gui, Qt6Widgets).
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
           pkgs.stdenv.cc.cc.lib
           pkgs.zlib
+          pkgs.zstd
+          pkgs.glib
+          pkgs.fontconfig
+          pkgs.freetype
+          pkgs.dbus
+          pkgs.libxkbcommon
+          pkgs.xorg.libX11
+          pkgs.libGL
         ];
         # compiledb generation and .clangd setup live in
         # scripts/setup-compile-db.sh, called from .envrc with a find-newer
