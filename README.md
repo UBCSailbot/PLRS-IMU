@@ -126,58 +126,49 @@ Run `make` with no arguments to list all targets.
 
 ### Python sim
 
-A Python harness at `sim/` wraps the C++ EKF for offline visualization
-and tuning. The same filter code that ships on the RP2040 runs in the
-sim, so Q values picked offline transfer faithfully. Synthetic
-trajectories (yaw plus heel and pitch), injectable IMU and GNSS noise,
-and three rendered views ship out of the box.
+A Python harness at `sim/` runs the C++ EKF offline for visualization and
+tuning. The same filter that ships on the RP2040 runs in the sim, so Q values
+transfer faithfully. Synthetic trajectories (yaw, heel, pitch), injectable IMU
+and GNSS noise, and three views are available.
 
-The default **timeseries** view plots one channel each for heading, roll,
-and pitch:
+`make sim` drops into an arrow-key picker — choose a view, then a scenario:
+
+**Timeseries** — heading, roll, and pitch channels; truth, GNSS measurements,
+EKF estimate, and open-loop gyro integration overlaid; residual vs truth with
+±1σ band on the lower axes:
 
 ![Sinusoidal scenario with EKF tracking truth inside its +/-1 sigma band](docs/images/sim-sinusoidal.png)
 
-Per channel, the top axes show the trajectory (truth in black, GNSS
-samples scattered, EKF estimate in blue, open-loop gyro integration as a
-dashed baseline) and the bottom axes show the residual against truth with
-the filter's +/-1 sigma band centered at zero -- residuals staying inside
-the band mean the filter is consistent with its claimed uncertainty.
-
-The **pose** view is a filmstrip of the boat through the run, the true
-hull (blue) with the EKF estimate ghosted (orange) -- tracking reads as
-the two boats overlapping:
-
-![Pose filmstrip of a tack in waves](docs/images/sim-pose.png)
-
-The **mounting** view is pure calibration geometry: a level boat with the
-IMU axis triad rotated by the mount offset and the GNSS antenna baseline
-arrow, so a misconfigured mount is visible at a glance:
+**Mounting** — calibration geometry: a level hull with the IMU triad rotated
+by the mount offset and the GNSS baseline arrow:
 
 ![Mounting view showing a tilted IMU triad and offset GNSS baseline](docs/images/sim-mounting.png)
 
-Quick start:
+**Simulate** — animated 3D boat over a 50 s run; truth (blue), EKF estimate
+(orange), IMU raw attitude (green), rendered as a GIF.
+
+A static **pose** filmstrip is also available via `--view pose` on the CLI:
+
+![Pose filmstrip of a tack in waves](docs/images/sim-pose.png)
 
 ```bash
-make sim                          # interactive scenario/view picker
-make sim SCENARIO=wave_tack VIEW=pose   # or constant_turn, sinusoidal, step_turns, static, heeling_tack
-make sim-test                     # pytest suite
-make sim-format                   # ruff format + check
+make sim                                        # interactive picker
+make sim SCENARIO=wave_tack VIEW=timeseries     # skip the picker
+make sim SCENARIO=wave_tack VIEW=simulate
+make sim-test                                   # pytest suite
+make sim-format                                 # ruff format + check
 ```
 
-`make sim` with no arguments drops into an arrow-key picker; pass `SCENARIO`
-(and optionally `VIEW`) to skip it. The same is available directly as
-`python -m plrs_sim` (picker) or `python -m plrs_sim sim <scenario> --view
-{timeseries,mounting,pose}`, which also takes noise, EKF, and calibration
-flags:
+Direct CLI with noise, EKF, and calibration flags:
 
 ```bash
 cd sim
-uv run python -m plrs_sim sim wave_tack --view pose \
-    --duration 30 --seed 7 \
+uv run python -m plrs_sim sim wave_tack --view simulate \
+    --duration 50 --seed 7 \
     --gyro-bias 0.02 --gnss-std 2.0 --gnss-dropout 0.1 \
     --q-heading 0.05 \
     --mount-roll 8 --baseline-offset 20 \
-    --save /tmp/wave_tack.png
+    --save /tmp/wave_tack.gif
 ```
 
 A `0` for any `--gyro-*`, `--gnss-std`, or `--mti-attitude-std` flag disables
