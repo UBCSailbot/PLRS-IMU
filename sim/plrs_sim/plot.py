@@ -170,6 +170,13 @@ def plot_animate(
     indices = np.arange(0, n, step)
     fps = max(1, round(1000 / _interval_ms))
 
+    # GIF rendering is slow (Agg 3D per-frame); cap at 40 frames and lower DPI.
+    _GIF_MAX = 40
+    _GIF_FPS = 12
+    _GIF_DPI = 72
+    gif_step = max(1, len(indices) // _GIF_MAX)
+    gif_indices = indices[::gif_step]
+
     _prev_backend = matplotlib.get_backend()
     _is_terminal = _prev_backend.startswith("module://")
 
@@ -183,9 +190,8 @@ def plot_animate(
     if title is not None:
         fig.suptitle(title)
 
-    def draw_frame(k: int) -> None:
+    def draw_frame(i: int) -> None:
         ax.cla()
-        i = indices[k]
         draw_boat(
             ax,
             roll.truth[i],
@@ -215,11 +221,14 @@ def plot_animate(
 
     def _write_gif(path: Path) -> None:
         from matplotlib.animation import PillowWriter
-        w = PillowWriter(fps=fps)
-        with w.saving(fig, path, dpi=100):
-            for k in range(len(indices)):
-                draw_frame(k)
+        total = len(gif_indices)
+        w = PillowWriter(fps=_GIF_FPS)
+        with w.saving(fig, path, dpi=_GIF_DPI):
+            for k, i in enumerate(gif_indices):
+                draw_frame(i)
                 w.grab_frame()
+                print(f"\rRendering... {k + 1}/{total}", end="", flush=True)
+        print()
 
     if save is not None:
         if str(save).endswith(".gif"):
@@ -228,8 +237,8 @@ def plot_animate(
             from matplotlib.animation import FFMpegWriter
             w = FFMpegWriter(fps=fps)
             with w.saving(fig, save, dpi=120):
-                for k in range(len(indices)):
-                    draw_frame(k)
+                for i in indices:
+                    draw_frame(i)
                     w.grab_frame()
 
     try:
@@ -252,10 +261,10 @@ def plot_animate(
                     tmp.unlink(missing_ok=True)
         elif show:
             while plt.fignum_exists(fig.number):
-                for k in range(len(indices)):
+                for i in indices:
                     if not plt.fignum_exists(fig.number):
                         break
-                    draw_frame(k)
+                    draw_frame(i)
                     plt.pause(_interval_ms / 1000.0)
     finally:
         plt.close(fig)
