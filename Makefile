@@ -1,6 +1,7 @@
 .PHONY: help format test build upload sim sim-test sim-format sim-example
 
-SCENARIO ?= constant_turn
+SCENARIO ?=
+VIEW     ?=
 EXAMPLE  ?= constant_turn
 
 help:
@@ -11,7 +12,7 @@ help:
 	@echo "  upload       build and flash the RP2040 (pio run -e pico -t upload)"
 	@echo ""
 	@echo "Python sim targets (the native binding rebuilds on import as needed):"
-	@echo "  sim          run CLI scenario (SCENARIO=constant_turn|sinusoidal|step_turns|static)"
+	@echo "  sim          interactive picker; or SCENARIO=<name> [VIEW=timeseries|mounting|pose]"
 	@echo "  sim-example  run example script (EXAMPLE=constant_turn|sinusoidal|step_turns|static)"
 	@echo "  sim-test     run sim pytest suite"
 	@echo "  sim-format   ruff format + check in sim/"
@@ -30,7 +31,7 @@ upload:
 	pio run -e pico -t upload
 
 sim:
-	cd sim && uv run --extra dev python -m plrs_sim sim $(SCENARIO)
+	cd sim && uv run --extra dev python -m plrs_sim $(if $(SCENARIO),sim $(SCENARIO) $(if $(VIEW),--view $(VIEW)))
 
 sim-example:
 	cd sim && uv run --extra dev python examples/$(EXAMPLE).py

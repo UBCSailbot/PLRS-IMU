@@ -20,6 +20,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .boat3d import draw_boat, set_equal_3d
 from .types import Channel, Trace
 
 _MEASUREMENT_SCATTER_ALPHA = 0.4
@@ -68,6 +69,68 @@ def plot_trace(
             ax_traj.set_title(title)
 
     axes[-1].set_xlabel("time (s)")
+    fig.tight_layout()
+
+    if save is not None:
+        fig.savefig(save, dpi=120, bbox_inches="tight")
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+def plot_pose(
+    trace: Trace,
+    *,
+    frames: int = 4,
+    show: bool = True,
+    save: Path | None = None,
+    title: str | None = None,
+) -> None:
+    """Filmstrip of the boat through the run: true hull vs ghosted estimate.
+
+    Samples `frames` evenly-spaced instants and poses two hulls at each from
+    the heading/roll/pitch channels -- truth solid, EKF estimate translucent.
+    Tracking reads as the two boats overlapping.
+    """
+    heading = trace.channels["heading"]
+    roll = trace.channels["roll"]
+    pitch = trace.channels["pitch"]
+    n = len(trace.t_ms)
+    idx = np.linspace(0, n - 1, frames).round().astype(int)
+
+    fig, axes = plt.subplots(
+        1, frames, figsize=(4 * frames, 4), subplot_kw={"projection": "3d"}
+    )
+    axes = np.atleast_1d(axes)
+    for ax, i in zip(axes, idx, strict=True):
+        draw_boat(
+            ax,
+            roll.truth[i],
+            pitch.truth[i],
+            heading.truth[i],
+            color="tab:blue",
+            label="truth",
+        )
+        draw_boat(
+            ax,
+            roll.estimate[i],
+            pitch.estimate[i],
+            heading.estimate[i],
+            color="tab:orange",
+            alpha=0.55,
+            label="estimate",
+        )
+        set_equal_3d(ax)
+        ax.set_title(
+            f"t={trace.t_ms[i] / 1000.0:.1f}s\n"
+            f"hdg {heading.truth[i]:.0f}  roll {roll.truth[i]:.0f}  "
+            f"pitch {pitch.truth[i]:.0f}",
+            fontsize=9,
+        )
+
+    axes[0].legend(loc="upper left", fontsize=8)
+    if title is not None:
+        fig.suptitle(title)
     fig.tight_layout()
 
     if save is not None:

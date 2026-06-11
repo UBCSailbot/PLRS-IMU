@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 
-from .attitude import from_axis_angle
+from .attitude import euler_to_quaternion, from_axis_angle
 from .types import (
     AttitudeProfile,
     ConstantHeel,
@@ -27,6 +27,7 @@ from .types import (
     Static,
     StepTurns,
     Vec3,
+    WaveMotion,
     YawProfile,
 )
 
@@ -64,6 +65,30 @@ def sample_attitude(profile: AttitudeProfile, t_ms: int) -> tuple[Quaternion, Ve
             return (
                 from_axis_angle(_BODY_X, angle * DEG_TO_RAD),
                 Vec3(x=0.0, y=0.0, z=0.0),
+            )
+        case WaveMotion(
+            roll_amplitude_deg=ar,
+            roll_period_s=tr,
+            pitch_amplitude_deg=ap,
+            pitch_period_s=tp,
+        ):
+            t_s = t_ms / 1000.0
+            wr = 2.0 * math.pi / tr
+            wp = 2.0 * math.pi / tp
+            roll_deg = ar * math.sin(wr * t_s)
+            pitch_deg = ap * math.sin(wp * t_s)
+            roll_rad = roll_deg * DEG_TO_RAD
+            roll_dot = ar * wr * math.cos(wr * t_s) * DEG_TO_RAD
+            pitch_dot = ap * wp * math.cos(wp * t_s) * DEG_TO_RAD
+            # Body rate for a ZYX orientation with zero yaw: roll about body X,
+            # pitch split into body Y and Z by the current roll.
+            return (
+                euler_to_quaternion(roll_deg, pitch_deg, 0.0),
+                Vec3(
+                    x=roll_dot,
+                    y=pitch_dot * math.cos(roll_rad),
+                    z=-pitch_dot * math.sin(roll_rad),
+                ),
             )
 
 

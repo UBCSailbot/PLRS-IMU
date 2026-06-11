@@ -22,7 +22,7 @@ from plrs_sim import (
     ImuNoiseModel,
     Scenario,
 )
-from plrs_sim.plot import _seam_broken, _wrap180, plot_trace
+from plrs_sim.plot import _seam_broken, _wrap180, plot_pose, plot_trace
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 
@@ -58,6 +58,17 @@ def test_plot_trace_writes_save_path(tmp_path: Path) -> None:
 
 def test_plot_trace_accepts_title() -> None:
     plot_trace(_trace(), show=False, title="test scenario")
+
+
+def test_plot_pose_runs_headless() -> None:
+    plot_pose(_trace(), frames=3, show=False)
+
+
+def test_plot_pose_writes_save_path(tmp_path: Path) -> None:
+    out = tmp_path / "pose.png"
+    plot_pose(_trace(), frames=3, show=False, save=out)
+    assert out.exists()
+    assert out.stat().st_size > 0
 
 
 def test_wrap180_maps_into_range() -> None:
