@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .attitude import euler_to_quaternion
 from .boat3d import plot_mounting
-from .plot import plot_pose, plot_trace
+from .plot import plot_animate, plot_pose, plot_trace
 from .runner import run
 from .source import SimulatedSource
 from .tuning import load_mount, load_tuning
@@ -32,7 +32,15 @@ from .types import (
     WaveMotion,
 )
 
-VIEWS = ("timeseries", "mounting", "pose")
+VIEWS = ("timeseries", "mounting", "simulate", "pose")
+
+# Human-readable labels for the interactive picker, in display order.
+# "pose" (filmstrip) is CLI-only; it does not appear here.
+_VIEW_LABELS = {
+    "Mounting": "mounting",
+    "Timeseries": "timeseries",
+    "Simulate": "simulate",
+}
 
 SCENARIOS: dict[str, Scenario] = {
     "constant_turn": Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
@@ -165,16 +173,22 @@ def _zero_to_none(x: float) -> float | None:
 
 
 def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
-    """Arrow-key prompt for scenario + view; returns parsed args, or None to quit."""
+    """Arrow-key prompt for view then (if needed) scenario; returns parsed args or None."""
     import questionary
 
-    scenario = questionary.select(
-        "Scenario", choices=[*sorted(SCENARIOS), "quit"]
+    view_label = questionary.select(
+        "View", choices=[*_VIEW_LABELS, "quit"]
     ).ask()
-    if scenario is None or scenario == "quit":  # Ctrl-C or explicit quit
+    if view_label is None or view_label == "quit":
         return None
-    view = questionary.select("View", choices=list(VIEWS)).ask()
-    if view is None:  # Ctrl-C
+    view = _VIEW_LABELS[view_label]
+
+    if view == "mounting":
+        # Mounting is pure config geometry; _run_view never reads the scenario.
+        return parser.parse_args(["sim", "static", "--view", "mounting"])
+
+    scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
+    if scenario is None:
         return None
     return parser.parse_args(["sim", scenario, "--view", view])
 
@@ -241,7 +255,9 @@ def _run_view(args: argparse.Namespace) -> None:
     )
     trace = run(src, cfg)
     title = f"{args.scenario} (seed={args.seed})"
-    if args.view == "pose":
+    if args.view == "simulate":
+        plot_animate(trace, show=not args.no_show, save=args.save, title=title)
+    elif args.view == "pose":
         plot_pose(trace, show=not args.no_show, save=args.save, title=title)
     else:
         plot_trace(trace, show=not args.no_show, save=args.save, title=title)
