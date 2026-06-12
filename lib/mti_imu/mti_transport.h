@@ -14,24 +14,6 @@
 
 namespace mti {
 /**
- * @brief Monotonic 64-bit millisecond clock built from Arduino's 32-bit clock.
- * Rollover on a 32-bit clock occurs every ~50 days.
- *
- * @return The number of millseconds elapsed since boot.
- */
-inline xbus::Ms millis64() {
-  static uint32_t last = 0;
-  static uint32_t high = 0;
-  uint32_t now = millis();
-
-  if (now < last) {
-    high += (uint64_t(1) << 32); // detect wraparound
-    last = now;
-  }
-  return xbus::Ms(high | now);
-}
-
-/**
  * @brief Minimal UART transport layer. Make sure to setup pins and baud before
  * construction.
  */
