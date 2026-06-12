@@ -18,8 +18,14 @@ namespace fusion {
 using Ms = std::chrono::milliseconds;
 
 constexpr float GRAVITY_MS2 = 9.81f;
+// Arduino.h defines these as macros; only define our constexpr versions on
+// non-Arduino builds (e.g. native host tests).
+#ifndef RAD_TO_DEG
 constexpr float RAD_TO_DEG = 180.0f / std::numbers::pi_v<float>;
+#endif
+#ifndef DEG_TO_RAD
 constexpr float DEG_TO_RAD = std::numbers::pi_v<float> / 180.0f;
+#endif
 
 /**
  * Quaternion known to be unit-norm by construction.
