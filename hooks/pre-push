@@ -21,4 +21,12 @@ pio test -e native
 echo "[pre-push] python sim tests..."
 ( cd sim && uv run --extra dev pytest -q )
 
+echo "[pre-push] sim images..."
+make sim-images
+if ! git diff --exit-code HEAD -- docs/images/ > /dev/null 2>&1; then
+  echo "[pre-push] docs/images/ changed -- commit the updated screenshots before pushing."
+  git diff --stat HEAD -- docs/images/
+  exit 1
+fi
+
 echo "[pre-push] all checks passed."
