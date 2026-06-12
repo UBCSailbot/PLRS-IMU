@@ -63,9 +63,17 @@ fi
 
 # Merge both databases into the project root so clangd gets one view
 # covering native test files (Unity flags) and firmware files (Arduino
-# headers, ARM defines). clangd uses the entry matching each TU.
+# headers, ARM defines). clangd uses the first matching entry per TU, so
+# deduplicate by file: keep native entries only for files absent from the
+# pico DB (test files), and keep all pico entries (src/main.cpp + framework
+# files). This prevents clangd from picking the host-g++ entry for
+# src/main.cpp, which lacks Arduino/FreeRTOS headers.
 if [ -f "$native" ] && [ -f "$pico" ]; then
-  jq -s '.[0] + .[1]' "$native" "$pico" > compile_commands.json
+  jq -s '
+    (.[1] | map(.file)) as $pico_files |
+    (.[0] | map(select(.file as $f | ($pico_files | index($f)) == null)))
+    + .[1]
+  ' "$native" "$pico" > compile_commands.json
 elif [ -f "$pico" ]; then
   cp "$pico" compile_commands.json
 elif [ -f "$native" ]; then
