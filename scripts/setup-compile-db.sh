@@ -61,6 +61,33 @@ if [ -f "$native" ]; then
   fi
 fi
 
+# Capture pico test files (e.g. test_loopback) the same way: verbose dry-run,
+# parse arm-none-eabi-g++ compile lines for test_main.cpp files.
+if [ -f "$pico" ]; then
+  rm -f .pio/build/pico/test/*/test_main.o
+  test_log=$(mktemp)
+  pio test -e pico --without-uploading --without-testing -vvv \
+    > "$test_log" 2>&1 || true
+  test_entries=$(grep -E 'arm-none-eabi-g\+\+ .* -c .* test/.*test_main\.cpp$' "$test_log" \
+    | while read -r cmd; do
+        file=$(printf '%s' "$cmd" | awk '{print $NF}')
+        output=$(printf '%s' "$cmd" \
+          | grep -oE -- '-o [^ ]+' \
+          | head -1 \
+          | awk '{print $2}')
+        jq -n --arg dir "$PWD" \
+              --arg file "$file" \
+              --arg cmd "$cmd" \
+              --arg output "$output" \
+          '{directory: $dir, file: $file, command: $cmd, output: $output}'
+      done | jq -s '.')
+  rm -f "$test_log"
+  if [ -n "$test_entries" ] && [ "$test_entries" != "[]" ]; then
+    jq --argjson new "$test_entries" '. + $new' "$pico" > "$pico.tmp"
+    mv "$pico.tmp" "$pico"
+  fi
+fi
+
 # Merge both databases into the project root so clangd gets one view
 # covering native test files (Unity flags) and firmware files (Arduino
 # headers, ARM defines). clangd uses the first matching entry per TU, so
@@ -80,9 +107,3 @@ elif [ -f "$native" ]; then
   cp "$native" compile_commands.json
 fi
 
-cat > .clangd <<'EOF'
-Index:
-  Background: Build
-CompileFlags:
-  CompilationDatabase: .
-EOF
