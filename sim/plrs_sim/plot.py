@@ -72,7 +72,7 @@ def plot_trace(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=120, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)
@@ -134,10 +134,163 @@ def plot_pose(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=120, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)
+
+
+def plot_animate(
+    trace: Trace,
+    *,
+    show: bool = True,
+    save: Path | None = None,
+    title: str | None = None,
+) -> None:
+    """Animated 3D boat: truth hull (solid blue) vs EKF estimate (ghost orange).
+
+    Subsamples the trace to ~20 fps so playback runs at approximately real time.
+
+    On terminal backends (e.g. matplotlib-backend-kitty), renders a GIF and
+    displays it with `kitty +kitten icat --hold`; press any key to continue.
+    On GUI backends, opens a Qt window that loops until closed.
+    """
+    import subprocess
+    import tempfile
+
+    import matplotlib
+
+    heading = trace.channels["heading"]
+    roll = trace.channels["roll"]
+    pitch = trace.channels["pitch"]
+    n = len(trace.t_ms)
+
+    _interval_ms = 50
+    dt_ms = float(np.mean(np.diff(trace.t_ms))) if n > 1 else _interval_ms
+    step = max(1, round(_interval_ms / dt_ms))
+    indices = np.arange(0, n, step)
+    fps = max(1, round(1000 / _interval_ms))
+
+    # GIF rendering is slow (Agg 3D per-frame); cap at 40 frames and lower DPI.
+    _GIF_MAX = 200
+    _GIF_FPS = 12
+    _GIF_DPI = 72
+    gif_step = max(1, len(indices) // _GIF_MAX)
+    gif_indices = indices[::gif_step]
+
+    _prev_backend = matplotlib.get_backend()
+    _is_terminal = _prev_backend.startswith("module://")
+
+    # Use Agg (headless) for terminal backends so savefig works for GIF
+    # rendering; use QtAgg for an interactive window otherwise.
+    if show:
+        plt.switch_backend("agg" if _is_terminal else "QtAgg")
+
+    fig = plt.figure(figsize=(7, 6))
+    ax = fig.add_subplot(projection="3d")
+    if title is not None:
+        fig.suptitle(title)
+
+    _has_imu_raw = (
+        roll.openloop is not None
+        and pitch.openloop is not None
+        and heading.openloop is not None
+    )
+
+    def draw_frame(i: int) -> None:
+        ax.cla()
+        draw_boat(
+            ax,
+            roll.truth[i],
+            pitch.truth[i],
+            heading.truth[i],
+            color="tab:blue",
+            label="truth",
+        )
+        draw_boat(
+            ax,
+            roll.estimate[i],
+            pitch.estimate[i],
+            heading.estimate[i],
+            color="tab:orange",
+            alpha=0.5,
+            label="EKF estimate",
+        )
+        if _has_imu_raw and not np.isnan(heading.openloop[i]):  # type: ignore[index]
+            draw_boat(
+                ax,
+                roll.openloop[i],  # type: ignore[index]
+                pitch.openloop[i],  # type: ignore[index]
+                heading.openloop[i],  # type: ignore[index]
+                color="tab:green",
+                alpha=0.4,
+                label="IMU raw",
+            )
+        set_equal_3d(ax)
+        ax.legend(loc="upper left", fontsize=8)
+        ax.set_title(
+            f"t={trace.t_ms[i] / 1000.0:.1f}s  "
+            f"hdg {heading.truth[i]:.0f}  "
+            f"roll {roll.truth[i]:.0f}  "
+            f"pitch {pitch.truth[i]:.0f}",
+            fontsize=9,
+        )
+
+    def _write_gif(path: Path) -> None:
+        from matplotlib.animation import PillowWriter
+
+        total = len(gif_indices)
+        w = PillowWriter(fps=_GIF_FPS)
+        with w.saving(fig, path, dpi=_GIF_DPI):
+            for k, i in enumerate(gif_indices):
+                draw_frame(i)
+                w.grab_frame()
+                print(f"\rRendering... {k + 1}/{total}", end="", flush=True)
+        print()
+
+    if save is not None:
+        if str(save).endswith(".gif"):
+            _write_gif(save)
+        elif str(save).endswith(".png"):
+            draw_frame(indices[-1])
+            fig.savefig(save, dpi=96, bbox_inches="tight")
+        else:
+            from matplotlib.animation import FFMpegWriter
+
+            w = FFMpegWriter(fps=fps)
+            with w.saving(fig, save, dpi=96):
+                for i in indices:
+                    draw_frame(i)
+                    w.grab_frame()
+
+    try:
+        if show and _is_terminal:
+            # Reuse an already-rendered save gif; otherwise write a temp one.
+            gif_path: Path | None = (
+                save if (save is not None and str(save).endswith(".gif")) else None
+            )
+            tmp: Path | None = None
+            if gif_path is None:
+                with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as f:
+                    tmp = Path(f.name)
+                _write_gif(tmp)
+                gif_path = tmp
+            try:
+                subprocess.run(["kitty", "+kitten", "icat", str(gif_path)], check=False)
+            finally:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+        elif show:
+            while plt.fignum_exists(fig.number):
+                for i in indices:
+                    if not plt.fignum_exists(fig.number):
+                        break
+                    draw_frame(i)
+                    plt.pause(_interval_ms / 1000.0)
+    finally:
+        plt.close(fig)
+        if show:
+            plt.switch_backend(_prev_backend)
 
 
 def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
@@ -179,7 +332,7 @@ def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
         color="tab:blue",
         zorder=3,
     )
-    ax_traj.set_ylabel(f"{ch.name} ({ch.unit})")
+    ax_traj.set_ylabel(f"{ch.name} [{ch.unit}]")
     ax_traj.legend(loc="best")
     ax_traj.grid(True, alpha=0.3)
 
@@ -238,6 +391,6 @@ def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
             if bound > 0.0:
                 ax_res.set_ylim(-bound, bound)
 
-    ax_res.set_ylabel(f"{ch.name} error ({ch.unit})")
+    ax_res.set_ylabel(f"error [{ch.unit}]")
     ax_res.legend(loc="best")
     ax_res.grid(True, alpha=0.3)

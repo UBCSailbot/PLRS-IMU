@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .attitude import euler_to_quaternion
 from .boat3d import plot_mounting
-from .plot import plot_pose, plot_trace
+from .plot import plot_animate, plot_pose, plot_trace
 from .runner import run
 from .source import SimulatedSource
 from .tuning import load_mount, load_tuning
@@ -32,7 +32,15 @@ from .types import (
     WaveMotion,
 )
 
-VIEWS = ("timeseries", "mounting", "pose")
+VIEWS = ("timeseries", "mounting", "simulate", "pose")
+
+# Human-readable labels for the interactive picker, in display order.
+# "pose" (filmstrip) is CLI-only; it does not appear here.
+_VIEW_LABELS = {
+    "Mounting": "mounting",
+    "Timeseries": "timeseries",
+    "Simulate": "simulate",
+}
 
 SCENARIOS: dict[str, Scenario] = {
     "constant_turn": Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
@@ -164,23 +172,37 @@ def _zero_to_none(x: float) -> float | None:
     return x if x > 0.0 else None
 
 
-def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace:
-    """Arrow-key prompt for scenario + view; returns parsed args with defaults."""
+def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
+    """Prompt for view then (if needed) scenario; returns parsed args or None."""
     import questionary
 
+    view_label = questionary.select("View", choices=[*_VIEW_LABELS, "quit"]).ask()
+    if view_label is None or view_label == "quit":
+        return None
+    view = _VIEW_LABELS[view_label]
+
+    if view == "mounting":
+        # Mounting is pure config geometry; _run_view never reads the scenario.
+        return parser.parse_args(["sim", "static", "--view", "mounting"])
+
     scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
-    view = questionary.select("View", choices=list(VIEWS)).ask()
-    if scenario is None or view is None:  # user pressed Ctrl-C
-        raise SystemExit(0)
-    return parser.parse_args(["sim", scenario, "--view", view])
+    if scenario is None:
+        return None
+    duration = ["--duration", "50"] if view == "simulate" else []
+    return parser.parse_args(["sim", scenario, "--view", view, *duration])
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd is None:
-        args = _select_interactively(parser)
-    _run_view(args)
+        while True:
+            args = _select_interactively(parser)
+            if args is None:
+                break
+            _run_view(args)
+    else:
+        _run_view(args)
 
 
 def _run_view(args: argparse.Namespace) -> None:
@@ -232,7 +254,9 @@ def _run_view(args: argparse.Namespace) -> None:
     )
     trace = run(src, cfg)
     title = f"{args.scenario} (seed={args.seed})"
-    if args.view == "pose":
+    if args.view == "simulate":
+        plot_animate(trace, show=not args.no_show, save=args.save, title=title)
+    elif args.view == "pose":
         plot_pose(trace, show=not args.no_show, save=args.save, title=title)
     else:
         plot_trace(trace, show=not args.no_show, save=args.save, title=title)

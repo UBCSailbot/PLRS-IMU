@@ -21,30 +21,28 @@ from .types import EkfConfig, GnssAttitudeMount
 
 _DEG_TO_RAD = np.pi / 180.0
 
-# Hull in body axes (X bow, Y port, Z up): a deck outline, a centerline keel
-# below it, and a flat transom plane at the stern -- enough to read heel,
-# trim, and heading.
+# Hull in body axes (X bow, Y port, Z up): a deck outline, a flat rectangular
+# transom at the stern, and a centerline keel -- enough to read heel, trim,
+# and heading.
 _VERTICES = np.array(
     [
         [1.0, 0.0, 0.0],  # 0 bow
         [0.5, 0.35, 0.0],  # 1 fwd port
-        [-0.8, 0.30, 0.0],  # 2 aft port
-        [-1.0, 0.25, 0.0],  # 3 transom port top
-        [-1.0, -0.25, 0.0],  # 4 transom stbd top
-        [-0.8, -0.30, 0.0],  # 5 aft stbd
-        [0.5, -0.35, 0.0],  # 6 fwd stbd
-        [-1.0, 0.18, -0.30],  # 7 transom port bottom
-        [-1.0, -0.18, -0.30],  # 8 transom stbd bottom
-        [0.7, 0.0, -0.25],  # 9 keel fwd
+        [-0.9, 0.30, 0.0],  # 2 transom port top
+        [-0.9, -0.30, 0.0],  # 3 transom stbd top
+        [0.5, -0.35, 0.0],  # 4 fwd stbd
+        [-0.9, 0.30, -0.30],  # 5 transom port bottom (directly below 2)
+        [-0.9, -0.30, -0.30],  # 6 transom stbd bottom (directly below 3)
+        [0.7, 0.0, -0.25],  # 7 keel fwd
     ]
 )
 
 # fmt: off
 _EDGES = (
-    (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 0),  # deck outline
-    (3, 7), (7, 8), (8, 4),                                  # flat transom plane
-    (0, 9), (9, 7), (9, 8),                                  # keel
-    (1, 9), (6, 9), (2, 7), (5, 8),                          # hull sides
+    (0, 1), (1, 2), (2, 3), (3, 4), (4, 0),  # deck outline
+    (2, 5), (5, 6), (6, 3),                   # transom (top edge 2->3 in deck)
+    (0, 7), (7, 5), (7, 6),                   # keel
+    (1, 7), (4, 7),                           # hull sides fwd
 )
 # fmt: on
 
@@ -128,7 +126,7 @@ def plot_mounting(
         ("IMU X", "IMU Y", "IMU Z"),
         strict=True,
     ):
-        ax.quiver(0.0, 0.0, 0.05, *vec, color=color, label=name)
+        ax.quiver(0.0, 0.0, 0.0, *vec, color=color, label=name)
 
     # GNSS antenna baseline: boat-forward rotated by the offset, in the deck
     # plane. The offset is clockwise from forward (toward starboard), i.e. -yaw.
@@ -149,7 +147,7 @@ def plot_mounting(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=120, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)

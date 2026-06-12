@@ -73,3 +73,7 @@ jobs:
         run: |
           nix develop --no-update-lock-file -c \
             bash -c 'cd sim && uv run --extra dev pytest -q'
+      - name: Check sim images are up to date
+        run: |
+          nix develop --no-update-lock-file -c \
+            bash -c 'make sim-images && git diff --exit-code HEAD -- docs/images/'
