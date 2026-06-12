@@ -26,13 +26,13 @@ _DEG_TO_RAD = np.pi / 180.0
 # and heading.
 _VERTICES = np.array(
     [
-        [1.0, 0.0, 0.0],    # 0 bow
-        [0.5, 0.35, 0.0],   # 1 fwd port
+        [1.0, 0.0, 0.0],  # 0 bow
+        [0.5, 0.35, 0.0],  # 1 fwd port
         [-0.9, 0.30, 0.0],  # 2 transom port top
-        [-0.9, -0.30, 0.0], # 3 transom stbd top
+        [-0.9, -0.30, 0.0],  # 3 transom stbd top
         [0.5, -0.35, 0.0],  # 4 fwd stbd
         [-0.9, 0.30, -0.30],  # 5 transom port bottom (directly below 2)
-        [-0.9, -0.30, -0.30], # 6 transom stbd bottom (directly below 3)
+        [-0.9, -0.30, -0.30],  # 6 transom stbd bottom (directly below 3)
         [0.7, 0.0, -0.25],  # 7 keel fwd
     ]
 )
@@ -147,7 +147,7 @@ def plot_mounting(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=120, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)

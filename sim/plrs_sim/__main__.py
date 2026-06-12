@@ -173,12 +173,10 @@ def _zero_to_none(x: float) -> float | None:
 
 
 def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
-    """Arrow-key prompt for view then (if needed) scenario; returns parsed args or None."""
+    """Prompt for view then (if needed) scenario; returns parsed args or None."""
     import questionary
 
-    view_label = questionary.select(
-        "View", choices=[*_VIEW_LABELS, "quit"]
-    ).ask()
+    view_label = questionary.select("View", choices=[*_VIEW_LABELS, "quit"]).ask()
     if view_label is None or view_label == "quit":
         return None
     view = _VIEW_LABELS[view_label]

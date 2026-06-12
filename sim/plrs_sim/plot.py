@@ -72,7 +72,7 @@ def plot_trace(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=120, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)
@@ -134,7 +134,7 @@ def plot_pose(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=120, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)
@@ -155,9 +155,10 @@ def plot_animate(
     displays it with `kitty +kitten icat --hold`; press any key to continue.
     On GUI backends, opens a Qt window that loops until closed.
     """
-    import matplotlib
     import subprocess
     import tempfile
+
+    import matplotlib
 
     heading = trace.channels["heading"]
     roll = trace.channels["roll"]
@@ -218,7 +219,7 @@ def plot_animate(
         if _has_imu_raw and not np.isnan(heading.openloop[i]):  # type: ignore[index]
             draw_boat(
                 ax,
-                roll.openloop[i],   # type: ignore[index]
+                roll.openloop[i],  # type: ignore[index]
                 pitch.openloop[i],  # type: ignore[index]
                 heading.openloop[i],  # type: ignore[index]
                 color="tab:green",
@@ -237,6 +238,7 @@ def plot_animate(
 
     def _write_gif(path: Path) -> None:
         from matplotlib.animation import PillowWriter
+
         total = len(gif_indices)
         w = PillowWriter(fps=_GIF_FPS)
         with w.saving(fig, path, dpi=_GIF_DPI):
@@ -249,10 +251,14 @@ def plot_animate(
     if save is not None:
         if str(save).endswith(".gif"):
             _write_gif(save)
+        elif str(save).endswith(".png"):
+            draw_frame(indices[-1])
+            fig.savefig(save, dpi=96, bbox_inches="tight")
         else:
             from matplotlib.animation import FFMpegWriter
+
             w = FFMpegWriter(fps=fps)
-            with w.saving(fig, save, dpi=120):
+            with w.saving(fig, save, dpi=96):
                 for i in indices:
                     draw_frame(i)
                     w.grab_frame()
@@ -260,7 +266,9 @@ def plot_animate(
     try:
         if show and _is_terminal:
             # Reuse an already-rendered save gif; otherwise write a temp one.
-            gif_path: Path | None = save if (save is not None and str(save).endswith(".gif")) else None
+            gif_path: Path | None = (
+                save if (save is not None and str(save).endswith(".gif")) else None
+            )
             tmp: Path | None = None
             if gif_path is None:
                 with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as f:
@@ -268,9 +276,7 @@ def plot_animate(
                 _write_gif(tmp)
                 gif_path = tmp
             try:
-                subprocess.run(
-                    ["kitty", "+kitten", "icat", str(gif_path)], check=False
-                )
+                subprocess.run(["kitty", "+kitten", "icat", str(gif_path)], check=False)
             finally:
                 if tmp is not None:
                     tmp.unlink(missing_ok=True)

@@ -145,7 +145,9 @@ by the mount offset and the GNSS baseline arrow:
 ![Mounting view showing a tilted IMU triad and offset GNSS baseline](docs/images/sim-mounting.png)
 
 **Simulate** — animated 3D boat over a 50 s run; truth (blue), EKF estimate
-(orange), IMU raw attitude (green), rendered as a GIF.
+(orange), IMU raw attitude (green), rendered as a GIF. Final frame:
+
+![Final frame of the 3D boat animation showing truth, EKF estimate, and IMU raw hulls](docs/images/sim-simulate.png)
 
 A static **pose** filmstrip is also available via `--view pose` on the CLI:
 
