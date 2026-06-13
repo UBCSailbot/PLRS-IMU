@@ -91,6 +91,39 @@ def draw_boat(
         )
 
 
+_TRIAD_COLORS = ("tab:red", "tab:green", "tab:blue")
+
+
+def draw_triad(
+    ax,
+    roll_deg: float,
+    pitch_deg: float,
+    yaw_deg: float,
+    *,
+    length: float = 0.6,
+    labels: tuple[str, str, str] = ("X", "Y", "Z"),
+    alpha: float = 1.0,
+) -> None:
+    """Draw an RGB body-axis triad posed at the given attitude."""
+    triad = rotate(np.eye(3) * length, roll_deg, pitch_deg, yaw_deg)
+    for vec, color, name in zip(triad, _TRIAD_COLORS, labels, strict=True):
+        ax.quiver(0.0, 0.0, 0.0, *vec, color=color, alpha=alpha, label=name)
+
+
+def draw_heading_arrow(
+    ax,
+    heading_deg: float,
+    *,
+    length: float = 1.2,
+    color: str,
+    label: str | None = None,
+    alpha: float = 1.0,
+) -> None:
+    """Draw a horizontal arrow from the origin at the given heading."""
+    vec = rotate(np.array([[length, 0.0, 0.0]]), 0.0, 0.0, heading_deg)[0]
+    ax.quiver(0.0, 0.0, 0.0, *vec, color=color, linewidth=2, alpha=alpha, label=label)
+
+
 def set_equal_3d(ax, half: float = 1.2) -> None:
     """Symmetric limits and a cubic box so the hull is not distorted."""
     ax.set_xlim(-half, half)
@@ -117,24 +150,18 @@ def plot_mounting(
     draw_boat(ax, 0.0, 0.0, 0.0, color="0.6", label="boat (level)")
 
     # IMU axis triad, rotated by the mount offset (boat -> IMU).
-    triad = rotate(
-        np.eye(3) * 0.6, cfg.mount_roll_deg, cfg.mount_pitch_deg, cfg.mount_yaw_deg
+    draw_triad(
+        ax,
+        cfg.mount_roll_deg,
+        cfg.mount_pitch_deg,
+        cfg.mount_yaw_deg,
+        labels=("IMU X", "IMU Y", "IMU Z"),
     )
-    for vec, color, name in zip(
-        triad,
-        ("tab:red", "tab:green", "tab:blue"),
-        ("IMU X", "IMU Y", "IMU Z"),
-        strict=True,
-    ):
-        ax.quiver(0.0, 0.0, 0.0, *vec, color=color, label=name)
 
     # GNSS antenna baseline: boat-forward rotated by the offset, in the deck
     # plane. The offset is clockwise from forward (toward starboard), i.e. -yaw.
-    baseline = rotate(
-        np.array([[1.2, 0.0, 0.0]]), 0.0, 0.0, -mount.baseline_offset_deg
-    )[0]
-    ax.quiver(
-        0.0, 0.0, 0.0, *baseline, color="tab:purple", linewidth=2, label="GNSS baseline"
+    draw_heading_arrow(
+        ax, -mount.baseline_offset_deg, color="tab:purple", label="GNSS baseline"
     )
 
     set_equal_3d(ax)
