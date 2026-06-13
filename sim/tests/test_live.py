@@ -14,6 +14,7 @@ from plrs_sim.live import (
     format_fusion,
     format_gnss,
     format_imu,
+    heading_offset_deg,
     monitor,
     pace,
     parse_line,
@@ -187,6 +188,47 @@ def test_live_draw_panels_render_headless() -> None:
     _draw_boat_panel(ax3d, state)
     _draw_scroll(ax, state, "heading", window_s=20.0)
     assert ax.lines  # at least one series was plotted
+    plt.close(fig)
+
+
+def test_heading_offset_takes_the_short_way_around() -> None:
+    assert heading_offset_deg(90.0, 0.0) == pytest.approx(90.0)
+    assert heading_offset_deg(0.0, 90.0) == pytest.approx(-90.0)
+    # Across the +-180 seam: 10 vs 350 is +20, not -340.
+    assert heading_offset_deg(10.0, 350.0) == pytest.approx(20.0)
+    # +180 and -180 are the same heading -> zero residual.
+    assert heading_offset_deg(180.0, -180.0) == pytest.approx(0.0)
+
+
+def test_alignment_summary_states() -> None:
+    assert MonitorState().alignment_summary() == "waiting for IMU..."
+
+    # IMU only (no GNSS yet): roll/pitch shown, offset withheld.
+    imu_only = monitor(
+        ["I,0,1,0,0,0,0,0,0,0,0,9.81"], show=False, summary_interval_ms=0
+    )
+    summary = imu_only.alignment_summary()
+    assert "roll=" in summary and "heading offset --" in summary
+
+    # With a valid fix and an identity quaternion seeded to 90, the offset is 0.
+    aligned = monitor(_SAMPLE_LINES, show=False, summary_interval_ms=0)
+    assert "heading offset (GNSS-IMU)=" in aligned.alignment_summary()
+    assert heading_offset_deg(90.0, 90.0) == pytest.approx(0.0)
+
+
+def test_align_panel_renders_headless() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from plrs_sim.live import _draw_align_panel
+
+    state = monitor(_SAMPLE_LINES, show=False, summary_interval_ms=0)
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    _draw_align_panel(ax, state)
+    assert ax.lines  # the reference hull drew at least one segment
     plt.close(fig)
 
 
