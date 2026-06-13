@@ -5,7 +5,7 @@ VIEW     ?=
 
 help:
 	@echo "Firmware targets:"
-	@echo "  format       clang-format all sources in-place"
+	@echo "  format       clang-format all sources in-place + ruff format sim/"
 	@echo "  test         run host Unity test suite (pio test -e native)"
 	@echo "  build        compile firmware (pio run -e pico)"
 	@echo "  upload       build and flash the RP2040 (pio run -e pico -t upload)"
@@ -19,6 +19,7 @@ help:
 format:
 	find lib src test -type f \( -name "*.h" -o -name "*.cpp" \) -print0 \
 		| xargs -0 clang-format -i
+	$(MAKE) sim-format
 
 test:
 	pio test -e native

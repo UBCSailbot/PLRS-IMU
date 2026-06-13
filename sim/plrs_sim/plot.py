@@ -253,7 +253,9 @@ def plot_animate(
             _write_gif(save)
         elif str(save).endswith(".png"):
             draw_frame(indices[-1])
-            fig.savefig(save, dpi=96, bbox_inches="tight", pil_kwargs={"optimize": True})
+            fig.savefig(
+                save, dpi=96, bbox_inches="tight", pil_kwargs={"optimize": True}
+            )
         else:
             from matplotlib.animation import FFMpegWriter
 
