@@ -200,6 +200,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--duration", type=float, default=30.0, metavar="SECONDS", help="synthetic only"
     )
     mon.add_argument("--no-show", action="store_true", help="record only, no window")
+    mon.add_argument(
+        "--align",
+        action="store_true",
+        help="sensor-alignment view: live IMU axes vs GNSS heading on a level hull",
+    )
 
     return p
 
@@ -243,24 +248,25 @@ def _select_monitor(parser: argparse.ArgumentParser) -> argparse.Namespace | Non
         return None
 
     if source.startswith("serial"):
-        return parser.parse_args(["monitor"])
-
-    if source.startswith("replay"):
+        args = ["monitor"]
+    elif source.startswith("replay"):
         captures = sorted(Path("captures").glob("*.log"))
         if not captures:
             print("No captures/*.log to replay yet.")
             return None
         choice = questionary.select("Capture", choices=[str(p) for p in captures]).ask()
-        return (
-            None
-            if choice is None
-            else parser.parse_args(["monitor", "--replay", choice])
-        )
+        if choice is None:
+            return None
+        args = ["monitor", "--replay", choice]
+    else:
+        scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
+        if scenario is None:
+            return None
+        args = ["monitor", "--synthetic", scenario]
 
-    scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
-    if scenario is None:
-        return None
-    return parser.parse_args(["monitor", "--synthetic", scenario])
+    if questionary.confirm("Sensor-alignment view?", default=False).ask():
+        args.append("--align")
+    return parser.parse_args(args)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -315,7 +321,7 @@ def _cmd_monitor(args: argparse.Namespace) -> None:
         stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         record = args.record or Path("captures") / f"{stamp}.log"
 
-    monitor(lines, record=record, show=not args.no_show)
+    monitor(lines, record=record, show=not args.no_show, align=args.align)
 
 
 def _run_view(args: argparse.Namespace) -> None:
