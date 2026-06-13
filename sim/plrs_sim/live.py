@@ -151,6 +151,11 @@ _DEFAULT_HISTORY = 2000
 _RAD_TO_DEG = 180.0 / math.pi
 
 
+def heading_offset_deg(gnss_deg: float, imu_deg: float) -> float:
+    """GNSS-minus-IMU heading residual, mapped into (-180, 180]."""
+    return (gnss_deg - imu_deg + 180.0) % 360.0 - 180.0
+
+
 @dataclass(slots=True)
 class Series:
     """A rolling (time, heading, roll, pitch) history for one attitude source."""
@@ -236,6 +241,24 @@ class MonitorState:
         )
         return f"t={t_s:8.2f}s  {fused}  {oloop}  {gnss}"
 
+    def alignment_summary(self) -> str:
+        """Sensor-alignment residuals: IMU roll/pitch and the heading offset.
+
+        Roll and pitch are absolute from the IMU; the heading offset is
+        GNSS-minus-IMU, shown only while the fix is valid.
+        """
+        if not self.openloop.t_ms:
+            return "waiting for IMU..."
+        roll, pitch = self.openloop.roll[-1], self.openloop.pitch[-1]
+        if self.last_gnss is not None and self.last_gnss.valid:
+            off = heading_offset_deg(
+                self.last_gnss.heading_deg, self.openloop.heading[-1]
+            )
+            offset = f"heading offset (GNSS-IMU)={off:+6.2f}"
+        else:
+            offset = "heading offset --"
+        return f"IMU roll={roll:+6.2f}  pitch={pitch:+6.2f}  |  {offset}"
+
 
 def replay_file(path: Path) -> Iterator[str]:
     """Yield lines from a previously captured telemetry file."""
@@ -301,13 +324,15 @@ def monitor(
     *,
     record: Path | None = None,
     show: bool = True,
+    align: bool = False,
     summary_interval_ms: int = 1000,
 ) -> MonitorState:
     """Drive the telemetry stream: record losslessly, then view or summarize.
 
     `lines` is any iterable of raw telemetry lines -- a live serial reader, a
     replay file, or a test list -- so every entry point shares this code path.
-    Returns the accumulated state for inspection.
+    `align` swaps the drift view for the sensor-alignment view. Returns the
+    accumulated state for inspection.
     """
     state = MonitorState()
     sink_cm: contextlib.AbstractContextManager[TextIO | None]
@@ -320,7 +345,7 @@ def monitor(
     with sink_cm as sink:
         teed = _tee(lines, sink)
         if show:
-            _run_live(teed, state)
+            (_run_align if align else _run_live)(teed, state)
         else:
             _run_headless(teed, state, summary_interval_ms)
     return state
@@ -382,19 +407,48 @@ def _draw_scroll(ax, state: MonitorState, which: str, window_s: float) -> None:
     ax.legend(loc="upper right", fontsize=7)
 
 
-def _run_live(
-    lines: Generator[str, None, None],
+def _draw_align_panel(ax, state: MonitorState) -> None:
+    from .boat3d import draw_boat, draw_heading_arrow, draw_triad, set_equal_3d
+
+    ax.cla()
+    # Level reference hull: the boat frame both sensors are aligned against.
+    draw_boat(ax, 0.0, 0.0, 0.0, color="0.6", label="boat (level)")
+    if state.openloop.t_ms:
+        draw_triad(
+            ax,
+            state.openloop.roll[-1],
+            state.openloop.pitch[-1],
+            state.openloop.heading[-1],
+            labels=("IMU X", "IMU Y", "IMU Z"),
+        )
+    if state.last_gnss is not None:
+        # Grey a stale fix so a frozen heading is not read as live agreement.
+        valid = state.last_gnss.valid
+        draw_heading_arrow(
+            ax,
+            state.last_gnss.heading_deg,
+            color="tab:purple" if valid else "0.7",
+            alpha=1.0 if valid else 0.4,
+            label="GNSS heading",
+        )
+    set_equal_3d(ax)
+    ax.legend(loc="upper left", fontsize=8)
+
+
+def _animate(
+    lines: Iterable[str],
     state: MonitorState,
+    build_figure: Callable[[], tuple],
     *,
     redraw_interval_ms: int = 80,
-    window_s: float = 20.0,
 ) -> None:
-    """Open a Qt window: 3D boat (raw vs fused) plus scrolling angle plots.
+    """Open a Qt window and animate from `state` while a thread drains `lines`.
 
-    The line stream is drained on a background thread so a blocking serial
-    read or a paced replay never stalls the GUI; the animation timer redraws
-    from `state` at its own rate. QtAgg is forced because the devshell pins
-    MPLBACKEND to the kitty backend, which cannot host a live figure.
+    `build_figure` is called once the GUI backend is live and returns
+    `(figure, update)`, where `update(frame)` redraws from the shared state.
+    The stream is drained on a daemon thread so a blocking serial read or a
+    paced replay never stalls the GUI. QtAgg is forced because the devshell
+    pins MPLBACKEND to the kitty backend, which cannot host a live figure.
     """
     import threading
 
@@ -412,20 +466,7 @@ def _run_live(
     reader = threading.Thread(target=_drain, args=(lines, state), daemon=True)
     reader.start()
 
-    fig = plt.figure(figsize=(11, 6))
-    ax3d = fig.add_subplot(1, 2, 1, projection="3d")
-    ax_h = fig.add_subplot(3, 2, 2)
-    ax_r = fig.add_subplot(3, 2, 4)
-    ax_p = fig.add_subplot(3, 2, 6)
-
-    def update(_frame: int) -> None:
-        _draw_boat_panel(ax3d, state)
-        _draw_scroll(ax_h, state, "heading", window_s)
-        _draw_scroll(ax_r, state, "roll", window_s)
-        _draw_scroll(ax_p, state, "pitch", window_s)
-        if state.last_diag is not None:
-            fig.suptitle(f"# {state.last_diag}", fontsize=9)
-
+    fig, update = build_figure()
     # Held in a local so the animation is not garbage-collected before show().
     anim = FuncAnimation(  # noqa: F841
         fig, update, interval=redraw_interval_ms, cache_frame_data=False
@@ -436,6 +477,61 @@ def _run_live(
     # (including C++ objects) is freed before interpreter shutdown.
     lines.close()
     reader.join(timeout=1.0)
+
+
+def _run_live(
+    lines: Iterable[str],
+    state: MonitorState,
+    *,
+    redraw_interval_ms: int = 80,
+    window_s: float = 20.0,
+) -> None:
+    """Open a Qt window: 3D boat (raw vs fused) plus scrolling angle plots."""
+    import matplotlib.pyplot as plt
+
+    def build() -> tuple:
+        fig = plt.figure(figsize=(11, 6))
+        ax3d = fig.add_subplot(1, 2, 1, projection="3d")
+        ax_h = fig.add_subplot(3, 2, 2)
+        ax_r = fig.add_subplot(3, 2, 4)
+        ax_p = fig.add_subplot(3, 2, 6)
+
+        def update(_frame: int) -> None:
+            _draw_boat_panel(ax3d, state)
+            _draw_scroll(ax_h, state, "heading", window_s)
+            _draw_scroll(ax_r, state, "roll", window_s)
+            _draw_scroll(ax_p, state, "pitch", window_s)
+            if state.last_diag is not None:
+                fig.suptitle(f"# {state.last_diag}", fontsize=9)
+
+        return fig, update
+
+    _animate(lines, state, build, redraw_interval_ms=redraw_interval_ms)
+
+
+def _run_align(
+    lines: Iterable[str], state: MonitorState, *, redraw_interval_ms: int = 80
+) -> None:
+    """Open a Qt window for physical sensor alignment.
+
+    A level reference hull carries the live IMU axis triad and the GNSS
+    heading arrow; the readout shows the residuals (IMU roll/pitch, which are
+    absolute, and the GNSS-minus-IMU heading offset) to drive toward zero by
+    physically adjusting the mounts.
+    """
+    import matplotlib.pyplot as plt
+
+    def build() -> tuple:
+        fig = plt.figure(figsize=(7, 7))
+        ax = fig.add_subplot(projection="3d")
+
+        def update(_frame: int) -> None:
+            _draw_align_panel(ax, state)
+            fig.suptitle(state.alignment_summary(), fontsize=10)
+
+        return fig, update
+
+    _animate(lines, state, build, redraw_interval_ms=redraw_interval_ms)
 
 
 def pace(
