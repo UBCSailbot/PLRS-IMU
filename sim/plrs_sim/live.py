@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import threading
 import time
 from collections import deque
 from collections.abc import Callable, Generator, Iterable, Iterator
@@ -90,7 +91,7 @@ def parse_line(line: str) -> Record | None:
                 heading_deg=float(fields[2]),
                 roll_deg=float(fields[3]),
                 pitch_deg=float(fields[4]),
-                heading_sigma_deg=float(fields[5]),
+                heading_sigma_deg=math.inf if fields[5] == "ovf" else float(fields[5]),
                 roll_sigma_deg=float(fields[6]),
                 pitch_sigma_deg=float(fields[7]),
             )
@@ -179,11 +180,12 @@ class MonitorState:
     """Live view of the stream: rolling attitude histories plus latest scalars.
 
     `fused` is the EKF estimate (`F` lines); `openloop` is the IMU-only
-    dead-reckon -- roll/pitch from the `I`-line quaternion, heading from
-    integrating gyro-z off the first GNSS fix (same construction as
-    runner.py's open-loop track). The two diverge as the gyro drifts and the
-    EKF holds, which is the value of GNSS made visible. `last_gnss` /
-    `last_diag` hold the most recent of each.
+    dead-reckon -- roll/pitch from the `I`-line quaternion, heading seeded from
+    the boot quaternion yaw and then propagated by integrating gyro-z. A valid
+    GNSS fix re-anchors that heading to the absolute reference once it arrives;
+    without GNSS it still tracks (relative) so the bench is usable. The two
+    tracks diverge as the gyro drifts and the EKF holds, which is the value of
+    the EKF made visible. `last_gnss` / `last_diag` hold the most recent of each.
     """
 
     fused: Series = field(default_factory=Series)
@@ -191,21 +193,35 @@ class MonitorState:
     last_gnss: GnssRecord | None = None
     last_diag: str | None = None
     latest_t_ms: int | None = None
+    lines_seen: int = 0
+    lines_parsed: int = 0
+    last_error: str | None = None
+    # Guards the series against concurrent append (drain thread) and read (GUI
+    # thread); without it a snapshot can catch a half-appended sample.
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _dr_heading: float = 0.0
-    _dr_seeded: bool = False
     _dr_prev_ms: int | None = None
+    _dr_anchored_to_gnss: bool = False
 
     def update(self, rec: Record) -> None:
+        with self._lock:
+            self._update(rec)
+
+    def _update(self, rec: Record) -> None:
         if isinstance(rec, FusionRecord):
             self.fused.append(
                 rec.timestamp_ms, rec.heading_deg, rec.roll_deg, rec.pitch_deg
             )
             self.latest_t_ms = rec.timestamp_ms
         elif isinstance(rec, ImuRecord):
-            roll, pitch, _yaw = quaternion_to_euler_zyx(rec.orientation)
-            # Dead-reckon heading by integrating gyro-z, but only once seeded by
-            # a GNSS fix -- before that the absolute heading is unknown.
-            if self._dr_seeded and self._dr_prev_ms is not None:
+            roll, pitch, yaw = quaternion_to_euler_zyx(rec.orientation)
+            # Seed the dead-reckon heading from the boot yaw, then propagate it
+            # by integrating gyro-z. If a GNSS fix already anchored the heading,
+            # keep that absolute reference rather than the arbitrary boot yaw.
+            if self._dr_prev_ms is None:
+                if not self._dr_anchored_to_gnss:
+                    self._dr_heading = yaw
+            else:
                 dt_s = (rec.timestamp_ms - self._dr_prev_ms) / 1000.0
                 self._dr_heading += rec.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
             self._dr_prev_ms = rec.timestamp_ms
@@ -213,11 +229,45 @@ class MonitorState:
             self.latest_t_ms = rec.timestamp_ms
         elif isinstance(rec, GnssRecord):
             self.last_gnss = rec
-            if rec.valid and not self._dr_seeded:
+            # Re-anchor the relative dead-reckon to the absolute heading once.
+            if rec.valid and not self._dr_anchored_to_gnss:
                 self._dr_heading = rec.heading_deg
-                self._dr_seeded = True
+                self._dr_anchored_to_gnss = True
         elif isinstance(rec, DiagRecord):
             self.last_diag = rec.text
+
+    def snapshot(self, which: str):
+        """Atomically copy the fused and open-loop (time, `which`) arrays plus the
+        latest timestamp, consistent against the drain thread's appends.
+
+        Returns `(t_now_s, [(t_s, values), ...])` with fused first, then
+        open-loop. Taken under the lock so a series can never be read mid-append.
+        """
+        import numpy as np
+
+        with self._lock:
+            t_now = (self.latest_t_ms or 0) / 1000.0
+            arrays = [
+                (
+                    np.fromiter(series.t_ms, dtype=float) / 1000.0,
+                    np.fromiter(getattr(series, which), dtype=float),
+                )
+                for series in (self.fused, self.openloop)
+            ]
+        return t_now, arrays
+
+    def status_line(self) -> str:
+        """Drain health for the viewer banner: distinguishes a dead port (rx 0)
+        from a parse failure (rx high, parsed 0) from a working stream."""
+        age = (
+            f"t={self.latest_t_ms / 1000:.1f}s"
+            if self.latest_t_ms is not None
+            else "no data"
+        )
+        status = f"rx {self.lines_seen} | parsed {self.lines_parsed} | {age}"
+        if self.last_error is not None:
+            status += f" | ERROR: {self.last_error}"
+        return status
 
     def summary_line(self) -> str:
         """One-line snapshot for headless monitoring."""
@@ -267,17 +317,18 @@ def replay_file(path: Path) -> Iterator[str]:
 
 
 def serial_lines(port: str, baud: int = 115200) -> Iterator[str]:
-    """Yield decoded lines from a serial port, opened passively.
+    """Yield decoded lines from a serial port.
 
-    DTR/RTS are deasserted before open and no 1200-bps touch is issued, so the
-    RP2040's USB CDC is not reset/re-enumerated (see CLAUDE.md Workarounds).
-    The production firmware emits unconditionally, so passive reading suffices.
+    DTR is asserted: the RP2040's USB CDC gates transmission on the host being
+    connected, so it stays silent with DTR low (see CLAUDE.md Workarounds). A
+    steady DTR at the data baud rate does not reset the board -- only the
+    1200-bps bootloader touch does, which is never issued here.
     """
     import serial
 
     ser = serial.serial_for_url(port, baudrate=baud, do_not_open=True)
-    ser.dtr = False
-    ser.rts = False
+    ser.dtr = True
+    ser.rts = True
     ser.timeout = 1.0
     ser.open()
     try:
@@ -304,9 +355,11 @@ def _run_headless(
     """Consume the stream, printing diagnostics live and a throttled summary."""
     last_summary: int | None = None
     for line in lines:
+        state.lines_seen += 1
         rec = parse_line(line)
         if rec is None:
             continue
+        state.lines_parsed += 1
         state.update(rec)
         if isinstance(rec, DiagRecord):
             print(f"# {rec.text}")
@@ -352,59 +405,85 @@ def monitor(
 
 
 def _drain(lines: Iterable[str], state: MonitorState) -> None:
-    """Consume the line stream into state; runs on the reader thread."""
-    for line in lines:
-        rec = parse_line(line)
-        if rec is not None:
-            state.update(rec)
+    """Consume the line stream into state; runs on the reader thread.
+
+    A reader-thread exception would otherwise vanish silently, leaving the
+    viewer frozen with no clue; record it on the shared state so the banner
+    shows it, and dump the traceback for the full detail.
+    """
+    try:
+        for line in lines:
+            state.lines_seen += 1
+            rec = parse_line(line)
+            if rec is not None:
+                state.lines_parsed += 1
+                state.update(rec)
+    except Exception as exc:
+        import traceback
+
+        traceback.print_exc()
+        state.last_error = f"drain: {exc}"
 
 
-def _draw_boat_panel(ax, state: MonitorState) -> None:
-    from .boat3d import draw_boat, set_equal_3d
-
-    ax.cla()
-    if state.openloop.t_ms:
-        draw_boat(
-            ax,
-            state.openloop.roll[-1],
-            state.openloop.pitch[-1],
-            state.openloop.heading[-1],
-            color="tab:green",
-            alpha=0.5,
-            label="open-loop",
-        )
-    if state.fused.t_ms:
-        draw_boat(
-            ax,
-            state.fused.roll[-1],
-            state.fused.pitch[-1],
-            state.fused.heading[-1],
-            color="tab:orange",
-            label="fused",
-        )
-    set_equal_3d(ax)
-    ax.legend(loc="upper left", fontsize=8)
+# Initial y-ranges per scroll panel. Heading spans the full circle and never
+# grows; roll/pitch start tight and the panel widens them as the data demands.
+_SCROLL_INITIAL_YLIM = {
+    "heading": (0.0, 360.0),
+    "roll": (-15.0, 15.0),
+    "pitch": (-15.0, 15.0),
+}
 
 
-def _draw_scroll(ax, state: MonitorState, which: str, window_s: float) -> None:
-    import numpy as np
+class _ScrollPanel:
+    """One scrolling angle panel, built for blitting.
 
-    ax.cla()
-    t_max = (state.latest_t_ms or 0) / 1000.0
-    for series, color, label in (
-        (state.fused, "tab:orange", "fused"),
-        (state.openloop, "tab:green", "open-loop"),
-    ):
-        if not series.t_ms:
-            continue
-        t = np.array(series.t_ms, dtype=float) / 1000.0
-        ax.plot(
-            t, np.array(getattr(series, which), dtype=float), color=color, label=label
-        )
-    ax.set_xlim(max(0.0, t_max - window_s), max(window_s, t_max))
-    ax.set_ylabel(f"{which} [deg]")
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper right", fontsize=7)
+    The x-axis is *relative* time ("seconds ago", fixed [-window, 0]) so the
+    ticks never move and the axis frame can stay a cached background while only
+    the lines are blitted. The lines are `animated` so the blit machinery
+    excludes them from that background. y-limits only ever grow, so they settle
+    quickly and rarely force a frame redraw.
+    """
+
+    def __init__(self, ax, which: str, window_s: float) -> None:
+        self.ax = ax
+        self.which = which
+        self.window_s = window_s
+        (self.fused_line,) = ax.plot([], [], color="tab:orange", label="fused", animated=True)
+        (self.open_line,) = ax.plot([], [], color="tab:green", label="open-loop", animated=True)
+        ax.set_xlim(-window_s, 0.0)
+        ax.set_ylim(*_SCROLL_INITIAL_YLIM[which])
+        ax.set_xlabel("seconds ago")
+        ax.set_ylabel(f"{which} [deg]")
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right", fontsize=7)
+
+    @property
+    def lines(self) -> tuple:
+        return (self.fused_line, self.open_line)
+
+    def update(self, state: MonitorState) -> bool:
+        """Set both lines to the visible window. Returns True if the y-limits had
+        to grow (so the caller must redraw this axis frame, not just blit)."""
+        t_now, arrays = state.snapshot(self.which)
+        ymin = ymax = None
+        for (t, values), line in zip(arrays, self.lines):
+            if t.size == 0:
+                continue
+            rel = t - t_now
+            mask = rel >= -self.window_s
+            y = values[mask]
+            line.set_data(rel[mask], y)
+            if y.size:
+                ymin = y.min() if ymin is None else min(ymin, y.min())
+                ymax = y.max() if ymax is None else max(ymax, y.max())
+        if ymin is None or ymax is None:
+            return False
+        lo, hi = self.ax.get_ylim()
+        if ymin < lo or ymax > hi:
+            pad = max(5.0, 0.1 * (ymax - ymin))
+            self.ax.set_ylim(min(lo, ymin - pad), max(hi, ymax + pad))
+            return True
+        return False
 
 
 def _draw_align_panel(ax, state: MonitorState) -> None:
@@ -435,25 +514,10 @@ def _draw_align_panel(ax, state: MonitorState) -> None:
     ax.legend(loc="upper left", fontsize=8)
 
 
-def _animate(
-    lines: Iterable[str],
-    state: MonitorState,
-    build_figure: Callable[[], tuple],
-    *,
-    redraw_interval_ms: int = 80,
-) -> None:
-    """Open a Qt window and animate from `state` while a thread drains `lines`.
-
-    `build_figure` is called once the GUI backend is live and returns
-    `(figure, update)`, where `update(frame)` redraws from the shared state.
-    The stream is drained on a daemon thread so a blocking serial read or a
-    paced replay never stalls the GUI. QtAgg is forced because the devshell
-    pins MPLBACKEND to the kitty backend, which cannot host a live figure.
-    """
-    import threading
-
+def _ensure_qt_backend() -> None:
+    """Force QtAgg: the devshell pins MPLBACKEND to the kitty backend, which
+    cannot host a live (continuously redrawn) figure."""
     import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation
 
     try:
         plt.switch_backend("QtAgg")
@@ -463,50 +527,140 @@ def _animate(
             "Run outside a headless shell, or use --no-show to record only."
         ) from e
 
+
+@contextlib.contextmanager
+def _drain_thread(lines: Iterable[str], state: MonitorState):
+    """Drain the stream on a daemon thread for the duration of the block.
+
+    A blocking serial read or a paced replay never stalls the GUI this way. On
+    exit the source is closed so the generator chain (including any C++ objects)
+    is freed before interpreter shutdown.
+    """
+    import threading
+
     reader = threading.Thread(target=_drain, args=(lines, state), daemon=True)
     reader.start()
+    try:
+        yield
+    finally:
+        with contextlib.suppress(Exception):
+            lines.close()  # type: ignore[attr-defined]
+        reader.join(timeout=1.0)
 
-    fig, update = build_figure()
-    # Held in a local so the animation is not garbage-collected before show().
-    anim = FuncAnimation(  # noqa: F841
-        fig, update, interval=redraw_interval_ms, cache_frame_data=False
-    )
-    plt.show()
 
-    # Close the source so the drain thread exits and the generator chain
-    # (including C++ objects) is freed before interpreter shutdown.
-    lines.close()
-    reader.join(timeout=1.0)
+def _animate(
+    lines: Iterable[str],
+    state: MonitorState,
+    build_figure: Callable[[], tuple],
+    *,
+    redraw_interval_ms: int = 200,
+) -> None:
+    """Open a Qt window and animate from `state` while a thread drains `lines`.
+
+    `build_figure` is called once the GUI backend is live and returns
+    `(figure, update)`, where `update(frame)` redraws from the shared state.
+    Used by the all-3D align view, which cannot be blitted; the live view drives
+    its own blit loop instead (see _run_live).
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    _ensure_qt_backend()
+    with _drain_thread(lines, state):
+        fig, update = build_figure()
+        # Held in a local so the animation is not garbage-collected before show().
+        anim = FuncAnimation(  # noqa: F841
+            fig, update, interval=redraw_interval_ms, cache_frame_data=False
+        )
+        plt.show()
+
+
+class _LiveBlitView:
+    """Drive the live figure by blitting the scroll panels every tick.
+
+    Blitting (restore a cached axis background, draw just the moving line, push
+    the pixels) costs ~7 ms for all three panels versus ~230 ms for a full
+    figure redraw, so the view stays smooth without pegging the event loop. A
+    panel whose y-limits had to grow needs one real redraw to refresh its ticks;
+    that also re-captures the backgrounds via the draw_event handler.
+    """
+
+    def __init__(self, fig, scrolls: list[_ScrollPanel], state: MonitorState) -> None:
+        self.fig = fig
+        self.canvas = fig.canvas
+        self.scrolls = scrolls
+        self.state = state
+        self._bgs: dict = {}
+        self.canvas.mpl_connect("draw_event", self._capture_backgrounds)
+
+    def _capture_backgrounds(self, _event=None) -> None:
+        self._bgs = {p.ax: self.canvas.copy_from_bbox(p.ax.bbox) for p in self.scrolls}
+
+    def tick(self) -> None:
+        try:
+            self._tick()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            self.state.last_error = f"draw: {exc}"
+
+    def _tick(self) -> None:
+        if not self._bgs:
+            self.canvas.draw()  # first paint -> draw_event captures backgrounds
+            return
+
+        if any([p.update(self.state) for p in self.scrolls]):
+            # A y-limit expanded: a real redraw refreshes the ticks (and, via the
+            # draw_event handler, the cached backgrounds).
+            self.canvas.draw()
+        else:
+            for p in self.scrolls:
+                self.canvas.restore_region(self._bgs[p.ax])
+                for line in p.lines:
+                    p.ax.draw_artist(line)
+                self.canvas.blit(p.ax.bbox)
+
+        self.canvas.flush_events()
+        self._set_status_title()
+
+    def _set_status_title(self) -> None:
+        # The status banner goes in the window title: it is always current and
+        # costs nothing, where an on-canvas banner would need its own blit.
+        manager = getattr(self.canvas, "manager", None)
+        if manager is None:
+            return
+        title = self.state.status_line()
+        if self.state.last_diag is not None:
+            title += f"  # {self.state.last_diag}"
+        manager.set_window_title(title)
 
 
 def _run_live(
     lines: Iterable[str],
     state: MonitorState,
     *,
-    redraw_interval_ms: int = 80,
+    scroll_interval_ms: int = 33,
     window_s: float = 20.0,
 ) -> None:
-    """Open a Qt window: 3D boat (raw vs fused) plus scrolling angle plots."""
+    """Open a Qt window with the heading/roll/pitch scrolling angle plots."""
     import matplotlib.pyplot as plt
 
-    def build() -> tuple:
-        fig = plt.figure(figsize=(11, 6))
-        ax3d = fig.add_subplot(1, 2, 1, projection="3d")
-        ax_h = fig.add_subplot(3, 2, 2)
-        ax_r = fig.add_subplot(3, 2, 4)
-        ax_p = fig.add_subplot(3, 2, 6)
+    _ensure_qt_backend()
+    with _drain_thread(lines, state):
+        fig = plt.figure(figsize=(9, 7))
+        scrolls = [
+            _ScrollPanel(fig.add_subplot(3, 1, 1), "heading", window_s),
+            _ScrollPanel(fig.add_subplot(3, 1, 2), "roll", window_s),
+            _ScrollPanel(fig.add_subplot(3, 1, 3), "pitch", window_s),
+        ]
+        view = _LiveBlitView(fig, scrolls, state)
 
-        def update(_frame: int) -> None:
-            _draw_boat_panel(ax3d, state)
-            _draw_scroll(ax_h, state, "heading", window_s)
-            _draw_scroll(ax_r, state, "roll", window_s)
-            _draw_scroll(ax_p, state, "pitch", window_s)
-            if state.last_diag is not None:
-                fig.suptitle(f"# {state.last_diag}", fontsize=9)
-
-        return fig, update
-
-    _animate(lines, state, build, redraw_interval_ms=redraw_interval_ms)
+        timer = fig.canvas.new_timer(interval=scroll_interval_ms)
+        timer.add_callback(view.tick)
+        timer.start()
+        plt.show()
+        timer.stop()
 
 
 def _run_align(
@@ -526,8 +680,16 @@ def _run_align(
         ax = fig.add_subplot(projection="3d")
 
         def update(_frame: int) -> None:
-            _draw_align_panel(ax, state)
-            fig.suptitle(state.alignment_summary(), fontsize=10)
+            try:
+                _draw_align_panel(ax, state)
+            except Exception as exc:
+                import traceback
+
+                traceback.print_exc()
+                state.last_error = f"draw: {exc}"
+            fig.suptitle(
+                f"{state.alignment_summary()}\n{state.status_line()}", fontsize=10
+            )
 
         return fig, update
 
