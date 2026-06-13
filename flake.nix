@@ -39,6 +39,11 @@
         # zstd, glib, fontconfig, freetype, dbus, libxkbcommon, xorg.libX11,
         # libGL: system libs that the PyPI PyQt6 wheel's bundled Qt6 links
         # against transitively (Qt6Core, Qt6Gui, Qt6Widgets).
+        # wayland, xcb-util-cursor: needed by the Qt platform plugins
+        # (libqwayland.so wants libwayland-client.so.0; the xcb fallback wants
+        # libxcb-cursor). These only load when an actual window opens, so the
+        # offscreen GIF path (plot_animate) never needed them -- the live
+        # monitor's interactive QtAgg window is the first thing that does.
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
           pkgs.stdenv.cc.cc.lib
           pkgs.zlib
@@ -50,6 +55,8 @@
           pkgs.libxkbcommon
           pkgs.xorg.libX11
           pkgs.libGL
+          pkgs.wayland
+          pkgs.xcb-util-cursor
         ];
         # compiledb generation and .clangd setup live in
         # scripts/setup-compile-db.sh, called from .envrc with a find-newer

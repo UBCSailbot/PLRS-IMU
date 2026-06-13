@@ -16,6 +16,7 @@ dev = [
     "pyqt6>=6.6",
     "matplotlib-backend-kitty>=2.1",
     "questionary>=2.0",
+    "pyserial>=3.5",
     # Build backend, installed into the venv so the extension builds without
     # isolation (see [tool.uv] below) and editable.rebuild can re-invoke it.
     "scikit-build-core>=0.10",

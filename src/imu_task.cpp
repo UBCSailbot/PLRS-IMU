@@ -78,26 +78,26 @@ static void bring_up(mti::Uart &uart, xbus::Parser &parser) {
   while (true) {
     send(uart, xbus::MID::GoToConfig, {});
     if (!wait_for(uart, parser, xbus::MID::GoToConfigAck, ACK_TIMEOUT_MS)) {
-      Serial.println("IMU: GoToConfig timeout, retrying");
+      Serial.println("# IMU: GoToConfig timeout, retrying");
       vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
       continue;
     }
 
     send(uart, xbus::MID::SetOutputConfig, OUTPUT_CONFIG);
     if (!wait_for(uart, parser, xbus::MID::OutputConfigAck, ACK_TIMEOUT_MS)) {
-      Serial.println("IMU: SetOutputConfig timeout, retrying");
+      Serial.println("# IMU: SetOutputConfig timeout, retrying");
       vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
       continue;
     }
 
     send(uart, xbus::MID::GoToMeasurement, {});
     if (!wait_for(uart, parser, xbus::MID::GoToMeasAck, ACK_TIMEOUT_MS)) {
-      Serial.println("IMU: GoToMeasurement timeout, retrying");
+      Serial.println("# IMU: GoToMeasurement timeout, retrying");
       vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
       continue;
     }
 
-    Serial.println("IMU: ready");
+    Serial.println("# IMU: ready");
     return;
   }
 }
