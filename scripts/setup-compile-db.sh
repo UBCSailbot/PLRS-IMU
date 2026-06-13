@@ -64,7 +64,9 @@ fi
 # Capture pico test files (e.g. test_loopback) the same way: verbose dry-run,
 # parse arm-none-eabi-g++ compile lines for test_main.cpp files.
 if [ -f "$pico" ]; then
-  rm -f .pio/build/pico/test/*/test_main.o
+  # The arduino builder names the object test_main.cpp.o (not test_main.o like
+  # the native env), so removing it forces a recompile and emits the command.
+  rm -f .pio/build/pico/test/*/test_main.cpp.o
   test_log=$(mktemp)
   pio test -e pico --without-uploading --without-testing -vvv \
     > "$test_log" 2>&1 || true
