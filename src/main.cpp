@@ -10,9 +10,11 @@
 #include <SerialPIO.h>
 #include <task.h>
 
-static SerialPIO output_serial(OUTPUT_UART_TX_PIN, OUTPUT_UART_RX_PIN);
-
 void setup() {
+  Serial.begin(115200); // required to bring up USB CDC (ttyACM0)
+
+  static SerialPIO output_serial(OUTPUT_UART_TX_PIN, OUTPUT_UART_RX_PIN);
+
   Serial1.setTX(GNSS_UART_TX_PIN);
   Serial1.setRX(GNSS_UART_RX_PIN);
   Serial1.begin(GNSS_UART_BAUD);
@@ -63,6 +65,12 @@ void setup() {
               &fusion_params,
               FUSION_TASK_PRIORITY,
               nullptr);
+  // xTaskCreate(fusion_task::task,
+  //             "fusion",
+  //             FUSION_TASK_STACK_SIZE,
+  //             &fusion_params,
+  //             FUSION_TASK_PRIORITY,
+  //             nullptr);
 }
 
 void loop() {
