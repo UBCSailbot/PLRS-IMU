@@ -72,7 +72,7 @@ def plot_trace(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=96, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight", pil_kwargs={"optimize": True})
     if show:
         plt.show()
     plt.close(fig)
@@ -134,7 +134,7 @@ def plot_pose(
     fig.tight_layout()
 
     if save is not None:
-        fig.savefig(save, dpi=96, bbox_inches="tight")
+        fig.savefig(save, dpi=96, bbox_inches="tight", pil_kwargs={"optimize": True})
     if show:
         plt.show()
     plt.close(fig)
@@ -253,7 +253,7 @@ def plot_animate(
             _write_gif(save)
         elif str(save).endswith(".png"):
             draw_frame(indices[-1])
-            fig.savefig(save, dpi=96, bbox_inches="tight")
+            fig.savefig(save, dpi=96, bbox_inches="tight", pil_kwargs={"optimize": True})
         else:
             from matplotlib.animation import FFMpegWriter
 

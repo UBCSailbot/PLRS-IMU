@@ -19,7 +19,7 @@ import contextlib
 import math
 import time
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
@@ -266,7 +266,7 @@ def serial_lines(port: str, baud: int = 115200) -> Iterator[str]:
         ser.close()
 
 
-def _tee(lines: Iterable[str], sink: TextIO | None) -> Iterator[str]:
+def _tee(lines: Iterable[str], sink: TextIO | None) -> Generator[str, None, None]:
     """Write each raw line to sink (one normalized line) and pass it through."""
     for line in lines:
         if sink is not None:
@@ -383,7 +383,7 @@ def _draw_scroll(ax, state: MonitorState, which: str, window_s: float) -> None:
 
 
 def _run_live(
-    lines: Iterable[str],
+    lines: Generator[str, None, None],
     state: MonitorState,
     *,
     redraw_interval_ms: int = 80,
@@ -431,6 +431,11 @@ def _run_live(
         fig, update, interval=redraw_interval_ms, cache_frame_data=False
     )
     plt.show()
+
+    # Close the source so the drain thread exits and the generator chain
+    # (including C++ objects) is freed before interpreter shutdown.
+    lines.close()
+    reader.join(timeout=1.0)
 
 
 def pace(
