@@ -16,7 +16,7 @@ constexpr uint16_t ATT_MODE_HEADING_PITCH = 2;
 
 sbf::AttEuler make_att(float heading_deg,
                        uint16_t mode = ATT_MODE_HEADING_PITCH) {
-  sbf::AttEuler att{};
+  sbf::AttEuler att {};
   att.tow = 1000;
   att.mode = mode;
   att.heading = heading_deg;
@@ -26,7 +26,7 @@ sbf::AttEuler make_att(float heading_deg,
 }
 
 sbf::AttCovEuler make_cov(float heading_variance_deg2) {
-  sbf::AttCovEuler cov{};
+  sbf::AttCovEuler cov {};
   cov.cov_headhead = heading_variance_deg2;
   return cov;
 }
@@ -42,7 +42,7 @@ void test_bridge_passes_heading_and_variance_through() {
 }
 
 void test_bridge_subtracts_baseline_offset() {
-  const GnssAttitudeMount mount{.baseline_offset_deg = 20.0f};
+  const GnssAttitudeMount mount {.baseline_offset_deg = 20.0f};
   const GnssSample s =
       att_euler_to_gnss_sample(make_att(50.0f), make_cov(4.0f), mount);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 30.0f, s.heading_deg);
@@ -50,7 +50,7 @@ void test_bridge_subtracts_baseline_offset() {
 
 void test_bridge_wraps_heading_into_plus_minus_180() {
   // 350 deg baseline, 20 deg offset -> 330 boat -> wraps to -30.
-  const GnssAttitudeMount mount{.baseline_offset_deg = 20.0f};
+  const GnssAttitudeMount mount {.baseline_offset_deg = 20.0f};
   const GnssSample s =
       att_euler_to_gnss_sample(make_att(350.0f), make_cov(4.0f), mount);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -30.0f, s.heading_deg);
@@ -69,7 +69,7 @@ void test_bridge_no_attitude_mode_is_invalid() {
 }
 
 void test_bridge_dnu_covariance_uses_fallback() {
-  const GnssAttitudeMount mount{.fallback_heading_variance_deg2 = 9.0f};
+  const GnssAttitudeMount mount {.fallback_heading_variance_deg2 = 9.0f};
   const GnssSample s =
       att_euler_to_gnss_sample(make_att(45.0f), make_cov(sbf::DNU_F4), mount);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 9.0f, s.heading_variance_deg2);

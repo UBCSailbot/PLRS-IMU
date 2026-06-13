@@ -20,7 +20,7 @@ namespace {
 
 static_assert(FusionFilter<TinyEkfFilter>);
 
-constexpr TinyEkfFilter::Config kTestConfig{
+constexpr TinyEkfFilter::Config kTestConfig {
     .q_heading_deg2 = 0.01f,
     .q_roll_deg2 = 0.01f,
     .q_pitch_deg2 = 0.01f,
@@ -34,17 +34,17 @@ constexpr TinyEkfFilter::Config kTestConfig{
 };
 
 ImuSample make_imu(float rate_z_rad_s, Ms t) {
-  return ImuSample{
-      .angular_velocity_rad_s = plrs::Vec3{0.0f, 0.0f, rate_z_rad_s},
-      .accel_ms2 = plrs::Vec3{0.0f, 0.0f, GRAVITY_MS2},
+  return ImuSample {
+      .angular_velocity_rad_s = plrs::Vec3 {0.0f, 0.0f, rate_z_rad_s},
+      .accel_ms2 = plrs::Vec3 {0.0f, 0.0f, GRAVITY_MS2},
       .timestamp = t,
   };
 }
 
 ImuSample make_imu_with(plrs::Vec3 omega, UnitQuaternion orientation, Ms t) {
-  return ImuSample{
+  return ImuSample {
       .angular_velocity_rad_s = omega,
-      .accel_ms2 = plrs::Vec3{0.0f, 0.0f, GRAVITY_MS2},
+      .accel_ms2 = plrs::Vec3 {0.0f, 0.0f, GRAVITY_MS2},
       .orientation = orientation,
       .timestamp = t,
   };
@@ -54,22 +54,22 @@ UnitQuaternion axis_angle(float ax, float ay, float az, float angle_rad) {
   const float half = angle_rad * 0.5f;
   const float s = std::sin(half);
   return UnitQuaternion::from_raw(
-             plrs::Quaternion{std::cos(half), ax * s, ay * s, az * s})
+             plrs::Quaternion {std::cos(half), ax * s, ay * s, az * s})
       .value();
 }
 
 ImuSample make_heeled_imu(float rate_z_rad_s, float heel_rad, Ms t) {
-  return ImuSample{
-      .angular_velocity_rad_s = plrs::Vec3{0.0f, 0.0f, rate_z_rad_s},
-      .accel_ms2 = plrs::Vec3{0.0f, 0.0f, GRAVITY_MS2},
+  return ImuSample {
+      .angular_velocity_rad_s = plrs::Vec3 {0.0f, 0.0f, rate_z_rad_s},
+      .accel_ms2 = plrs::Vec3 {0.0f, 0.0f, GRAVITY_MS2},
       .orientation = axis_angle(1.0f, 0.0f, 0.0f, heel_rad),
       .timestamp = t,
   };
 }
 
-GnssSample make_gnss(float heading_deg, float variance_deg2, Ms t,
-                     bool valid = true) {
-  return GnssSample{
+GnssSample
+make_gnss(float heading_deg, float variance_deg2, Ms t, bool valid = true) {
+  return GnssSample {
       .heading_deg = heading_deg,
       .heading_variance_deg2 = variance_deg2,
       .timestamp = t,
@@ -101,7 +101,7 @@ void test_initial_state_uninitialized() {
 /** @brief Invalid GnssSample is a no-op; filter stays uninitialized. */
 void test_invalid_gnss_is_noop() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(45.0f, 1.0f, Ms{1000}, false));
+  f.update(make_gnss(45.0f, 1.0f, Ms {1000}, false));
   auto out = f.output();
   TEST_ASSERT_EQUAL_FLOAT(FLT_MAX, out.heading_variance_deg2);
   TEST_ASSERT_EQUAL_FLOAT(0.0f, out.heading_deg);
@@ -113,7 +113,7 @@ void test_invalid_gnss_is_noop() {
  * P[IDX_HEADING][IDX_HEADING] is unchanged from its constructor-set value. */
 void test_first_valid_gnss_seeds_heading() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(45.0f, 1.0f, Ms{1000}));
+  f.update(make_gnss(45.0f, 1.0f, Ms {1000}));
   auto out = f.output();
   TEST_ASSERT_EQUAL_FLOAT(45.0f, out.heading_deg);
   TEST_ASSERT_EQUAL_FLOAT(1000.0f, out.heading_variance_deg2);
@@ -122,10 +122,10 @@ void test_first_valid_gnss_seeds_heading() {
 /** @brief A tight GNSS update pulls heading strongly toward the measurement. */
 void test_update_pulls_toward_measurement() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(0.0f, 1.0f, Ms{1000}));    // seed at 0
-  f.predict(make_imu(0.0f, Ms{1000}));          // baseline
-  f.predict(make_imu(0.0f, Ms{5000}));          // grow P over 4 s
-  f.update(make_gnss(45.0f, 0.001f, Ms{5000})); // very tight R
+  f.update(make_gnss(0.0f, 1.0f, Ms {1000}));    // seed at 0
+  f.predict(make_imu(0.0f, Ms {1000}));          // baseline
+  f.predict(make_imu(0.0f, Ms {5000}));          // grow P over 4 s
+  f.update(make_gnss(45.0f, 0.001f, Ms {5000})); // very tight R
   auto out = f.output();
   TEST_ASSERT_FLOAT_WITHIN(1.0f, 45.0f, out.heading_deg);
 }
@@ -133,11 +133,11 @@ void test_update_pulls_toward_measurement() {
 /** @brief A measurement update shrinks the heading variance. */
 void test_update_shrinks_variance() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(0.0f, 1.0f, Ms{1000}));
-  f.predict(make_imu(0.0f, Ms{1000})); // baseline
-  f.predict(make_imu(0.0f, Ms{2000})); // grow P by Q
+  f.update(make_gnss(0.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu(0.0f, Ms {1000})); // baseline
+  f.predict(make_imu(0.0f, Ms {2000})); // grow P by Q
   auto before = f.output().heading_variance_deg2;
-  f.update(make_gnss(0.0f, 0.1f, Ms{2000}));
+  f.update(make_gnss(0.0f, 0.1f, Ms {2000}));
   auto after = f.output().heading_variance_deg2;
   TEST_ASSERT_TRUE(after < before);
 }
@@ -149,8 +149,8 @@ void test_update_shrinks_variance() {
 /** @brief First predict() sets the timestamp baseline; no state advance. */
 void test_first_predict_baseline_only() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(45.0f, 1.0f, Ms{1000}));
-  f.predict(make_imu(1.0f, Ms{2000})); // 1 rad/s but first predict call
+  f.update(make_gnss(45.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu(1.0f, Ms {2000})); // 1 rad/s but first predict call
   auto out = f.output();
   TEST_ASSERT_EQUAL_FLOAT(45.0f, out.heading_deg);
 }
@@ -158,9 +158,9 @@ void test_first_predict_baseline_only() {
 /** @brief Gyro_z integrates into heading: 0.5 rad/s for 1 s ~= 28.6479 deg. */
 void test_predict_integrates_gyro() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(0.0f, 1.0f, Ms{1000}));
-  f.predict(make_imu(0.0f, Ms{1000})); // baseline
-  f.predict(make_imu(0.5f, Ms{2000})); // 0.5 rad/s * 1 s
+  f.update(make_gnss(0.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu(0.0f, Ms {1000})); // baseline
+  f.predict(make_imu(0.5f, Ms {2000})); // 0.5 rad/s * 1 s
   auto out = f.output();
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 28.6479f, out.heading_deg);
 }
@@ -168,10 +168,10 @@ void test_predict_integrates_gyro() {
 /** @brief A predict step grows the heading variance (process noise added). */
 void test_predict_grows_variance() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(0.0f, 1.0f, Ms{1000}));
-  f.predict(make_imu(0.0f, Ms{1000})); // baseline
+  f.update(make_gnss(0.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu(0.0f, Ms {1000})); // baseline
   auto before = f.output().heading_variance_deg2;
-  f.predict(make_imu(0.0f, Ms{2000}));
+  f.predict(make_imu(0.0f, Ms {2000}));
   auto after = f.output().heading_variance_deg2;
   TEST_ASSERT_TRUE(after > before);
 }
@@ -191,12 +191,12 @@ void test_predict_heeled_flat_turn_tracks_world_yaw() {
   TinyEkfFilter f(kTestConfig);
   const float heel_rad = 30.0f * DEG_TO_RAD;
   const float yaw_rate = 1.0f; // rad/s, world frame
-  const plrs::Vec3 omega{0.0f, yaw_rate * std::sin(heel_rad),
-                         yaw_rate * std::cos(heel_rad)};
+  const plrs::Vec3 omega {
+      0.0f, yaw_rate * std::sin(heel_rad), yaw_rate * std::cos(heel_rad)};
   const UnitQuaternion heel = axis_angle(1.0f, 0.0f, 0.0f, heel_rad);
-  f.update(make_gnss(0.0f, 1.0f, Ms{1000}));
-  f.predict(make_imu_with(omega, heel, Ms{1000})); // baseline
-  f.predict(make_imu_with(omega, heel, Ms{2000})); // 1 s of turn
+  f.update(make_gnss(0.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu_with(omega, heel, Ms {1000})); // baseline
+  f.predict(make_imu_with(omega, heel, Ms {2000})); // 1 s of turn
   auto out = f.output();
   TEST_ASSERT_FLOAT_WITHIN(0.05f, yaw_rate * RAD_TO_DEG, out.heading_deg);
   TEST_ASSERT_FLOAT_WITHIN(0.05f, 30.0f, out.roll_deg);
@@ -207,7 +207,7 @@ void test_predict_heeled_flat_turn_tracks_world_yaw() {
 void test_output_exposes_roll_from_orientation() {
   TinyEkfFilter f(kTestConfig);
   const float heel_rad = 20.0f * DEG_TO_RAD;
-  f.predict(make_heeled_imu(0.0f, heel_rad, Ms{1000}));
+  f.predict(make_heeled_imu(0.0f, heel_rad, Ms {1000}));
   auto out = f.output();
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.0f, out.roll_deg);
 }
@@ -217,7 +217,7 @@ void test_output_applies_mount_rotation() {
   TinyEkfFilter::Config cfg = kTestConfig;
   cfg.mount.boat_to_imu = axis_angle(1.0f, 0.0f, 0.0f, 10.0f * DEG_TO_RAD);
   TinyEkfFilter f(cfg);
-  f.predict(make_imu(0.0f, Ms{1000}));
+  f.predict(make_imu(0.0f, Ms {1000}));
   auto out = f.output();
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, out.roll_deg);
 }
@@ -237,7 +237,7 @@ void test_attitude_variance_uninitialized() {
 /** @brief After the seeding predict, roll/pitch variance is finite. */
 void test_attitude_variance_finite_after_predict() {
   TinyEkfFilter f(kTestConfig);
-  f.predict(make_heeled_imu(0.0f, 15.0f * DEG_TO_RAD, Ms{1000}));
+  f.predict(make_heeled_imu(0.0f, 15.0f * DEG_TO_RAD, Ms {1000}));
   auto out = f.output();
   TEST_ASSERT_TRUE(out.roll_variance_deg2 < FLT_MAX);
   TEST_ASSERT_TRUE(out.pitch_variance_deg2 < FLT_MAX);
@@ -248,10 +248,10 @@ void test_attitude_variance_finite_after_predict() {
 void test_mti_corrects_roll_and_shrinks_variance() {
   TinyEkfFilter f(kTestConfig);
   const float heel_rad = 25.0f * DEG_TO_RAD;
-  f.predict(make_heeled_imu(0.0f, heel_rad, Ms{1000})); // seed roll = 25
+  f.predict(make_heeled_imu(0.0f, heel_rad, Ms {1000})); // seed roll = 25
   const float seeded_var = f.output().roll_variance_deg2;
   for (int i = 2; i <= 20; i++) {
-    f.predict(make_heeled_imu(0.0f, heel_rad, Ms{1000 * i}));
+    f.predict(make_heeled_imu(0.0f, heel_rad, Ms {1000 * i}));
   }
   auto out = f.output();
   TEST_ASSERT_FLOAT_WITHIN(0.5f, 25.0f, out.roll_deg);
@@ -263,10 +263,10 @@ void test_mti_corrects_roll_and_shrinks_variance() {
  */
 void test_gnss_update_wraps_across_seam() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(179.0f, 1.0f, Ms{1000}));
-  f.predict(make_imu(0.0f, Ms{1000}));
-  f.predict(make_imu(0.0f, Ms{2000}));
-  f.update(make_gnss(-179.0f, 0.001f, Ms{2000}));
+  f.update(make_gnss(179.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu(0.0f, Ms {1000}));
+  f.predict(make_imu(0.0f, Ms {2000}));
+  f.update(make_gnss(-179.0f, 0.001f, Ms {2000}));
   auto out = f.output();
   TEST_ASSERT_FLOAT_WITHIN(1.0f, 0.0f, wrap180(out.heading_deg - (-179.0f)));
 }
@@ -274,9 +274,9 @@ void test_gnss_update_wraps_across_seam() {
 /** @brief Heading stays wrapped to (-180, 180] after integrating past 180. */
 void test_predict_wraps_heading_past_180() {
   TinyEkfFilter f(kTestConfig);
-  f.update(make_gnss(170.0f, 1.0f, Ms{1000}));
-  f.predict(make_imu(0.0f, Ms{1000}));
-  f.predict(make_imu(0.5f, Ms{2000})); // +28.6 deg -> 198.6 -> wraps to -161.4
+  f.update(make_gnss(170.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu(0.0f, Ms {1000}));
+  f.predict(make_imu(0.5f, Ms {2000})); // +28.6 deg -> 198.6 -> wraps to -161.4
   auto out = f.output();
   TEST_ASSERT_TRUE(out.heading_deg <= 180.0f && out.heading_deg > -180.0f);
   TEST_ASSERT_FLOAT_WITHIN(0.1f, -161.35f, out.heading_deg);

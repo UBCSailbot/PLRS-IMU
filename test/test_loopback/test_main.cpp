@@ -58,7 +58,8 @@ void test_xbus_loopback_goto_config() {
 
   mti::Uart uart(Serial1);
   auto result = loopback_roundtrip(uart, encoded->view());
-  TEST_ASSERT_TRUE_MESSAGE(result.has_value(), "Timeout: no packet on loopback");
+  TEST_ASSERT_TRUE_MESSAGE(result.has_value(),
+                           "Timeout: no packet on loopback");
   TEST_ASSERT_EQUAL(xbus::MID::GoToConfig, result->mid);
 }
 
@@ -68,11 +69,12 @@ void test_xbus_loopback_goto_config() {
  *        multi-byte frame than the bare command above.
  */
 void test_xbus_loopback_mtdata2_quaternion() {
-  const plrs::Quaternion sent {.w = 0.7071f, .x = 0.0f, .y = 0.7071f, .z = 0.0f};
+  const plrs::Quaternion sent {
+      .w = 0.7071f, .x = 0.0f, .y = 0.7071f, .z = 0.0f};
 
   std::array<uint8_t, xbus::SUBPACKET_HEADER + xbus::QUATERNION_BYTES> sub {};
-  auto id =
-      xbus::write_u16_big_endian(static_cast<uint16_t>(xbus::DataId::Quaternion));
+  auto id = xbus::write_u16_big_endian(
+      static_cast<uint16_t>(xbus::DataId::Quaternion));
   sub[0] = id[0];
   sub[1] = id[1];
   sub[2] = xbus::QUATERNION_BYTES;
@@ -95,7 +97,8 @@ void test_xbus_loopback_mtdata2_quaternion() {
 
   mti::Uart uart(Serial1);
   auto result = loopback_roundtrip(uart, encoded->view());
-  TEST_ASSERT_TRUE_MESSAGE(result.has_value(), "Timeout: no packet on loopback");
+  TEST_ASSERT_TRUE_MESSAGE(result.has_value(),
+                           "Timeout: no packet on loopback");
   TEST_ASSERT_EQUAL(xbus::MID::MTData2, result->mid);
 
   auto got = xbus::read_quaternion(*result);

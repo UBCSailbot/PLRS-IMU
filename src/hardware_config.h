@@ -38,4 +38,3 @@ static constexpr uint32_t IMU_UART_RX_PIN = 5;
 static constexpr uint32_t OUTPUT_UART_BAUD = 115200;
 static constexpr uint32_t OUTPUT_UART_TX_PIN = 20;
 static constexpr uint32_t OUTPUT_UART_RX_PIN = 19;
-

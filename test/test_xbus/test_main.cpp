@@ -29,14 +29,14 @@ static_assert(kGoToConfig->bytes[3] == 0x00); // len = 0
 static_assert(kGoToConfig->bytes[4] == 0xD1); // checksum
 
 // Oversize payloads are also rejected at compile time.
-constexpr std::array<uint8_t, MAX_PAYLOAD + 1> kBig{};
+constexpr std::array<uint8_t, MAX_PAYLOAD + 1> kBig {};
 constexpr auto kOversize =
     Packet::command(MID::SetOutputConfig, ByteSpan(kBig.data(), kBig.size()));
 static_assert(!kOversize.has_value());
 
 // Feed all bytes in a span into the parser at a fixed timestamp. Returns the
 // result from the final byte (the only one that can carry a complete packet).
-std::optional<Packet> feed_frame(Parser &p, ByteSpan frame, Ms t = Ms{0}) {
+std::optional<Packet> feed_frame(Parser &p, ByteSpan frame, Ms t = Ms {0}) {
   std::optional<Packet> result;
   for (uint8_t b : frame)
     result = p.feed(b, t);
@@ -66,7 +66,8 @@ void test_checksum_gotoconfig() {
 /** @brief Checksum accumulates payload bytes; receiver invariant holds. */
 void test_checksum_with_payload() {
   const uint8_t payload[] = {0x20, 0x10, 0x00, 0x64};
-  uint8_t chk = checksum(0xFF, static_cast<uint8_t>(MID::SetOutputConfig),
+  uint8_t chk = checksum(0xFF,
+                         static_cast<uint8_t>(MID::SetOutputConfig),
                          ByteSpan(payload, sizeof payload));
   TEST_ASSERT_EQUAL_HEX8(0xA9, chk);
 
@@ -111,7 +112,7 @@ void test_command_custom_bid() {
 
 /** @brief Exactly MAX_PAYLOAD bytes is accepted (boundary). */
 void test_command_accepts_max_payload() {
-  std::array<uint8_t, MAX_PAYLOAD> payload{};
+  std::array<uint8_t, MAX_PAYLOAD> payload {};
   auto result = Packet::command(MID::SetOutputConfig,
                                 ByteSpan(payload.data(), payload.size()));
   TEST_ASSERT_TRUE(result.has_value());
@@ -121,7 +122,7 @@ void test_command_accepts_max_payload() {
 /** @brief MAX_PAYLOAD + 1 bytes is rejected; extended-length frames are out of
  * scope. */
 void test_command_rejects_oversize() {
-  std::array<uint8_t, MAX_PAYLOAD + 1> payload{};
+  std::array<uint8_t, MAX_PAYLOAD + 1> payload {};
   auto result = Packet::command(MID::SetOutputConfig,
                                 ByteSpan(payload.data(), payload.size()));
   TEST_ASSERT_FALSE(result.has_value());
@@ -148,8 +149,8 @@ void test_encode_with_payload_bytes() {
       Packet::command(MID::SetOutputConfig, ByteSpan(payload, sizeof payload))
           .value());
   TEST_ASSERT_TRUE(enc.has_value());
-  const uint8_t expected[] = {0xFA, 0xFF, 0xC0, 0x04, 0x20,
-                              0x10, 0x00, 0x64, 0xA9};
+  const uint8_t expected[] = {
+      0xFA, 0xFF, 0xC0, 0x04, 0x20, 0x10, 0x00, 0x64, 0xA9};
   TEST_ASSERT_EQUAL_size_t(sizeof expected, enc->len);
   TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, enc->bytes.data(), sizeof expected);
 }
@@ -222,8 +223,8 @@ void test_parse_clean_frame() {
 void test_parse_with_payload() {
   Parser p;
   // SetOutputConfig, Quaternion@100Hz: FA FF C0 04 20 10 00 64 A9
-  const uint8_t frame[] = {0xFA, 0xFF, 0xC0, 0x04, 0x20,
-                           0x10, 0x00, 0x64, 0xA9};
+  const uint8_t frame[] = {
+      0xFA, 0xFF, 0xC0, 0x04, 0x20, 0x10, 0x00, 0x64, 0xA9};
   auto pkt = feed_frame(p, frame);
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT(pkt->mid == MID::SetOutputConfig);
@@ -250,7 +251,7 @@ void test_junk_before_frame_ignored() {
   Parser p;
   const uint8_t junk[] = {0x00, 0x01, 0x02};
   for (uint8_t b : junk)
-    TEST_ASSERT_FALSE(p.feed(b, Ms{0}).has_value());
+    TEST_ASSERT_FALSE(p.feed(b, Ms {0}).has_value());
 
   const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
   auto pkt = feed_frame(p, frame);
@@ -263,18 +264,18 @@ void test_junk_before_frame_ignored() {
 void test_timeout_drops_stalled_frame() {
   Parser p;
   // Feed preamble + bid + mid at t=0; parser is mid-frame in Len state.
-  p.feed(0xFA, Ms{0});
-  p.feed(0xFF, Ms{0});
-  p.feed(0x30, Ms{0});
+  p.feed(0xFA, Ms {0});
+  p.feed(0xFF, Ms {0});
+  p.feed(0x30, Ms {0});
   TEST_ASSERT_TRUE(p.mid_frame());
 
   // 60ms > FRAME_TIMEOUT(50ms): the 0xFA triggers a reset then starts a new
   // frame.
-  p.feed(0xFA, Ms{60});
-  p.feed(0xFF, Ms{60});
-  p.feed(0x30, Ms{60});
-  p.feed(0x00, Ms{60});
-  auto pkt = p.feed(0xD1, Ms{60});
+  p.feed(0xFA, Ms {60});
+  p.feed(0xFF, Ms {60});
+  p.feed(0x30, Ms {60});
+  p.feed(0x00, Ms {60});
+  auto pkt = p.feed(0xD1, Ms {60});
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT(pkt->mid == MID::GoToConfig);
 }
@@ -286,7 +287,7 @@ void test_no_false_timeout() {
   const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
   std::optional<Packet> pkt;
   for (std::size_t i = 0; i < sizeof frame; ++i)
-    pkt = p.feed(frame[i], Ms{static_cast<long long>(i * 40)});
+    pkt = p.feed(frame[i], Ms {static_cast<long long>(i * 40)});
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT(pkt->mid == MID::GoToConfig);
 }
@@ -295,12 +296,12 @@ void test_no_false_timeout() {
  */
 void test_extended_length_rejected() {
   Parser p;
-  p.feed(0xFA, Ms{0});
-  p.feed(0xFF, Ms{0});
-  p.feed(0x36, Ms{0}); // MTData2
+  p.feed(0xFA, Ms {0});
+  p.feed(0xFF, Ms {0});
+  p.feed(0x36, Ms {0}); // MTData2
   TEST_ASSERT_TRUE(p.mid_frame());
 
-  p.feed(0xFF, Ms{0}); // LEN_EXTENDED triggers reset
+  p.feed(0xFF, Ms {0}); // LEN_EXTENDED triggers reset
   TEST_ASSERT_FALSE(p.mid_frame());
 
   const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
@@ -311,12 +312,20 @@ void test_extended_length_rejected() {
 void test_back_to_back_frames() {
   Parser p;
   const uint8_t two_frames[] = {
-      0xFA, 0xFF, 0x30, 0x00, 0xD1, // GoToConfig
-      0xFA, 0xFF, 0x30, 0x00, 0xD1, // GoToConfig again
+      0xFA,
+      0xFF,
+      0x30,
+      0x00,
+      0xD1, // GoToConfig
+      0xFA,
+      0xFF,
+      0x30,
+      0x00,
+      0xD1, // GoToConfig again
   };
   int count = 0;
   for (uint8_t b : two_frames)
-    if (p.feed(b, Ms{0}).has_value())
+    if (p.feed(b, Ms {0}).has_value())
       ++count;
   TEST_ASSERT_EQUAL(2, count);
 }
@@ -337,7 +346,7 @@ void test_encode_roundtrip_via_parser() {
   Parser p;
   std::optional<Packet> got;
   for (std::size_t i = 0; i < enc->len; ++i)
-    got = p.feed(enc->bytes[i], Ms{0});
+    got = p.feed(enc->bytes[i], Ms {0});
 
   TEST_ASSERT_TRUE(got.has_value());
   TEST_ASSERT(got->mid == MID::SetOutputConfig);
@@ -350,10 +359,10 @@ void test_no_timeout_when_under_threshold() {
   Parser p;
   const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
   std::optional<Packet> pkt;
-  Ms t{0};
+  Ms t {0};
   for (uint8_t b : frame) {
     pkt = p.feed(b, t);
-    t += Parser::FRAME_TIMEOUT - Ms{1};
+    t += Parser::FRAME_TIMEOUT - Ms {1};
   }
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT(pkt->mid == MID::GoToConfig);
@@ -365,10 +374,10 @@ void test_idle_gap_then_frame_ok() {
   Parser p;
   const uint8_t frame[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
   std::optional<Packet> pkt;
-  Ms t{10'000'000};
+  Ms t {10'000'000};
   for (uint8_t b : frame) {
     pkt = p.feed(b, t);
-    t += Ms{1};
+    t += Ms {1};
   }
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT(pkt->mid == MID::GoToConfig);
@@ -385,7 +394,7 @@ void test_corrupted_len_resyncs_but_only_slowly_without_timeout() {
   frame[3] = 200; // corrupt LEN: 2 -> 200
 
   for (uint8_t b : frame)
-    p.feed(b, Ms{0}); // fixed timestamp — timeout never fires
+    p.feed(b, Ms {0}); // fixed timestamp — timeout never fires
 
   bool recovered = false;
   int frames_needed = 0;
@@ -393,7 +402,7 @@ void test_corrupted_len_resyncs_but_only_slowly_without_timeout() {
     auto good = xtest::make_frame(MID::GoToConfigAck, {});
     ++frames_needed;
     for (uint8_t b : good) {
-      if (p.feed(b, Ms{0}).has_value()) {
+      if (p.feed(b, Ms {0}).has_value()) {
         recovered = true;
         break;
       }
@@ -410,15 +419,15 @@ void test_corrupted_len_recovers_immediately_with_timeout() {
   auto frame = xtest::make_frame(MID::GoToConfigAck, {0x01, 0x02});
   frame[3] = 200; // corrupt LEN
   for (uint8_t b : frame)
-    p.feed(b, Ms{0});
+    p.feed(b, Ms {0});
   TEST_ASSERT_TRUE(p.mid_frame());
 
   const uint8_t good[] = {0xFA, 0xFF, 0x30, 0x00, 0xD1};
-  Ms t = Parser::FRAME_TIMEOUT + Ms{1};
+  Ms t = Parser::FRAME_TIMEOUT + Ms {1};
   std::optional<Packet> got;
   for (uint8_t b : good) {
     got = p.feed(b, t);
-    t += Ms{1};
+    t += Ms {1};
   }
   TEST_ASSERT_TRUE(got.has_value());
   TEST_ASSERT(got->mid == MID::GoToConfig);
@@ -453,14 +462,14 @@ void test_mtdata2_quaternion_extraction() {
   auto found = find_data(*pkt, DataId::Quaternion);
   TEST_ASSERT_TRUE(found.has_value());
   TEST_ASSERT_EQUAL_size_t(16, found->bytes.size());
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qw,
-                           read_f32_big_endian(found->bytes.subspan(0)));
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qx,
-                           read_f32_big_endian(found->bytes.subspan(4)));
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qy,
-                           read_f32_big_endian(found->bytes.subspan(8)));
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, qz,
-                           read_f32_big_endian(found->bytes.subspan(12)));
+  TEST_ASSERT_FLOAT_WITHIN(
+      1e-6f, qw, read_f32_big_endian(found->bytes.subspan(0)));
+  TEST_ASSERT_FLOAT_WITHIN(
+      1e-6f, qx, read_f32_big_endian(found->bytes.subspan(4)));
+  TEST_ASSERT_FLOAT_WITHIN(
+      1e-6f, qy, read_f32_big_endian(found->bytes.subspan(8)));
+  TEST_ASSERT_FLOAT_WITHIN(
+      1e-6f, qz, read_f32_big_endian(found->bytes.subspan(12)));
 
   TEST_ASSERT_FALSE(find_data(*pkt, DataId::MagneticField).has_value());
 }
@@ -488,8 +497,8 @@ void test_find_data_found() {
 
 /** @brief Non-matching DataId returns nullopt. */
 void test_find_data_not_found() {
-  const uint8_t raw[] = {0x20, 0x10, 0x04, 0x3F,
-                         0x80, 0x00, 0x00}; // Quaternion only
+  const uint8_t raw[] = {
+      0x20, 0x10, 0x04, 0x3F, 0x80, 0x00, 0x00}; // Quaternion only
   Packet p;
   p.mid = MID::MTData2;
   p.len = sizeof raw;
@@ -514,7 +523,7 @@ void test_find_data_truncated_safe() {
 
 /** @brief read_quaternion round-trips known w/x/y/z floats. */
 void test_read_quaternion_roundtrip() {
-  const plrs::Quaternion expected{0.7071f, 0.0f, 0.7071f, 0.0f};
+  const plrs::Quaternion expected {0.7071f, 0.0f, 0.7071f, 0.0f};
   std::vector<uint8_t> qbytes;
   for (float v : {expected.w, expected.x, expected.y, expected.z}) {
     auto fb = xtest::be_float(v);
@@ -559,8 +568,20 @@ void test_read_quaternion_wrong_length() {
 /** @brief With multiple sub-packets, the correct one is found by DataId. */
 void test_find_data_multiple_subpackets() {
   const uint8_t raw[] = {
-      0x20, 0x10, 0x04, 0x3F, 0x80, 0x00, 0x00, // Quaternion: 1.0f
-      0x40, 0x20, 0x04, 0x40, 0x00, 0x00, 0x00, // Acceleration: 2.0f
+      0x20,
+      0x10,
+      0x04,
+      0x3F,
+      0x80,
+      0x00,
+      0x00, // Quaternion: 1.0f
+      0x40,
+      0x20,
+      0x04,
+      0x40,
+      0x00,
+      0x00,
+      0x00, // Acceleration: 2.0f
   };
   Packet p;
   p.mid = MID::MTData2;
@@ -610,9 +631,18 @@ void test_build_output_config_multiple_items() {
   }};
   constexpr auto payload = build_output_config(items);
   const uint8_t expected[] = {
-      0x20, 0x10, 0x00, 0x64, // Quaternion @ 100Hz
-      0x40, 0x30, 0x00, 0x64, // FreeAccel @ 100Hz
-      0xE0, 0x20, 0x00, 0x01, // StatusWord @ 1Hz
+      0x20,
+      0x10,
+      0x00,
+      0x64, // Quaternion @ 100Hz
+      0x40,
+      0x30,
+      0x00,
+      0x64, // FreeAccel @ 100Hz
+      0xE0,
+      0x20,
+      0x00,
+      0x01, // StatusWord @ 1Hz
   };
   TEST_ASSERT_EQUAL_size_t(sizeof expected, payload.size());
   TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, payload.data(), payload.size());
@@ -629,8 +659,8 @@ void test_build_output_config_round_trips_through_encode() {
   TEST_ASSERT_TRUE(pkt.has_value());
   auto enc = encode(*pkt);
   TEST_ASSERT_TRUE(enc.has_value());
-  const uint8_t expected[] = {0xFA, 0xFF, 0xC0, 0x04, 0x20,
-                              0x10, 0x00, 0x64, 0xA9};
+  const uint8_t expected[] = {
+      0xFA, 0xFF, 0xC0, 0x04, 0x20, 0x10, 0x00, 0x64, 0xA9};
   TEST_ASSERT_EQUAL_size_t(sizeof expected, enc->len);
   TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, enc->bytes.data(), sizeof expected);
 }

@@ -62,10 +62,10 @@ inline GnssSample att_euler_to_gnss_sample(const sbf::AttEuler &att,
   const float variance = cov.cov_headhead != sbf::DNU_F4
                              ? cov.cov_headhead
                              : mount.fallback_heading_variance_deg2;
-  return GnssSample{
+  return GnssSample {
       .heading_deg = wrap180(att.heading - mount.baseline_offset_deg),
       .heading_variance_deg2 = variance,
-      .timestamp = Ms{att.tow},
+      .timestamp = Ms {att.tow},
       .valid = has_heading,
   };
 }

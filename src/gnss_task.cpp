@@ -1,10 +1,10 @@
 #ifdef ARDUINO
 #include "gnss_task.h"
+#include "command.h"
 #include "gnss_bridge.h"
 #include "hardware_config.h"
 #include "sbf_blocks.h"
 #include "stack_check.h"
-#include "command.h"
 
 #include <Arduino.h>
 #include <FreeRTOS.h>
@@ -33,10 +33,10 @@ static std::chrono::milliseconds now() {
  *
  * @return The reply, or nullopt on timeout.
  */
-static std::optional<septentrio_gnss::Reply> wait_for_reply(
-    septentrio_gnss::Uart &uart,
-    septentrio_gnss::Parser &parser,
-    uint32_t timeout_ms) {
+static std::optional<septentrio_gnss::Reply>
+wait_for_reply(septentrio_gnss::Uart &uart,
+               septentrio_gnss::Parser &parser,
+               uint32_t timeout_ms) {
   auto deadline = now() + std::chrono::milliseconds(timeout_ms);
   while (now() < deadline) {
     auto byte = uart.read();
@@ -45,7 +45,8 @@ static std::optional<septentrio_gnss::Reply> wait_for_reply(
       continue;
     }
     auto msg = parser.feed(*byte, now());
-    if (!msg) continue;
+    if (!msg)
+      continue;
     if (auto *reply = std::get_if<septentrio_gnss::Reply>(&*msg)) {
       return *reply;
     }
@@ -68,11 +69,11 @@ static void bring_up(septentrio_gnss::Uart &uart,
   };
 
   while (true) {
-    auto cmd = septentrio_gnss::set_sbf_output(
-        septentrio_gnss::SbfStream::Stream1,
-        septentrio_gnss::Connection::COM1,
-        blocks,
-        septentrio_gnss::SbfInterval::Msec100);
+    auto cmd =
+        septentrio_gnss::set_sbf_output(septentrio_gnss::SbfStream::Stream1,
+                                        septentrio_gnss::Connection::COM1,
+                                        blocks,
+                                        septentrio_gnss::SbfInterval::Msec100);
 
     if (!cmd) {
       Serial.println("GNSS: failed to build command, retrying");
@@ -115,10 +116,12 @@ void task(void *params) {
     }
 
     auto msg = parser.feed(*byte, now());
-    if (!msg) continue;
+    if (!msg)
+      continue;
 
     auto *packet = std::get_if<sbf::Packet>(&*msg);
-    if (!packet) continue;
+    if (!packet)
+      continue;
 
     if (auto att = sbf::parse_att_euler(*packet)) {
       pending_att = att;
@@ -131,7 +134,8 @@ void task(void *params) {
         continue;
       }
 
-      // TODO: thread mount calibration through TaskParams once tuning codegen lands (#47)
+      // TODO: thread mount calibration through TaskParams once tuning codegen
+      // lands (#47)
       constexpr fusion::GnssAttitudeMount mount {};
       auto sample = fusion::att_euler_to_gnss_sample(*pending_att, *cov, mount);
       pending_att = std::nullopt;

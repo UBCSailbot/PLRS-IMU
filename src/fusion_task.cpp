@@ -41,9 +41,8 @@ void task(void *params) {
 
   while (true) {
     fusion::ImuSample imu;
-    if (xQueueReceive(p.imu_queue,
-                      &imu,
-                      pdMS_TO_TICKS(IMU_QUEUE_TIMEOUT_MS)) == pdTRUE) {
+    if (xQueueReceive(p.imu_queue, &imu, pdMS_TO_TICKS(IMU_QUEUE_TIMEOUT_MS)) ==
+        pdTRUE) {
       filter.predict(imu);
 
       fusion::GnssSample gnss;

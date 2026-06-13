@@ -27,14 +27,14 @@ using septentrio_gnss::ReplyKind;
 // constexpr loss in crc_ccitt and read_little_endian.
 // ---------------------------------------------------------------------------
 namespace {
-constexpr std::array<uint8_t, 9> kCheckBytes = {'1', '2', '3', '4', '5',
-                                                '6', '7', '8', '9'};
+constexpr std::array<uint8_t, 9> kCheckBytes = {
+    '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 constexpr uint16_t kCheckCrc =
     crc_ccitt({kCheckBytes.data(), kCheckBytes.size()});
 static_assert(kCheckCrc == 0x31C3);
 
-constexpr std::array<uint8_t, 8> kLeBytes = {0x78, 0x56, 0x34, 0x12,
-                                             0x21, 0x43, 0x65, 0x87};
+constexpr std::array<uint8_t, 8> kLeBytes = {
+    0x78, 0x56, 0x34, 0x12, 0x21, 0x43, 0x65, 0x87};
 static_assert(read_little_endian<uint16_t>({kLeBytes.data(), kLeBytes.size()},
                                            0) == 0x5678);
 static_assert(read_little_endian<uint32_t>({kLeBytes.data(), kLeBytes.size()},
@@ -44,8 +44,8 @@ static_assert(read_little_endian<uint64_t>({kLeBytes.data(), kLeBytes.size()},
 
 // Feed all bytes into the parser at a fixed timestamp; return the SBF
 // Packet variant if the last byte completed one, else nullopt.
-std::optional<Packet> feed_block(Parser &p, const std::vector<uint8_t> &frame,
-                                 Ms t = Ms{0}) {
+std::optional<Packet>
+feed_block(Parser &p, const std::vector<uint8_t> &frame, Ms t = Ms {0}) {
   std::optional<Packet> result;
   for (uint8_t b : frame) {
     auto msg = p.feed(b, t);
@@ -58,7 +58,7 @@ std::optional<Packet> feed_block(Parser &p, const std::vector<uint8_t> &frame,
 
 // NMEA counterpart.
 std::optional<nmea::Sentence>
-feed_sentence(Parser &p, const std::vector<uint8_t> &frame, Ms t = Ms{0}) {
+feed_sentence(Parser &p, const std::vector<uint8_t> &frame, Ms t = Ms {0}) {
   std::optional<nmea::Sentence> result;
   for (uint8_t b : frame) {
     auto msg = p.feed(b, t);
@@ -70,8 +70,8 @@ feed_sentence(Parser &p, const std::vector<uint8_t> &frame, Ms t = Ms{0}) {
 }
 
 // Reply counterpart.
-std::optional<Reply> feed_reply(Parser &p, const std::vector<uint8_t> &frame,
-                                Ms t = Ms{0}) {
+std::optional<Reply>
+feed_reply(Parser &p, const std::vector<uint8_t> &frame, Ms t = Ms {0}) {
   std::optional<Reply> result;
   for (uint8_t b : frame) {
     auto msg = p.feed(b, t);
@@ -92,8 +92,8 @@ void tearDown() {}
 
 /** @brief Canonical CRC-CCITT/XMODEM check vector. */
 void test_crc_ccitt_check_vector() {
-  const std::vector<uint8_t> data = {'1', '2', '3', '4', '5',
-                                     '6', '7', '8', '9'};
+  const std::vector<uint8_t> data = {
+      '1', '2', '3', '4', '5', '6', '7', '8', '9'};
   TEST_ASSERT_EQUAL_HEX16(0x31C3, crc_ccitt({data.data(), data.size()}));
 }
 
@@ -119,14 +119,15 @@ void test_crc_ccitt_chains_with_init() {
 
 /** @brief LE byte order for u16/u32/u64 reads. */
 void test_read_le_known_bytes() {
-  const std::array<uint8_t, 8> b = {0x78, 0x56, 0x34, 0x12,
-                                    0x21, 0x43, 0x65, 0x87};
+  const std::array<uint8_t, 8> b = {
+      0x78, 0x56, 0x34, 0x12, 0x21, 0x43, 0x65, 0x87};
   TEST_ASSERT_EQUAL_HEX16(
       0x5678, read_little_endian<uint16_t>({b.data(), b.size()}, 0));
   TEST_ASSERT_EQUAL_HEX32(
       0x12345678, read_little_endian<uint32_t>({b.data(), b.size()}, 0));
-  TEST_ASSERT_EQUAL_HEX64(0x8765432112345678ULL, read_little_endian<uint64_t>(
-                                                     {b.data(), b.size()}, 0));
+  TEST_ASSERT_EQUAL_HEX64(
+      0x8765432112345678ULL,
+      read_little_endian<uint64_t>({b.data(), b.size()}, 0));
 }
 
 /** @brief f32/f64 round-trip via bit_cast at unaligned offsets. */
@@ -137,7 +138,7 @@ void test_read_le_floats() {
   const uint64_t du = std::bit_cast<uint64_t>(dv);
 
   // Place values at offset 1 (unaligned for u32/u64 access on Cortex-M0+).
-  std::array<uint8_t, 1 + sizeof(double)> buf{};
+  std::array<uint8_t, 1 + sizeof(double)> buf {};
   for (std::size_t i = 0; i < sizeof(float); i++) {
     buf[1 + i] = static_cast<uint8_t>(fu >> (i * BITS_PER_BYTE));
   }
@@ -332,14 +333,14 @@ void test_timeout_drops_stalled_block() {
   // Feed first half of the original frame, then stall.
   const std::size_t half = first.size() / 2;
   for (std::size_t i = 0; i < half; i++) {
-    p.feed(first[i], Ms{0});
+    p.feed(first[i], Ms {0});
   }
   TEST_ASSERT_TRUE(p.mid_frame());
 
   // After the timeout, the parser resets before processing the next byte.
   // Feed a fresh frame starting from the stall instant.
   auto fresh = stest::make_block(5938, {0xAA, 0xBB, 0xCC, 0xDD});
-  auto pkt = feed_block(p, fresh, Parser::FRAME_TIMEOUT + Ms{1});
+  auto pkt = feed_block(p, fresh, Parser::FRAME_TIMEOUT + Ms {1});
   TEST_ASSERT_TRUE(pkt.has_value());
   TEST_ASSERT_EQUAL_UINT16(5938, pkt->id);
 }
@@ -352,7 +353,7 @@ void test_no_timeout_when_under_threshold() {
   // Feed each byte 100ms apart (< FRAME_TIMEOUT of 250ms).
   std::optional<Packet> pkt;
   for (std::size_t i = 0; i < frame.size(); i++) {
-    auto m = p.feed(frame[i], Ms{100} * static_cast<long>(i));
+    auto m = p.feed(frame[i], Ms {100} * static_cast<long>(i));
     if (m && std::holds_alternative<Packet>(*m)) {
       pkt = std::get<Packet>(*m);
     }
@@ -367,7 +368,7 @@ void test_no_timeout_when_under_threshold() {
 
 namespace {
 sbf::PVTGeodetic make_sentinel_pvt() {
-  return sbf::PVTGeodetic{
+  return sbf::PVTGeodetic {
       .tow = 123456789,
       .wnc = 2345,
       .mode = 0x01,
@@ -499,7 +500,7 @@ void test_parse_pvt_geodetic_dnu_preserved() {
 
 /** @brief PosCovGeodetic round-trip: every field comes back bit-exact. */
 void test_parse_pos_cov_geodetic_round_trip() {
-  const sbf::PosCovGeodetic expected{
+  const sbf::PosCovGeodetic expected {
       .tow = 111,
       .wnc = 222,
       .mode = 0x05,
@@ -536,7 +537,7 @@ void test_parse_pos_cov_geodetic_round_trip() {
 
 /** @brief VelCovGeodetic round-trip: every field comes back bit-exact. */
 void test_parse_vel_cov_geodetic_round_trip() {
-  const sbf::VelCovGeodetic expected{
+  const sbf::VelCovGeodetic expected {
       .tow = 333,
       .wnc = 444,
       .mode = 0x05,
@@ -572,7 +573,7 @@ void test_parse_vel_cov_geodetic_round_trip() {
 
 /** @brief AttEuler round-trip: heading/pitch/roll + rates come back exact. */
 void test_parse_att_euler_round_trip() {
-  const sbf::AttEuler expected{
+  const sbf::AttEuler expected {
       .tow = 555,
       .wnc = 666,
       .nr_sv = 10,
@@ -603,7 +604,7 @@ void test_parse_att_euler_round_trip() {
 
 /** @brief AttCovEuler round-trip: covariance fields come back exact. */
 void test_parse_att_cov_euler_round_trip() {
-  const sbf::AttCovEuler expected{
+  const sbf::AttCovEuler expected {
       .tow = 777,
       .wnc = 888,
       .reserved = 0,
@@ -639,7 +640,8 @@ void test_parse_clean_nmea() {
   auto s = feed_sentence(p, frame);
   TEST_ASSERT_TRUE(s.has_value());
   TEST_ASSERT_EQUAL_STRING_LEN("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9",
-                               s->data.data(), s->length);
+                               s->data.data(),
+                               s->length);
 }
 
 /** @brief Wrong NMEA checksum returns nullopt; parser resyncs. */
@@ -666,13 +668,13 @@ void test_nmea_then_sbf_interleaved() {
   std::optional<nmea::Sentence> nmea_out;
   std::optional<Packet> sbf_out;
   for (uint8_t b : nmea_frame) {
-    auto m = p.feed(b, Ms{0});
+    auto m = p.feed(b, Ms {0});
     if (m && std::holds_alternative<nmea::Sentence>(*m)) {
       nmea_out = std::get<nmea::Sentence>(*m);
     }
   }
   for (uint8_t b : sbf_frame) {
-    auto m = p.feed(b, Ms{0});
+    auto m = p.feed(b, Ms {0});
     if (m && std::holds_alternative<Packet>(*m)) {
       sbf_out = std::get<Packet>(*m);
     }
@@ -711,7 +713,7 @@ void test_command_build_appends_cr() {
 
 /** @brief Body that would not leave room for the terminator is rejected. */
 void test_command_build_rejects_oversize() {
-  std::array<char, septentrio_gnss::MAX_COMMAND_LEN> body{};
+  std::array<char, septentrio_gnss::MAX_COMMAND_LEN> body {};
   body.fill('x');
   auto cmd = Command::build(std::string_view(body.data(), body.size()));
   TEST_ASSERT_FALSE(cmd.has_value());
@@ -729,8 +731,8 @@ void test_parse_clean_reply_ok() {
   auto r = feed_reply(p, frame);
   TEST_ASSERT_TRUE(r.has_value());
   TEST_ASSERT_EQUAL(static_cast<int>(ReplyKind::Ok), static_cast<int>(r->kind));
-  TEST_ASSERT_EQUAL_STRING_LEN(" setSBFOutput\n  ack\n", r->data.data(),
-                               r->length);
+  TEST_ASSERT_EQUAL_STRING_LEN(
+      " setSBFOutput\n  ack\n", r->data.data(), r->length);
 }
 
 /** @brief "$R?" is the Err kind. */
@@ -763,8 +765,8 @@ void test_dollar_R_without_kind_char_is_nmea() {
   auto frame = stest::make_nmea("RMC,123519,A,4807.038,N");
   auto s = feed_sentence(p, frame);
   TEST_ASSERT_TRUE(s.has_value());
-  TEST_ASSERT_EQUAL_STRING_LEN("RMC,123519,A,4807.038,N", s->data.data(),
-                               s->length);
+  TEST_ASSERT_EQUAL_STRING_LEN(
+      "RMC,123519,A,4807.038,N", s->data.data(), s->length);
 }
 
 // ---------------------------------------------------------------------------
@@ -780,8 +782,8 @@ using septentrio_gnss::SbfStream;
 using septentrio_gnss::set_gnss_attitude;
 using septentrio_gnss::set_sbf_output;
 
-constexpr std::array<SbfBlock, 2> kAttBlocks{SbfBlock::AttEuler,
-                                             SbfBlock::AttCovEuler};
+constexpr std::array<SbfBlock, 2> kAttBlocks {SbfBlock::AttEuler,
+                                              SbfBlock::AttCovEuler};
 
 // Framing is pinned at compile time; the runtime tests below just exercise
 // the same builders through the suite.
@@ -805,8 +807,8 @@ void test_set_gnss_attitude_moving_base() {
 
 /** @brief setSBFOutput joins the requested blocks with '+'. */
 void test_set_sbf_output_joins_blocks() {
-  auto cmd = set_sbf_output(SbfStream::Stream1, Connection::COM1, kAttBlocks,
-                            SbfInterval::Msec100);
+  auto cmd = set_sbf_output(
+      SbfStream::Stream1, Connection::COM1, kAttBlocks, SbfInterval::Msec100);
   TEST_ASSERT_TRUE(cmd.has_value());
   TEST_ASSERT_TRUE(cmd->view() ==
                    "setSBFOutput,Stream1,COM1,AttEuler+AttCovEuler,msec100\r");
