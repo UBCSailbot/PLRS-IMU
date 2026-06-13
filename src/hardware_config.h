@@ -10,7 +10,9 @@
  * FreeRTOS configuration.
  */
 
-static constexpr uint32_t GNSS_TASK_STACK_SIZE = 512;
+// The GNSS parser embeds full SBF/NMEA/reply frame buffers (~1.1 KB) and lives
+// on its task stack, so this is sized well above the others.
+static constexpr uint32_t GNSS_TASK_STACK_SIZE = 2048;
 static constexpr uint32_t IMU_TASK_STACK_SIZE = 512;
 static constexpr uint32_t FUSION_TASK_STACK_SIZE = 1024;
 
