@@ -2,12 +2,18 @@
 #include "fusion_task.h"
 #include "ekf_filter.h"
 #include "fusion.h"
+#include "hardware_config.h"
+#include "stack_check.h"
 
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <task.h>
 
 namespace fusion_task {
+
+static_assert(
+    plrs::fits_on_task_stack<fusion::TinyEkfFilter>(FUSION_TASK_STACK_SIZE),
+    "FUSION_TASK_STACK_SIZE too small for fusion::TinyEkfFilter");
 
 static constexpr uint32_t IMU_QUEUE_TIMEOUT_MS = 20;
 static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;

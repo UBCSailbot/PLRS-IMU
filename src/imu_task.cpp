@@ -1,6 +1,8 @@
 #ifdef ARDUINO
 #include "imu_task.h"
 #include "fusion.h"
+#include "hardware_config.h"
+#include "stack_check.h"
 #include "xbus_protocol.h"
 
 #include <Arduino.h>
@@ -9,6 +11,9 @@
 #include <task.h>
 
 namespace imu_task {
+
+static_assert(plrs::fits_on_task_stack<xbus::Parser>(IMU_TASK_STACK_SIZE),
+              "IMU_TASK_STACK_SIZE too small for xbus::Parser");
 
 static constexpr uint32_t ACK_TIMEOUT_MS = 500;
 static constexpr uint32_t RETRY_DELAY_MS = 1000;

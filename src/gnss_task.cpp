@@ -1,7 +1,9 @@
 #ifdef ARDUINO
 #include "gnss_task.h"
 #include "gnss_bridge.h"
+#include "hardware_config.h"
 #include "sbf_blocks.h"
+#include "stack_check.h"
 #include "command.h"
 
 #include <Arduino.h>
@@ -10,6 +12,10 @@
 #include <task.h>
 
 namespace gnss_task {
+
+static_assert(
+    plrs::fits_on_task_stack<septentrio_gnss::Parser>(GNSS_TASK_STACK_SIZE),
+    "GNSS_TASK_STACK_SIZE too small for septentrio_gnss::Parser");
 
 static constexpr uint32_t REPLY_TIMEOUT_MS = 2000;
 static constexpr uint32_t RETRY_DELAY_MS = 1000;
