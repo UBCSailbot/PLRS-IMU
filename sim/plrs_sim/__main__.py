@@ -35,11 +35,13 @@ from .types import (
 VIEWS = ("timeseries", "mounting", "simulate", "pose")
 
 # Human-readable labels for the interactive picker, in display order.
-# "pose" (filmstrip) is CLI-only; it does not appear here.
+# "pose" (filmstrip) is CLI-only; it does not appear here. "Monitor" is the
+# live hardware view, not a sim view, and is dispatched separately.
 _VIEW_LABELS = {
-    "Mounting": "mounting",
+    "Config (tuning.toml)": "mounting",
     "Timeseries": "timeseries",
     "Simulate": "simulate",
+    "Monitor (hardware)": "monitor",
 }
 
 SCENARIOS: dict[str, Scenario] = {
@@ -165,6 +167,40 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sim.add_argument("--no-show", action="store_true", help="skip interactive window")
 
+    mon = sub.add_parser(
+        "monitor", help="visualize live RP2040 telemetry, or replay a capture"
+    )
+    src = mon.add_mutually_exclusive_group()
+    src.add_argument(
+        "--port",
+        default="/dev/ttyACM0",
+        help="serial port of the RP2040 (default; live source)",
+    )
+    src.add_argument(
+        "--replay", type=Path, default=None, metavar="FILE", help="replay a capture"
+    )
+    src.add_argument(
+        "--synthetic",
+        choices=sorted(SCENARIOS.keys()),
+        default=None,
+        help="replay a simulated scenario, no hardware needed",
+    )
+    mon.add_argument("--baud", type=int, default=115200)
+    mon.add_argument(
+        "--record",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="capture file to write (default captures/<timestamp>.log for live)",
+    )
+    mon.add_argument(
+        "--speed", type=float, default=1.0, help="replay speed multiplier (replay only)"
+    )
+    mon.add_argument(
+        "--duration", type=float, default=30.0, metavar="SECONDS", help="synthetic only"
+    )
+    mon.add_argument("--no-show", action="store_true", help="record only, no window")
+
     return p
 
 
@@ -182,14 +218,49 @@ def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace
     view = _VIEW_LABELS[view_label]
 
     if view == "mounting":
-        # Mounting is pure config geometry; _run_view never reads the scenario.
+        # Config geometry is pure tuning.toml; _run_view never reads the scenario.
         return parser.parse_args(["sim", "static", "--view", "mounting"])
+
+    if view == "monitor":
+        return _select_monitor(parser)
 
     scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
     if scenario is None:
         return None
     duration = ["--duration", "50"] if view == "simulate" else []
     return parser.parse_args(["sim", scenario, "--view", view, *duration])
+
+
+def _select_monitor(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
+    """Prompt for a telemetry source: live serial, replay, or synthetic."""
+    import questionary
+
+    source = questionary.select(
+        "Telemetry source",
+        choices=["serial (live)", "replay a capture", "synthetic (no hardware)"],
+    ).ask()
+    if source is None:
+        return None
+
+    if source.startswith("serial"):
+        return parser.parse_args(["monitor"])
+
+    if source.startswith("replay"):
+        captures = sorted(Path("captures").glob("*.log"))
+        if not captures:
+            print("No captures/*.log to replay yet.")
+            return None
+        choice = questionary.select("Capture", choices=[str(p) for p in captures]).ask()
+        return (
+            None
+            if choice is None
+            else parser.parse_args(["monitor", "--replay", choice])
+        )
+
+    scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
+    if scenario is None:
+        return None
+    return parser.parse_args(["monitor", "--synthetic", scenario])
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -200,9 +271,51 @@ def main(argv: list[str] | None = None) -> None:
             args = _select_interactively(parser)
             if args is None:
                 break
-            _run_view(args)
+            _dispatch(args)
+    else:
+        _dispatch(args)
+
+
+def _dispatch(args: argparse.Namespace) -> None:
+    if args.cmd == "monitor":
+        _cmd_monitor(args)
     else:
         _run_view(args)
+
+
+def _cmd_monitor(args: argparse.Namespace) -> None:
+    from datetime import datetime
+
+    from .live import monitor, pace, replay_file, serial_lines
+
+    if args.replay is not None:
+        lines = pace(replay_file(args.replay), speed=args.speed)
+        record = args.record
+    elif args.synthetic is not None:
+        from .export import export_telemetry
+
+        # Realistic gyro noise/bias so the open-loop track visibly drifts off
+        # the GNSS-corrected fused estimate -- the point of the comparison.
+        source = SimulatedSource(
+            scenario=SCENARIOS[args.synthetic],
+            imu_noise=ImuNoiseModel(
+                gyro_white_std_rad_s=0.01,
+                gyro_constant_bias_rad_s=0.005,
+                gyro_bias_walk_std_rad_s_sqrt_s=0.001,
+                mti_attitude_std_deg=1.0,
+            ),
+            gnss_noise=GnssNoiseModel(heading_std_deg=1.0),
+            duration_s=args.duration,
+            seed=0,
+        )
+        lines = pace(export_telemetry(source, load_tuning()), speed=args.speed)
+        record = args.record
+    else:
+        lines = serial_lines(args.port, args.baud)
+        stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        record = args.record or Path("captures") / f"{stamp}.log"
+
+    monitor(lines, record=record, show=not args.no_show)
 
 
 def _run_view(args: argparse.Namespace) -> None:

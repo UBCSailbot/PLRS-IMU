@@ -1,4 +1,4 @@
-.PHONY: help format test build upload sim sim-images sim-test sim-format
+.PHONY: help format test build upload tui sim-images sim-test sim-format
 
 SCENARIO ?=
 VIEW     ?=
@@ -11,7 +11,7 @@ help:
 	@echo "  upload       build and flash the RP2040 (pio run -e pico -t upload)"
 	@echo ""
 	@echo "Python sim targets (the native binding rebuilds on import as needed):"
-	@echo "  sim          interactive picker; or SCENARIO=<name> [VIEW=timeseries|mounting|simulate]"
+	@echo "  tui          interactive picker; or SCENARIO=<name> [VIEW=timeseries|mounting|simulate]"
 	@echo "  sim-images   regenerate docs/images screenshots (timeseries, mounting, pose, simulate)"
 	@echo "  sim-test     run sim pytest suite"
 	@echo "  sim-format   ruff format + check in sim/"
@@ -29,7 +29,7 @@ build:
 upload:
 	pio run -e pico -t upload
 
-sim:
+tui:
 	cd sim && uv run --extra dev python -m plrs_sim $(if $(SCENARIO),sim $(SCENARIO) $(if $(VIEW),--view $(VIEW)))
 
 sim-images:
