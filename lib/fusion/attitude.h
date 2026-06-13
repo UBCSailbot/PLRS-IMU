@@ -32,7 +32,7 @@ inline plrs::Vec3 rotate(UnitQuaternion q, plrs::Vec3 v) {
   const float tx = 2.0f * (p.y * v.z - p.z * v.y);
   const float ty = 2.0f * (p.z * v.x - p.x * v.z);
   const float tz = 2.0f * (p.x * v.y - p.y * v.x);
-  return plrs::Vec3{
+  return plrs::Vec3 {
       .x = v.x + p.w * tx + (p.y * tz - p.z * ty),
       .y = v.y + p.w * ty + (p.z * tx - p.x * tz),
       .z = v.z + p.w * tz + (p.x * ty - p.y * tx),
@@ -88,14 +88,14 @@ struct EulerRates {
  *
  * @return Euler-angle rates (rad/s).
  */
-inline EulerRates euler_rates_zyx(float roll_rad, float pitch_rad,
-                                  plrs::Vec3 omega_body) {
+inline EulerRates
+euler_rates_zyx(float roll_rad, float pitch_rad, plrs::Vec3 omega_body) {
   const float sr = std::sin(roll_rad);
   const float cr = std::cos(roll_rad);
   const float sec_pitch = 1.0f / std::cos(pitch_rad);
   const float tan_pitch = std::tan(pitch_rad);
   const float a = omega_body.y * sr + omega_body.z * cr;
-  return EulerRates{
+  return EulerRates {
       .roll_dot = omega_body.x + a * tan_pitch,
       .pitch_dot = omega_body.y * cr - omega_body.z * sr,
       .yaw_dot = a * sec_pitch,
@@ -125,15 +125,15 @@ struct EulerRatesJacobian {
  *
  * @return Partial derivatives of the Euler rates (per radian).
  */
-inline EulerRatesJacobian euler_rates_jacobian(float roll_rad, float pitch_rad,
-                                               plrs::Vec3 omega_body) {
+inline EulerRatesJacobian
+euler_rates_jacobian(float roll_rad, float pitch_rad, plrs::Vec3 omega_body) {
   const float sr = std::sin(roll_rad);
   const float cr = std::cos(roll_rad);
   const float sec_pitch = 1.0f / std::cos(pitch_rad);
   const float tan_pitch = std::tan(pitch_rad);
   const float a = omega_body.y * sr + omega_body.z * cr;
   const float a_droll = omega_body.y * cr - omega_body.z * sr;
-  return EulerRatesJacobian{
+  return EulerRatesJacobian {
       .droll_droll = a_droll * tan_pitch,
       .droll_dpitch = a * sec_pitch * sec_pitch,
       .dpitch_droll = -a,
@@ -159,7 +159,7 @@ inline EulerZyx quaternion_to_euler_zyx(UnitQuaternion q) {
   const plrs::Quaternion p = q.components();
   const float sin_pitch =
       std::clamp(2.0f * (p.w * p.y - p.z * p.x), -1.0f, 1.0f);
-  return EulerZyx{
+  return EulerZyx {
       .roll_deg = std::atan2(2.0f * (p.w * p.x + p.y * p.z),
                              1.0f - 2.0f * (p.x * p.x + p.y * p.y)) *
                   RAD_TO_DEG,

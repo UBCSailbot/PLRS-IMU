@@ -1,2 +1,7 @@
 ---
 BasedOnStyle: LLVM
+ColumnLimit: 80
+AlignAfterOpenBracket: Align
+BinPackArguments: false
+BinPackParameters: false
+SpaceBeforeCpp11BracedList: true

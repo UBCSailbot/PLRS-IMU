@@ -32,7 +32,7 @@ public:
    * Mid-frame timeout. Bytes arriving more than FRAME_TIMEOUT after the
    * previous byte cause the partial frame to be dropped before processing.
    */
-  static constexpr Ms FRAME_TIMEOUT{250};
+  static constexpr Ms FRAME_TIMEOUT {250};
 
   /**
    * @brief Reset the parser and drop the current frame.
@@ -239,7 +239,7 @@ private:
     if (computed != expected) {
       return std::nullopt;
     }
-    return Message{p};
+    return Message {p};
   }
 
   std::optional<Message> _nmea_consume_body_byte(uint8_t byte) {
@@ -282,7 +282,7 @@ private:
     if (!ok) {
       return std::nullopt;
     }
-    return Message{s};
+    return Message {s};
   }
 
   static constexpr bool is_prompt_char(uint8_t c) {
@@ -335,32 +335,32 @@ private:
     }
     r.length = _reply_length;
     reset();
-    return Message{r};
+    return Message {r};
   }
 
   State _state = State::Idle;
-  Ms _last_advance{0};
+  Ms _last_advance {0};
 
   // SBF state.
   uint8_t _sbf_crc_low_byte = 0;
   uint16_t _sbf_expected_crc = 0;
-  std::array<uint8_t, SBF_CRC_INPUT_HEADER_BYTES> _sbf_header{};
+  std::array<uint8_t, SBF_CRC_INPUT_HEADER_BYTES> _sbf_header {};
   uint16_t _sbf_body_length = 0;
   uint16_t _sbf_body_index = 0;
-  std::array<uint8_t, sbf::MAX_BODY> _sbf_buffer{};
+  std::array<uint8_t, sbf::MAX_BODY> _sbf_buffer {};
 
   // NMEA state.
   std::size_t _nmea_length = 0;
   uint8_t _nmea_running_xor = 0;
   uint8_t _nmea_expected_xor = 0;
-  std::array<char, nmea::MAX_BODY> _nmea_buffer{};
+  std::array<char, nmea::MAX_BODY> _nmea_buffer {};
 
   // Reply state.
   ReplyKind _reply_kind = ReplyKind::Ok;
   std::size_t _reply_length = 0;
   bool _reply_in_prompt_candidate = false;
   std::size_t _reply_body_end_before_prompt = 0;
-  std::array<char, MAX_REPLY_BODY> _reply_data_buffer{};
+  std::array<char, MAX_REPLY_BODY> _reply_data_buffer {};
 };
 
 } // namespace septentrio_gnss

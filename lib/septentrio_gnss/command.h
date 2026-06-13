@@ -46,7 +46,7 @@ enum class ReplyKind : uint8_t {
  */
 
 struct Command {
-  std::array<char, MAX_COMMAND_LEN> data{};
+  std::array<char, MAX_COMMAND_LEN> data {};
   std::size_t length = 0;
 
   /**
@@ -85,7 +85,7 @@ struct Command {
 
 struct Reply {
   ReplyKind kind = ReplyKind::Ok;
-  std::array<char, MAX_REPLY_BODY> data{};
+  std::array<char, MAX_REPLY_BODY> data {};
   std::size_t length = 0;
 
   /**
@@ -189,7 +189,7 @@ constexpr std::string_view to_token(SbfBlock block) {
  * terminated Command.
  */
 struct CommandBuilder {
-  std::array<char, MAX_COMMAND_LEN> buffer{};
+  std::array<char, MAX_COMMAND_LEN> buffer {};
   std::size_t length = 0;
   bool overflowed = false;
 
@@ -208,7 +208,7 @@ struct CommandBuilder {
   }
 
   void put(float value) {
-    std::array<char, 32> tmp{};
+    std::array<char, 32> tmp {};
     const auto result =
         std::to_chars(tmp.data(), tmp.data() + tmp.size(), value);
     put(std::string_view(tmp.data(), result.ptr - tmp.data()));
@@ -239,8 +239,10 @@ set_gnss_attitude(GnssAttitudeMode mode) {
  * @param blocks One or more SBF blocks, emitted '+'-joined.
  */
 constexpr std::expected<Command, const char *>
-set_sbf_output(SbfStream stream, Connection conn,
-               std::span<const SbfBlock> blocks, SbfInterval interval) {
+set_sbf_output(SbfStream stream,
+               Connection conn,
+               std::span<const SbfBlock> blocks,
+               SbfInterval interval) {
   CommandBuilder b;
   b.put("setSBFOutput,");
   b.put(to_token(stream));

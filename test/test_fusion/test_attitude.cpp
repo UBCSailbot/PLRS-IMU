@@ -17,7 +17,7 @@ UnitQuaternion axis_angle(float ax, float ay, float az, float angle_rad) {
   const float half = angle_rad * 0.5f;
   const float s = std::sin(half);
   return UnitQuaternion::from_raw(
-             plrs::Quaternion{std::cos(half), ax * s, ay * s, az * s})
+             plrs::Quaternion {std::cos(half), ax * s, ay * s, az * s})
       .value();
 }
 
@@ -32,12 +32,13 @@ void test_unit_quaternion_identity_components() {
 }
 
 void test_unit_quaternion_from_raw_accepts_unit() {
-  auto q = UnitQuaternion::from_raw(plrs::Quaternion{1.0f, 0.0f, 0.0f, 0.0f});
+  auto q = UnitQuaternion::from_raw(plrs::Quaternion {1.0f, 0.0f, 0.0f, 0.0f});
   TEST_ASSERT_TRUE(q.has_value());
 }
 
 void test_unit_quaternion_from_raw_normalizes_near_unit() {
-  auto q = UnitQuaternion::from_raw(plrs::Quaternion{1.005f, 0.0f, 0.0f, 0.0f});
+  auto q =
+      UnitQuaternion::from_raw(plrs::Quaternion {1.005f, 0.0f, 0.0f, 0.0f});
   TEST_ASSERT_TRUE(q.has_value());
   plrs::Quaternion c = q->components();
   const float norm = std::sqrt(c.w * c.w + c.x * c.x + c.y * c.y + c.z * c.z);
@@ -45,18 +46,18 @@ void test_unit_quaternion_from_raw_normalizes_near_unit() {
 }
 
 void test_unit_quaternion_from_raw_rejects_zero() {
-  auto q = UnitQuaternion::from_raw(plrs::Quaternion{0.0f, 0.0f, 0.0f, 0.0f});
+  auto q = UnitQuaternion::from_raw(plrs::Quaternion {0.0f, 0.0f, 0.0f, 0.0f});
   TEST_ASSERT_FALSE(q.has_value());
 }
 
 void test_unit_quaternion_from_raw_rejects_far_from_unit() {
-  auto q = UnitQuaternion::from_raw(plrs::Quaternion{2.0f, 0.0f, 0.0f, 0.0f});
+  auto q = UnitQuaternion::from_raw(plrs::Quaternion {2.0f, 0.0f, 0.0f, 0.0f});
   TEST_ASSERT_FALSE(q.has_value());
 }
 
 void test_unit_quaternion_from_raw_rejects_nan() {
   const float nan = std::nan("");
-  auto q = UnitQuaternion::from_raw(plrs::Quaternion{nan, 0.0f, 0.0f, 0.0f});
+  auto q = UnitQuaternion::from_raw(plrs::Quaternion {nan, 0.0f, 0.0f, 0.0f});
   TEST_ASSERT_FALSE(q.has_value());
 }
 
@@ -96,7 +97,7 @@ void test_unit_quaternion_double_conjugate_is_self() {
 }
 
 void test_rotate_identity_passes_through() {
-  plrs::Vec3 v{1.0f, 2.0f, 3.0f};
+  plrs::Vec3 v {1.0f, 2.0f, 3.0f};
   plrs::Vec3 r = rotate(UnitQuaternion::identity(), v);
   TEST_ASSERT_EQUAL_FLOAT(v.x, r.x);
   TEST_ASSERT_EQUAL_FLOAT(v.y, r.y);
@@ -105,7 +106,7 @@ void test_rotate_identity_passes_through() {
 
 void test_rotate_yaw_90_maps_east_to_north() {
   UnitQuaternion q = axis_angle(0.0f, 0.0f, 1.0f, 90.0f * DEG_TO_RAD);
-  plrs::Vec3 r = rotate(q, plrs::Vec3{1.0f, 0.0f, 0.0f});
+  plrs::Vec3 r = rotate(q, plrs::Vec3 {1.0f, 0.0f, 0.0f});
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, r.x);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 1.0f, r.y);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, r.z);
@@ -113,7 +114,7 @@ void test_rotate_yaw_90_maps_east_to_north() {
 
 void test_rotate_yaw_180_negates_xy() {
   UnitQuaternion q = axis_angle(0.0f, 0.0f, 1.0f, 180.0f * DEG_TO_RAD);
-  plrs::Vec3 r = rotate(q, plrs::Vec3{1.0f, 1.0f, 5.0f});
+  plrs::Vec3 r = rotate(q, plrs::Vec3 {1.0f, 1.0f, 5.0f});
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -1.0f, r.x);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -1.0f, r.y);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 5.0f, r.z);
@@ -159,7 +160,7 @@ void test_euler_near_singular_does_not_nan() {
 }
 
 void test_world_angular_velocity_identity_passes_through() {
-  plrs::Vec3 omega_body{0.1f, -0.2f, 0.5f};
+  plrs::Vec3 omega_body {0.1f, -0.2f, 0.5f};
   plrs::Vec3 omega_world =
       world_angular_velocity(UnitQuaternion::identity(), omega_body);
   TEST_ASSERT_EQUAL_FLOAT(omega_body.x, omega_world.x);
@@ -170,21 +171,21 @@ void test_world_angular_velocity_identity_passes_through() {
 void test_world_yaw_rate_heeled_boat_projects_by_cos_heel() {
   const float heel_rad = 30.0f * DEG_TO_RAD;
   UnitQuaternion orientation = axis_angle(1.0f, 0.0f, 0.0f, heel_rad);
-  plrs::Vec3 omega_body{0.0f, 0.0f, 1.0f};
+  plrs::Vec3 omega_body {0.0f, 0.0f, 1.0f};
   float yaw_rate = world_yaw_rate(orientation, omega_body);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, std::cos(heel_rad), yaw_rate);
 }
 
 void test_world_yaw_rate_matches_world_angular_velocity_z() {
   UnitQuaternion orientation = axis_angle(0.0f, 1.0f, 0.0f, 0.3f);
-  plrs::Vec3 omega_body{0.1f, 0.2f, 0.3f};
+  plrs::Vec3 omega_body {0.1f, 0.2f, 0.3f};
   plrs::Vec3 omega_world = world_angular_velocity(orientation, omega_body);
   float yaw_rate = world_yaw_rate(orientation, omega_body);
   TEST_ASSERT_EQUAL_FLOAT(omega_world.z, yaw_rate);
 }
 
 void test_euler_rates_level_pass_through_gyro() {
-  plrs::Vec3 omega{0.1f, -0.2f, 0.3f};
+  plrs::Vec3 omega {0.1f, -0.2f, 0.3f};
   EulerRates r = euler_rates_zyx(0.0f, 0.0f, omega);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, omega.x, r.roll_dot);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, omega.y, r.pitch_dot);
@@ -193,7 +194,7 @@ void test_euler_rates_level_pass_through_gyro() {
 
 void test_euler_rates_heeled_body_z_splits_into_yaw_and_pitch() {
   const float heel_rad = 30.0f * DEG_TO_RAD;
-  EulerRates r = euler_rates_zyx(heel_rad, 0.0f, plrs::Vec3{0.0f, 0.0f, 1.0f});
+  EulerRates r = euler_rates_zyx(heel_rad, 0.0f, plrs::Vec3 {0.0f, 0.0f, 1.0f});
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, r.roll_dot);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -std::sin(heel_rad), r.pitch_dot);
   TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, std::cos(heel_rad), r.yaw_dot);
@@ -201,7 +202,7 @@ void test_euler_rates_heeled_body_z_splits_into_yaw_and_pitch() {
 
 void test_euler_rates_yaw_matches_world_yaw_rate_at_zero_pitch() {
   const float roll_rad = 25.0f * DEG_TO_RAD;
-  plrs::Vec3 omega{0.1f, 0.2f, 0.3f};
+  plrs::Vec3 omega {0.1f, 0.2f, 0.3f};
   EulerRates r = euler_rates_zyx(roll_rad, 0.0f, omega);
   float expected =
       world_yaw_rate(axis_angle(1.0f, 0.0f, 0.0f, roll_rad), omega);
@@ -211,7 +212,7 @@ void test_euler_rates_yaw_matches_world_yaw_rate_at_zero_pitch() {
 void test_euler_rates_jacobian_matches_finite_difference() {
   const float roll = 0.3f;
   const float pitch = 0.2f;
-  const plrs::Vec3 omega{0.1f, 0.2f, 0.3f};
+  const plrs::Vec3 omega {0.1f, 0.2f, 0.3f};
   const float h = 1e-3f;
   EulerRatesJacobian j = euler_rates_jacobian(roll, pitch, omega);
 

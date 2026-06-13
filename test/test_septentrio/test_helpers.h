@@ -32,7 +32,7 @@ template <typename T> inline void push_le(std::vector<uint8_t> &v, T x) {
 namespace detail {
 
 constexpr std::array<uint16_t, 256> build_crc_table() {
-  std::array<uint16_t, 256> t{};
+  std::array<uint16_t, 256> t {};
   for (uint16_t i = 0; i < 256; i++) {
     uint16_t c = static_cast<uint16_t>(i << 8);
     for (int j = 0; j < 8; j++) {
@@ -71,9 +71,8 @@ inline uint16_t crc_ccitt_xmodem(const std::vector<uint8_t> &data) {
  *
  * @return The wire bytes of the block.
  */
-inline std::vector<uint8_t>
-make_block_with_length(uint16_t id, uint16_t length,
-                       const std::vector<uint8_t> &body) {
+inline std::vector<uint8_t> make_block_with_length(
+    uint16_t id, uint16_t length, const std::vector<uint8_t> &body) {
   std::vector<uint8_t> crc_input;
   crc_input.push_back(static_cast<uint8_t>(id & 0xFF));
   crc_input.push_back(static_cast<uint8_t>(id >> 8));
@@ -248,8 +247,8 @@ inline std::vector<uint8_t> make_nmea(std::string_view body) {
  * @param port  Prompt port name (e.g. "COM1"). Must match the
  *              uppercase-letters-then-digits pattern.
  */
-inline std::vector<uint8_t> make_reply(char kind, std::string_view body,
-                                       std::string_view port = "COM1") {
+inline std::vector<uint8_t>
+make_reply(char kind, std::string_view body, std::string_view port = "COM1") {
   std::vector<uint8_t> v;
   v.push_back('$');
   v.push_back(static_cast<uint8_t>(septentrio_gnss::REPLY_MARKER_CHAR));

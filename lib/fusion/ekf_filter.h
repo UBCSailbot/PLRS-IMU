@@ -61,7 +61,7 @@ public:
     float p0_bias_deg2_s2;
     float mti_roll_variance_deg2;
     float mti_pitch_variance_deg2;
-    MountRotation mount{};
+    MountRotation mount {};
   };
 
   /**
@@ -70,10 +70,22 @@ public:
    * @param cfg. Filter tuning parameters.
    */
   explicit TinyEkfFilter(Config cfg)
-      : _cfg(cfg), _Q{
-                       cfg.q_heading_deg2, 0.0f, 0.0f, 0.0f, 0.0f,
-                       cfg.q_roll_deg2,    0.0f, 0.0f, 0.0f, 0.0f,
-                       cfg.q_pitch_deg2,   0.0f, 0.0f, 0.0f, 0.0f,
+      : _cfg(cfg), _Q {
+                       cfg.q_heading_deg2,
+                       0.0f,
+                       0.0f,
+                       0.0f,
+                       0.0f,
+                       cfg.q_roll_deg2,
+                       0.0f,
+                       0.0f,
+                       0.0f,
+                       0.0f,
+                       cfg.q_pitch_deg2,
+                       0.0f,
+                       0.0f,
+                       0.0f,
+                       0.0f,
                        cfg.q_bias_deg2_s2,
                    } {
     const float pdiag[N_STATE] = {
@@ -150,9 +162,13 @@ public:
     ekf_predict(&_ekf, fx, F, _Q);
     _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
 
-    scalar_update(H_ROLL, _ekf.x[IDX_ROLL], attitude.roll_deg,
+    scalar_update(H_ROLL,
+                  _ekf.x[IDX_ROLL],
+                  attitude.roll_deg,
                   _cfg.mti_roll_variance_deg2);
-    scalar_update(H_PITCH, _ekf.x[IDX_PITCH], attitude.pitch_deg,
+    scalar_update(H_PITCH,
+                  _ekf.x[IDX_PITCH],
+                  attitude.pitch_deg,
                   _cfg.mti_pitch_variance_deg2);
   }
 
@@ -189,7 +205,7 @@ public:
    * predict seeds them. Afterward each is the matching P diagonal entry.
    */
   FusionOutput output() const {
-    return FusionOutput{
+    return FusionOutput {
         .heading_deg = _ekf.x[IDX_HEADING],
         .heading_variance_deg2 =
             _initialized ? _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING]
@@ -223,8 +239,8 @@ private:
    * @param z. Measurement, already innovation-wrapped where it matters.
    * @param variance. Measurement noise variance (R).
    */
-  void scalar_update(const float H[N_STATE], float hx, float z,
-                     float variance) {
+  void
+  scalar_update(const float H[N_STATE], float hx, float z, float variance) {
     const float zv[N_MEAS] = {z};
     const float hxv[N_MEAS] = {hx};
     const float R[N_MEAS * N_MEAS] = {variance};
@@ -234,7 +250,7 @@ private:
   ekf_t _ekf;
   Config _cfg;
   float _Q[N_STATE * N_STATE];
-  Ms _last_predict_time{0};
+  Ms _last_predict_time {0};
   bool _initialized = false;
   bool _has_predicted = false;
 };

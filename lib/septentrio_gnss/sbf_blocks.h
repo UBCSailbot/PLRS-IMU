@@ -121,7 +121,7 @@ inline std::optional<PVTGeodetic> parse_pvt_geodetic(const Packet &p) {
     return std::nullopt;
   }
   const ByteSpan b = p.body();
-  return PVTGeodetic{
+  return PVTGeodetic {
       .tow = read_little_endian<uint32_t>(b, o::TOW),
       .wnc = read_little_endian<uint16_t>(b, o::WNC),
       .mode = b[o::MODE],
@@ -214,7 +214,7 @@ inline std::optional<PosCovGeodetic> parse_pos_cov_geodetic(const Packet &p) {
     return std::nullopt;
   }
   const ByteSpan b = p.body();
-  return PosCovGeodetic{
+  return PosCovGeodetic {
       .tow = read_little_endian<uint32_t>(b, o::TOW),
       .wnc = read_little_endian<uint16_t>(b, o::WNC),
       .mode = b[o::MODE],
@@ -293,7 +293,7 @@ inline std::optional<VelCovGeodetic> parse_vel_cov_geodetic(const Packet &p) {
     return std::nullopt;
   }
   const ByteSpan b = p.body();
-  return VelCovGeodetic{
+  return VelCovGeodetic {
       .tow = read_little_endian<uint32_t>(b, o::TOW),
       .wnc = read_little_endian<uint16_t>(b, o::WNC),
       .mode = b[o::MODE],
@@ -372,7 +372,7 @@ inline std::optional<AttEuler> parse_att_euler(const Packet &p) {
     return std::nullopt;
   }
   const ByteSpan b = p.body();
-  return AttEuler{
+  return AttEuler {
       .tow = read_little_endian<uint32_t>(b, o::TOW),
       .wnc = read_little_endian<uint16_t>(b, o::WNC),
       .nr_sv = b[o::NR_SV],
@@ -444,7 +444,7 @@ inline std::optional<AttCovEuler> parse_att_cov_euler(const Packet &p) {
     return std::nullopt;
   }
   const ByteSpan b = p.body();
-  return AttCovEuler{
+  return AttCovEuler {
       .tow = read_little_endian<uint32_t>(b, o::TOW),
       .wnc = read_little_endian<uint16_t>(b, o::WNC),
       .reserved = b[o::RESERVED],

@@ -100,7 +100,7 @@ struct Packet {
   uint8_t bid = BID_MASTER;
   MID mid = MID::Error;
   uint8_t len = 0;
-  std::array<uint8_t, MAX_PAYLOAD> data{};
+  std::array<uint8_t, MAX_PAYLOAD> data {};
 
   /**
    * @brief Return a copy of data.
@@ -153,8 +153,8 @@ struct Packet {
  * @return The sum of all message bytes excluding the preamble.
  *         If the lower byte value of the result is zero, the result is valid.
  */
-constexpr uint8_t checksum(uint8_t bid, uint8_t mid,
-                           std::span<const uint8_t> data) {
+constexpr uint8_t
+checksum(uint8_t bid, uint8_t mid, std::span<const uint8_t> data) {
   uint8_t sum = bid + mid + static_cast<uint8_t>(data.size());
   for (const uint8_t byte : data) {
     sum += byte;
@@ -171,7 +171,7 @@ constexpr uint8_t checksum(uint8_t bid, uint8_t mid,
  * Serialized form of a packet ready to send.
  */
 struct Encoded {
-  std::array<uint8_t, MAX_FRAME> bytes{};
+  std::array<uint8_t, MAX_FRAME> bytes {};
   std::size_t len = 0;
 
   /**
@@ -207,7 +207,7 @@ constexpr std::size_t OUTPUT_ITEM_BYTES = 4;
 template <std::size_t N>
 constexpr std::array<uint8_t, N * OUTPUT_ITEM_BYTES>
 build_output_config(const std::array<OutputItem, N> &items) {
-  std::array<uint8_t, N * OUTPUT_ITEM_BYTES> out{};
+  std::array<uint8_t, N * OUTPUT_ITEM_BYTES> out {};
   for (std::size_t i = 0; i < N; i++) {
     const auto id = write_u16_big_endian(static_cast<uint16_t>(items[i].id));
     const auto rate = write_u16_big_endian(items[i].rate_hz);
@@ -265,7 +265,7 @@ public:
    *
    * At 115200 baud a full 254-byte frame takes 22ms.
    */
-  static constexpr Ms FRAME_TIMEOUT{50};
+  static constexpr Ms FRAME_TIMEOUT {50};
 
   /**
    * @brief Reset the parser and drop the current frame.
@@ -359,13 +359,13 @@ private:
   };
 
   State _state = State::Preamble;
-  Ms _last_advance{0};
+  Ms _last_advance {0};
   uint8_t _bid = 0;
   uint8_t _mid = 0;
   uint8_t _length = 0;
   uint8_t _index = 0;
   uint8_t _sum = 0;
-  std::array<uint8_t, MAX_PAYLOAD> _buffer{};
+  std::array<uint8_t, MAX_PAYLOAD> _buffer {};
 };
 
 /**
@@ -413,7 +413,7 @@ inline std::optional<DataPacket> find_data(const Packet &packet,
       break;
     }
     if (id == wanted) {
-      return DataPacket{id, s.subspan(i + SUBPACKET_HEADER, len)};
+      return DataPacket {id, s.subspan(i + SUBPACKET_HEADER, len)};
     }
     i += SUBPACKET_HEADER + len;
   }
@@ -429,7 +429,7 @@ inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet) {
     return read_f32_big_endian(
         sub->bytes.subspan(idx * sizeof(float), sizeof(float)));
   };
-  return plrs::Quaternion{
+  return plrs::Quaternion {
       .w = take(0),
       .x = take(1),
       .y = take(2),

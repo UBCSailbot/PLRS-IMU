@@ -42,9 +42,9 @@ using Ms = std::chrono::milliseconds;
 
 template <typename T>
 constexpr T read_little_endian(ByteSpan b, std::size_t offset) {
-  std::array<std::byte, sizeof(T)> tmp{};
+  std::array<std::byte, sizeof(T)> tmp {};
   for (std::size_t i = 0; i < sizeof(T); i++) {
-    tmp[i] = std::byte{b[offset + i]};
+    tmp[i] = std::byte {b[offset + i]};
   }
   return std::bit_cast<T>(tmp);
 }
@@ -78,7 +78,7 @@ constexpr uint16_t crc_ccitt(ByteSpan data, uint16_t init = CRC_INIT) {
 struct Packet {
   uint16_t id = 0;
   uint16_t body_length = 0;
-  std::array<uint8_t, MAX_BODY> data{};
+  std::array<uint8_t, MAX_BODY> data {};
 
   constexpr ByteSpan body() const { return {data.data(), body_length}; }
   constexpr uint16_t block_number() const { return id & ID_BLOCK_MASK; }

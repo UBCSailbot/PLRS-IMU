@@ -18,8 +18,14 @@ namespace fusion {
 using Ms = std::chrono::milliseconds;
 
 constexpr float GRAVITY_MS2 = 9.81f;
+// Arduino.h defines these as macros; only define our constexpr versions on
+// non-Arduino builds (e.g. native host tests).
+#ifndef RAD_TO_DEG
 constexpr float RAD_TO_DEG = 180.0f / std::numbers::pi_v<float>;
+#endif
+#ifndef DEG_TO_RAD
 constexpr float DEG_TO_RAD = std::numbers::pi_v<float> / 180.0f;
+#endif
 
 /**
  * Quaternion known to be unit-norm by construction.
@@ -37,7 +43,7 @@ public:
   static constexpr float NORM_TOLERANCE = 0.01f;
 
   static constexpr UnitQuaternion identity() {
-    return UnitQuaternion{plrs::Quaternion{1.0f, 0.0f, 0.0f, 0.0f}};
+    return UnitQuaternion {plrs::Quaternion {1.0f, 0.0f, 0.0f, 0.0f}};
   }
 
   /**
@@ -56,8 +62,8 @@ public:
     if (!(norm >= 1.0f - NORM_TOLERANCE && norm <= 1.0f + NORM_TOLERANCE)) {
       return std::unexpected("Quaternion norm not close to 1");
     }
-    return UnitQuaternion{
-        plrs::Quaternion{q.w / norm, q.x / norm, q.y / norm, q.z / norm}};
+    return UnitQuaternion {
+        plrs::Quaternion {q.w / norm, q.x / norm, q.y / norm, q.z / norm}};
   }
 
   /**
@@ -67,7 +73,7 @@ public:
   static constexpr UnitQuaternion multiply(UnitQuaternion a, UnitQuaternion b) {
     const plrs::Quaternion p = a._q;
     const plrs::Quaternion q = b._q;
-    return UnitQuaternion{plrs::Quaternion{
+    return UnitQuaternion {plrs::Quaternion {
         p.w * q.w - p.x * q.x - p.y * q.y - p.z * q.z,
         p.w * q.x + p.x * q.w + p.y * q.z - p.z * q.y,
         p.w * q.y - p.x * q.z + p.y * q.w + p.z * q.x,
@@ -79,7 +85,7 @@ public:
    * @brief Conjugate of a unit quaternion.
    */
   constexpr UnitQuaternion conjugate() const {
-    return UnitQuaternion{plrs::Quaternion{_q.w, -_q.x, -_q.y, -_q.z}};
+    return UnitQuaternion {plrs::Quaternion {_q.w, -_q.x, -_q.y, -_q.z}};
   }
 
   constexpr plrs::Quaternion components() const { return _q; }

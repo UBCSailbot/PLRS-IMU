@@ -37,7 +37,7 @@ constexpr uint8_t NIBBLE_BITS = 4;
  */
 
 struct Sentence {
-  std::array<char, MAX_BODY> data{};
+  std::array<char, MAX_BODY> data {};
   std::size_t length = 0;
 
   /**
