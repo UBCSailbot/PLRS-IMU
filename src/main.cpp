@@ -65,12 +65,6 @@ void setup() {
               &fusion_params,
               FUSION_TASK_PRIORITY,
               nullptr);
-  // xTaskCreate(fusion_task::task,
-  //             "fusion",
-  //             FUSION_TASK_STACK_SIZE,
-  //             &fusion_params,
-  //             FUSION_TASK_PRIORITY,
-  //             nullptr);
 }
 
 void loop() {
