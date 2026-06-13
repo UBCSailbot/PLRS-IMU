@@ -1,3 +1,4 @@
+#include "_freertos.h"
 #include "ekf_filter.h"
 #include "fusion.h"
 #include "fusion_task.h"
@@ -9,6 +10,18 @@
 #include <FreeRTOS.h>
 #include <SerialPIO.h>
 #include <task.h>
+
+void heartbeat_task(void *params) {
+  while (true) {
+    for (uint32_t i = 0; i < 2; i++) {
+      digitalWrite(HEARTBEAT_LED_PIN, HIGH);
+      vTaskDelay(1000);
+      digitalWrite(HEARTBEAT_LED_PIN, LOW);
+      vTaskDelay(1000);
+    }
+    vTaskDelay(2000);
+  }
+}
 
 void setup() {
   Serial.begin(115200); // required to bring up USB CDC (ttyACM0)
@@ -65,6 +78,8 @@ void setup() {
               &fusion_params,
               FUSION_TASK_PRIORITY,
               nullptr);
+  // Temporary heartbeat task
+  xTaskCreate(heartbeat_task, "heartbeat", 128, nullptr, 4, nullptr);
 }
 
 void loop() {
