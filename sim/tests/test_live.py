@@ -119,15 +119,16 @@ def test_open_loop_heading_integrates_gyro_after_seed() -> None:
 
 
 def test_open_loop_heading_wraps_at_seam() -> None:
-    # Seed at -170, then a CCW gyro that drives heading below -180 wraps to
-    # +180, matching the firmware-wrapped fused track rather than running past.
-    lines = [
-        "G,0,-170.000,1.000,1",
-        "I,0,1,0,0,0,0,0,0,0,0,9.81",
-        "I,1000,1,0,0,0,0,0,0.5,0,0,9.81",
-    ]
+    # Seed at -170, then a CCW gyro that walks heading below -180. Each step
+    # wraps to (-180, 180] like the firmware-wrapped fused track, so the
+    # open-loop line crosses the seam together with it rather than running past.
+    lines = ["G,0,-170.000,1.000,1", "I,0,1,0,0,0,0,0,0,0,0,9.81"]
+    # 0.5 rad/s for 1 s steps -> -28.6 deg/step; by 1 s it is below -180.
+    lines += [f"I,{t},1,0,0,0,0,0,0.5,0,0,9.81" for t in (1000, 2000, 3000)]
     state = monitor(lines, show=False, summary_interval_ms=0)
-    assert list(state.openloop.heading)[-1] == pytest.approx(161.35, abs=0.1)
+    headings = list(state.openloop.heading)
+    assert headings[1] == pytest.approx(161.35, abs=0.1)  # first step wrapped
+    assert all(-180.0 < h <= 180.0 for h in headings)
 
 
 def test_snapshot_consistent_under_concurrent_appends() -> None:
