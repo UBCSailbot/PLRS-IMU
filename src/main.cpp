@@ -5,6 +5,7 @@
 #include "gnss_task.h"
 #include "hardware_config.h"
 #include "imu_task.h"
+#include "tuning.h"
 
 #include <Arduino.h>
 #include <FreeRTOS.h>
@@ -42,24 +43,11 @@ void setup() {
   QueueHandle_t imu_queue = xQueueCreate(8, sizeof(fusion::ImuSample));
   QueueHandle_t gnss_queue = xQueueCreate(4, sizeof(fusion::GnssSample));
 
-  static const fusion::TinyEkfFilter::Config filter_config {
-      .q_heading_deg2 = 0.01f,
-      .q_roll_deg2 = 0.01f,
-      .q_pitch_deg2 = 0.01f,
-      .q_bias_deg2_s2 = 0.0001f,
-      .p0_heading_deg2 = 1000.0f,
-      .p0_roll_deg2 = 1000.0f,
-      .p0_pitch_deg2 = 1000.0f,
-      .p0_bias_deg2_s2 = 1.0f,
-      .mti_roll_variance_deg2 = 1.0f,
-      .mti_pitch_variance_deg2 = 1.0f,
-  };
-
   static imu_task::TaskParams imu_params {mti::Uart(Serial2), imu_queue};
-  static gnss_task::TaskParams gnss_params {septentrio_gnss::Uart(Serial1),
-                                            gnss_queue};
+  static gnss_task::TaskParams gnss_params {
+      septentrio_gnss::Uart(Serial1), gnss_queue, tuning::kGnssMount};
   static fusion_task::TaskParams fusion_params {
-      imu_queue, gnss_queue, filter_config};
+      imu_queue, gnss_queue, tuning::kFilterConfig};
 
   xTaskCreate(imu_task::task,
               "imu",
