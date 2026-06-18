@@ -47,6 +47,19 @@ public:
   }
 
   /**
+   * @brief Wrap already-unit components without validating or normalizing.
+   *
+   * The constexpr counterpart to `from_raw`, for components computed unit at
+   * build time (e.g. the generated mount in tuning.h). The caller guarantees
+   * `|q| == 1`; use `from_raw` for untrusted input.
+   *
+   * @param q  Unit quaternion components.
+   */
+  static constexpr UnitQuaternion from_unit_unchecked(plrs::Quaternion q) {
+    return UnitQuaternion {q};
+  }
+
+  /**
    * @brief Validate that `q` is approximately unit and normalize it.
    *
    * @param q  Raw quaternion components.

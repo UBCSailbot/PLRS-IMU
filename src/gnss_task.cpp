@@ -134,10 +134,8 @@ void task(void *params) {
         continue;
       }
 
-      // TODO: thread mount calibration through TaskParams once tuning codegen
-      // lands (#47)
-      constexpr fusion::GnssAttitudeMount mount {};
-      auto sample = fusion::att_euler_to_gnss_sample(*pending_att, *cov, mount);
+      auto sample =
+          fusion::att_euler_to_gnss_sample(*pending_att, *cov, p.mount);
       pending_att = std::nullopt;
 
       xQueueSend(p.queue, &sample, 0);

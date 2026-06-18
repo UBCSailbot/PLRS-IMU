@@ -1,4 +1,4 @@
-.PHONY: help format test build upload tui sim-images sim-test sim-format
+.PHONY: help format test build flash tui sim-images sim-test sim-format
 
 SCENARIO ?=
 VIEW     ?=
@@ -8,7 +8,7 @@ help:
 	@echo "  format       clang-format all sources in-place + ruff format sim/"
 	@echo "  test         run host Unity test suite (pio test -e native)"
 	@echo "  build        compile firmware (pio run -e pico)"
-	@echo "  upload       build and flash the RP2040 (pio run -e pico -t upload)"
+	@echo "  flash        build and flash the RP2040 (pio run -e pico -t upload)"
 	@echo ""
 	@echo "Python sim targets (the native binding rebuilds on import as needed):"
 	@echo "  tui          interactive picker; or SCENARIO=<name> [VIEW=timeseries|mounting|simulate]"
@@ -27,7 +27,7 @@ test:
 build:
 	pio run -e pico
 
-upload:
+flash:
 	pio run -e pico -t upload
 
 tui:
