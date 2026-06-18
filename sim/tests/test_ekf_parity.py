@@ -97,7 +97,8 @@ def test_predict_integrates_gyro() -> None:
     f.update(make_gnss(0.0, 1.0, 1000))
     f.predict(make_imu(0.0, 1000))
     f.predict(make_imu(0.5, 2000))
-    assert abs(f.output().heading_deg - 28.6479) < 0.01
+    # Heading is compass (CW-positive); a CCW gyro drives it negative.
+    assert abs(f.output().heading_deg + 28.6479) < 0.01
 
 
 def test_predict_grows_variance() -> None:
