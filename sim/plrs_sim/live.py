@@ -448,8 +448,12 @@ class _ScrollPanel:
         self.ax = ax
         self.which = which
         self.window_s = window_s
-        (self.fused_line,) = ax.plot([], [], color="tab:orange", label="fused", animated=True)
-        (self.open_line,) = ax.plot([], [], color="tab:green", label="open-loop", animated=True)
+        (self.fused_line,) = ax.plot(
+            [], [], color="tab:orange", label="fused", animated=True
+        )
+        (self.open_line,) = ax.plot(
+            [], [], color="tab:green", label="open-loop", animated=True
+        )
         ax.set_xlim(-window_s, 0.0)
         ax.set_ylim(*_SCROLL_INITIAL_YLIM[which])
         ax.set_xlabel("seconds ago")
@@ -466,7 +470,7 @@ class _ScrollPanel:
         to grow (so the caller must redraw this axis frame, not just blit)."""
         t_now, arrays = state.snapshot(self.which)
         ymin = ymax = None
-        for (t, values), line in zip(arrays, self.lines):
+        for (t, values), line in zip(arrays, self.lines, strict=True):
             if t.size == 0:
                 continue
             rel = t - t_now
