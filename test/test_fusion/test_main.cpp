@@ -155,14 +155,17 @@ void test_first_predict_baseline_only() {
   TEST_ASSERT_EQUAL_FLOAT(45.0f, out.heading_deg);
 }
 
-/** @brief Gyro_z integrates into heading: 0.5 rad/s for 1 s ~= 28.6479 deg. */
+/**
+ * @brief Gyro_z integrates into heading. Heading is compass (CW-positive), so a
+ * CCW gyro of 0.5 rad/s for 1 s drives it to ~= -28.6479 deg.
+ */
 void test_predict_integrates_gyro() {
   TinyEkfFilter f(kTestConfig);
   f.update(make_gnss(0.0f, 1.0f, Ms {1000}));
   f.predict(make_imu(0.0f, Ms {1000})); // baseline
   f.predict(make_imu(0.5f, Ms {2000})); // 0.5 rad/s * 1 s
   auto out = f.output();
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, 28.6479f, out.heading_deg);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, -28.6479f, out.heading_deg);
 }
 
 /** @brief A predict step grows the heading variance (process noise added). */
@@ -185,7 +188,8 @@ void test_predict_grows_variance() {
  *
  * At 30 deg heel a pure world-frame yaw rate of 1 rad/s shows up in the body
  * gyro as (0, sin(heel), cos(heel)). The Euler yaw row recovers the full
- * 1 rad/s, decoupled from heel, while roll and pitch hold steady.
+ * 1 rad/s, decoupled from heel, while roll and pitch hold steady. Heading is
+ * compass (CW-positive), so the CCW world yaw shows up negative.
  */
 void test_predict_heeled_flat_turn_tracks_world_yaw() {
   TinyEkfFilter f(kTestConfig);
@@ -198,7 +202,7 @@ void test_predict_heeled_flat_turn_tracks_world_yaw() {
   f.predict(make_imu_with(omega, heel, Ms {1000})); // baseline
   f.predict(make_imu_with(omega, heel, Ms {2000})); // 1 s of turn
   auto out = f.output();
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, yaw_rate * RAD_TO_DEG, out.heading_deg);
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, -yaw_rate * RAD_TO_DEG, out.heading_deg);
   TEST_ASSERT_FLOAT_WITHIN(0.05f, 30.0f, out.roll_deg);
   TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, out.pitch_deg);
 }
@@ -276,7 +280,8 @@ void test_predict_wraps_heading_past_180() {
   TinyEkfFilter f(kTestConfig);
   f.update(make_gnss(170.0f, 1.0f, Ms {1000}));
   f.predict(make_imu(0.0f, Ms {1000}));
-  f.predict(make_imu(0.5f, Ms {2000})); // +28.6 deg -> 198.6 -> wraps to -161.4
+  // Compass: a CW (negative gyro) turn raises heading +28.6 -> 198.6 -> -161.4.
+  f.predict(make_imu(-0.5f, Ms {2000}));
   auto out = f.output();
   TEST_ASSERT_TRUE(out.heading_deg <= 180.0f && out.heading_deg > -180.0f);
   TEST_ASSERT_FLOAT_WITHIN(0.1f, -161.35f, out.heading_deg);

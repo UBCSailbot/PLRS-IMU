@@ -97,8 +97,8 @@ def test_monitor_state_accumulates_both_attitude_sources() -> None:
     # Identity quaternion -> level attitude on the open-loop series.
     assert list(state.openloop.t_ms) == [1000, 2000]
     assert state.openloop.roll[-1] == pytest.approx(0.0)
-    # The first I (t=1000) precedes the GNSS fix, so heading is unseeded (0);
-    # after seeding to 90 the zero gyro adds no drift.
+    # The first I (t=1000) seeds heading from the identity-quaternion yaw (0);
+    # the GNSS fix then re-anchors it to 90, and the zero gyro adds no drift.
     assert list(state.openloop.heading) == pytest.approx([0.0, 90.0])
     assert state.last_gnss is not None and state.last_gnss.heading_deg == 90.0
     assert state.last_diag == "IMU: ready"
@@ -106,15 +106,62 @@ def test_monitor_state_accumulates_both_attitude_sources() -> None:
 
 
 def test_open_loop_heading_integrates_gyro_after_seed() -> None:
-    # Seed heading at 100 deg, then a 1 rad/s yaw rate for 1 s -> +57.3 deg.
+    # Seed heading at 100 deg; compass convention, so a CCW 1 rad/s yaw rate
+    # for 1 s drives it -57.3 deg.
     lines = [
         "G,0,100.000,1.000,1",
         "I,0,1,0,0,0,0,0,0,0,0,9.81",
         "I,1000,1,0,0,0,0,0,1.0,0,0,9.81",
     ]
     state = monitor(lines, show=False, summary_interval_ms=0)
-    expected = [100.0, 100.0 + 180.0 / 3.14159]
+    expected = [100.0, 100.0 - 180.0 / 3.14159]
     assert list(state.openloop.heading) == pytest.approx(expected, abs=0.1)
+
+
+def test_open_loop_heading_wraps_at_seam() -> None:
+    # Seed at -170, then a CCW gyro that walks heading below -180. Each step
+    # wraps to (-180, 180] like the firmware-wrapped fused track, so the
+    # open-loop line crosses the seam together with it rather than running past.
+    lines = ["G,0,-170.000,1.000,1", "I,0,1,0,0,0,0,0,0,0,0,9.81"]
+    # 0.5 rad/s for 1 s steps -> -28.6 deg/step; by 1 s it is below -180.
+    lines += [f"I,{t},1,0,0,0,0,0,0.5,0,0,9.81" for t in (1000, 2000, 3000)]
+    state = monitor(lines, show=False, summary_interval_ms=0)
+    headings = list(state.openloop.heading)
+    assert headings[1] == pytest.approx(161.35, abs=0.1)  # first step wrapped
+    assert all(-180.0 < h <= 180.0 for h in headings)
+
+
+def test_snapshot_consistent_under_concurrent_appends() -> None:
+    # The GUI thread snapshots the series while the drain thread appends; the two
+    # arrays per series must always be equal length (no half-appended sample).
+    import threading
+
+    state = MonitorState()
+    stop = threading.Event()
+
+    def writer() -> None:
+        t = 0
+        while not stop.is_set():
+            t += 10
+            state.update(
+                ImuRecord(
+                    timestamp_ms=t,
+                    orientation=Quaternion(w=1.0, x=0.0, y=0.0, z=0.0),
+                    angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=0.1),
+                    accel_ms2=Vec3(x=0.0, y=0.0, z=9.81),
+                )
+            )
+
+    thread = threading.Thread(target=writer)
+    thread.start()
+    try:
+        for _ in range(3000):
+            _t_now, arrays = state.snapshot("heading")
+            for t, values in arrays:
+                assert t.size == values.size
+    finally:
+        stop.set()
+        thread.join()
 
 
 def test_monitor_records_stream_verbatim(tmp_path) -> None:
@@ -172,22 +219,21 @@ def test_format_parse_round_trips() -> None:
 
 
 def test_live_draw_panels_render_headless() -> None:
-    # Prove the boat + scroll drawing code runs (under Agg, no window): a bug
+    # Prove the scroll-panel drawing code runs (under Agg, no window): a bug
     # in the live panels surfaces here instead of only on hardware night.
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from plrs_sim.live import _draw_boat_panel, _draw_scroll
+    from plrs_sim.live import _ScrollPanel
 
     state = monitor(_SAMPLE_LINES, show=False, summary_interval_ms=0)
     fig = plt.figure()
-    ax3d = fig.add_subplot(1, 2, 1, projection="3d")
-    ax = fig.add_subplot(1, 2, 2)
-    _draw_boat_panel(ax3d, state)
-    _draw_scroll(ax, state, "heading", window_s=20.0)
-    assert ax.lines  # at least one series was plotted
+    ax = fig.add_subplot(1, 1, 1)
+    panel = _ScrollPanel(ax, "heading", window_s=20.0)
+    panel.update(state)
+    assert any(line.get_xdata().size for line in ax.lines)  # a series got data
     plt.close(fig)
 
 

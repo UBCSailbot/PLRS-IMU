@@ -13,14 +13,15 @@
 #include <task.h>
 
 void heartbeat_task(void *params) {
+  pinMode(HEARTBEAT_LED_PIN, OUTPUT);
   while (true) {
     for (uint32_t i = 0; i < 2; i++) {
       digitalWrite(HEARTBEAT_LED_PIN, HIGH);
-      vTaskDelay(1000);
+      vTaskDelay(pdMS_TO_TICKS(200));
       digitalWrite(HEARTBEAT_LED_PIN, LOW);
-      vTaskDelay(1000);
+      vTaskDelay(pdMS_TO_TICKS(200));
     }
-    vTaskDelay(2000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
