@@ -223,7 +223,7 @@ class MonitorState:
                     self._dr_heading = yaw
             else:
                 dt_s = (rec.timestamp_ms - self._dr_prev_ms) / 1000.0
-                self._dr_heading += rec.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
+                self._dr_heading -= rec.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
             self._dr_prev_ms = rec.timestamp_ms
             self.openloop.append(rec.timestamp_ms, self._dr_heading, roll, pitch)
             self.latest_t_ms = rec.timestamp_ms
