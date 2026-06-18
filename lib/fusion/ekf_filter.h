@@ -128,9 +128,11 @@ public:
     const EulerRatesJacobian jac =
         euler_rates_jacobian(roll_rad, pitch_rad, imu.angular_velocity_rad_s);
 
+    // ENU yaw is CCW-positive; compass heading is CW-positive. Negate the ENU
+    // yaw rate so the heading state stays in compass convention.
     const float fx[N_STATE] = {
         _ekf.x[IDX_HEADING] +
-            (rates.yaw_dot * RAD_TO_DEG - _ekf.x[IDX_GYRO_BIAS]) * dt_s,
+            (-rates.yaw_dot * RAD_TO_DEG - _ekf.x[IDX_GYRO_BIAS]) * dt_s,
         _ekf.x[IDX_ROLL] + rates.roll_dot * RAD_TO_DEG * dt_s,
         _ekf.x[IDX_PITCH] + rates.pitch_dot * RAD_TO_DEG * dt_s,
         _ekf.x[IDX_GYRO_BIAS],
@@ -142,8 +144,8 @@ public:
     // the RAD_TO_DEG and DEG_TO_RAD conversions cancel.
     const float F[N_STATE * N_STATE] = {
         1.0f,
-        jac.dyaw_droll * dt_s,
-        jac.dyaw_dpitch * dt_s,
+        -jac.dyaw_droll * dt_s,
+        -jac.dyaw_dpitch * dt_s,
         -dt_s,
         0.0f,
         1.0f + jac.droll_droll * dt_s,
