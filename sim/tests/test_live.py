@@ -106,15 +106,28 @@ def test_monitor_state_accumulates_both_attitude_sources() -> None:
 
 
 def test_open_loop_heading_integrates_gyro_after_seed() -> None:
-    # Seed heading at 100 deg, then a 1 rad/s yaw rate for 1 s -> +57.3 deg.
+    # Seed heading at 100 deg; compass convention, so a CCW 1 rad/s yaw rate
+    # for 1 s drives it -57.3 deg.
     lines = [
         "G,0,100.000,1.000,1",
         "I,0,1,0,0,0,0,0,0,0,0,9.81",
         "I,1000,1,0,0,0,0,0,1.0,0,0,9.81",
     ]
     state = monitor(lines, show=False, summary_interval_ms=0)
-    expected = [100.0, 100.0 + 180.0 / 3.14159]
+    expected = [100.0, 100.0 - 180.0 / 3.14159]
     assert list(state.openloop.heading) == pytest.approx(expected, abs=0.1)
+
+
+def test_open_loop_heading_wraps_at_seam() -> None:
+    # Seed at -170, then a CCW gyro that drives heading below -180 wraps to
+    # +180, matching the firmware-wrapped fused track rather than running past.
+    lines = [
+        "G,0,-170.000,1.000,1",
+        "I,0,1,0,0,0,0,0,0,0,0,9.81",
+        "I,1000,1,0,0,0,0,0,0.5,0,0,9.81",
+    ]
+    state = monitor(lines, show=False, summary_interval_ms=0)
+    assert list(state.openloop.heading)[-1] == pytest.approx(161.35, abs=0.1)
 
 
 def test_snapshot_consistent_under_concurrent_appends() -> None:
