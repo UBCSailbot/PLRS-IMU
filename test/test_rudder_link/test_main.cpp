@@ -355,6 +355,37 @@ void test_heading_end_to_end() {
   TEST_ASSERT_EQUAL_FLOAT(angle, h->deg);
 }
 
+// ---------------------------------------------------------------------------
+// Sender
+// ---------------------------------------------------------------------------
+
+/** @brief Successive frames carry 0, 1, 2, ... as their seq. */
+void test_sender_increments_seq() {
+  Sender s;
+  Parser p;
+  for (uint8_t expected = 0; expected < 3; expected++) {
+    const auto frame = s.next(Heading {.deg = 1.0f});
+    auto out = feed_all(p, frame.view());
+    TEST_ASSERT_EQUAL_size_t(1, out.size());
+    TEST_ASSERT_TRUE(out[0].has_value());
+    TEST_ASSERT_EQUAL_HEX8(expected, out[0]->seq);
+  }
+}
+
+/** @brief The seq counter wraps from 255 back to 0. */
+void test_sender_seq_wraps() {
+  Sender s;
+  Parser p;
+  uint8_t last = 0xFF;
+  for (int i = 0; i < 257; i++) {
+    const auto frame = s.next(Heading {.deg = 0.0f});
+    auto out = feed_all(p, frame.view());
+    TEST_ASSERT_EQUAL_size_t(1, out.size());
+    last = out[0]->seq;
+  }
+  TEST_ASSERT_EQUAL_HEX8(0, last);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_crc16_known_answer);
@@ -377,5 +408,7 @@ int main() {
   RUN_TEST(test_parser_no_false_timeout);
   RUN_TEST(test_heading_from_payload_wrong_size);
   RUN_TEST(test_heading_end_to_end);
+  RUN_TEST(test_sender_increments_seq);
+  RUN_TEST(test_sender_seq_wraps);
   return UNITY_END();
 }

@@ -238,6 +238,17 @@ template <class M> constexpr Encoded encode(uint8_t seq, const M &msg) {
   return *encode(M::ID, seq, msg.to_payload());
 }
 
+/**
+ * Stamps each outgoing frame with the next sequence number.
+ */
+class Sender {
+public:
+  template <class M> Encoded next(const M &msg) { return encode(_seq++, msg); }
+
+private:
+  uint8_t _seq = 0;
+};
+
 /*
  * Receiving.
  */
