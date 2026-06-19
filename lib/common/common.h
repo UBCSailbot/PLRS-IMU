@@ -10,6 +10,14 @@
 #include <cstdint>
 #include <span>
 
+// Marks a returned view as borrowing *this, so clang/clangd flag a span kept
+// past the owner's lifetime. gcc lacks the attribute, so it expands to nothing.
+#if defined(__clang__)
+#define PLRS_LIFETIMEBOUND [[clang::lifetimebound]]
+#else
+#define PLRS_LIFETIMEBOUND
+#endif
+
 namespace plrs {
 
 using ByteSpan = std::span<const uint8_t>;

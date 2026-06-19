@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <span>
 
@@ -79,7 +80,9 @@ struct Encoded {
   std::array<uint8_t, MAX_FRAME> bytes {};
   std::size_t len = 0;
 
-  constexpr ByteSpan view() const { return {bytes.data(), len}; }
+  constexpr ByteSpan view() const PLRS_LIFETIMEBOUND {
+    return {bytes.data(), len};
+  }
 };
 
 /**
@@ -126,7 +129,9 @@ struct Decoded {
   std::array<uint8_t, MAX_DATA> bytes {};
   std::size_t len = 0;
 
-  constexpr ByteSpan view() const { return {bytes.data(), len}; }
+  constexpr ByteSpan view() const PLRS_LIFETIMEBOUND {
+    return {bytes.data(), len};
+  }
 };
 
 /**
@@ -162,5 +167,199 @@ constexpr std::optional<Decoded> cobs_decode(ByteSpan data) {
   }
   return d;
 }
+
+/**
+ * @brief Frame a message: header, payload, CRC, then COBS.
+ *
+ * @param id  Message type.
+ * @param seq  Sequence number.
+ * @param payload  Message body; at most MAX_PAYLOAD.
+ *
+ * @return The framed bytes ready to send, or nullopt if payload exceeds
+ *   MAX_PAYLOAD.
+ */
+constexpr std::optional<Encoded>
+encode(MsgId id, uint8_t seq, ByteSpan payload) {
+  if (payload.size() > MAX_PAYLOAD) {
+    return std::nullopt;
+  }
+
+  std::array<uint8_t, MAX_DATA> body {};
+  std::size_t n = 0;
+  body[n++] = PROTOCOL_VERSION;
+  body[n++] = static_cast<uint8_t>(id);
+  body[n++] = seq;
+  for (uint8_t b : payload) {
+    body[n++] = b;
+  }
+
+  const auto crc = plrs::write_u16_little_endian(crc16({body.data(), n}));
+  body[n++] = crc[0];
+  body[n++] = crc[1];
+
+  return cobs_encode({body.data(), n});
+}
+
+/*
+ * Messages.
+ */
+
+/**
+ * Heading message: compass heading in degrees (see docs/attitude.md).
+ *
+ * Each message type follows this shape: a static ID, a to_payload() that
+ * serializes its body, and a from_payload() that parses one back.
+ */
+struct Heading {
+  static constexpr MsgId ID = MsgId::Heading;
+  float deg;
+
+  constexpr std::array<uint8_t, sizeof(float)> to_payload() const {
+    return plrs::write_f32_little_endian(deg);
+  }
+
+  static constexpr std::optional<Heading> from_payload(ByteSpan payload) {
+    if (payload.size() != sizeof(float)) {
+      return std::nullopt;
+    }
+    return Heading {.deg = plrs::read_f32_little_endian(payload)};
+  }
+};
+
+/**
+ * @brief Frame a typed message: header, payload, CRC, then COBS.
+ *
+ * @param seq  Sequence number.
+ * @param msg  A message with a static ID and a to_payload().
+ *
+ * @return The framed bytes ready to send.
+ */
+template <class M> constexpr Encoded encode(uint8_t seq, const M &msg) {
+  return *encode(M::ID, seq, msg.to_payload());
+}
+
+/*
+ * Receiving.
+ */
+
+/**
+ * Why a completed frame was rejected.
+ */
+enum class Error : uint8_t {
+  Malformed,    // COBS decode failed, or the frame is shorter than a header+CRC
+  WrongVersion, // ver byte does not match PROTOCOL_VERSION
+  BadCrc,       // CRC mismatch
+};
+
+/**
+ * A parsed frame. payload borrows the parser's buffer => valid only until the
+ * next feed().
+ */
+struct Frame {
+  MsgId id;
+  uint8_t seq;
+  ByteSpan payload;
+};
+
+/**
+ * Accumulates bytes up to the COBS delimiter, then decodes, version-checks, and
+ * CRC-checks one frame.
+ */
+class Parser {
+public:
+  /**
+   * Drop a partial frame whose delimiter has not arrived within this long. COBS
+   * resyncs at the next delimiter regardless; this only bounds staleness.
+   */
+  static constexpr Ms FRAME_TIMEOUT {50};
+
+  /**
+   * @brief Reset the parser and drop the current frame.
+   */
+  void reset() {
+    _len = 0;
+    _overflow = false;
+  }
+
+  /**
+   * @brief Check if the parser is mid frame.
+   *
+   * @return true if bytes have accumulated since the last delimiter.
+   */
+  bool mid_frame() const { return _len > 0; }
+
+  /**
+   * @brief Feed one byte into the parser.
+   *
+   * @param byte  The current byte.
+   * @param now  The current time.
+   *
+   * @return nullopt while the frame is still arriving; otherwise a completed
+   *   frame, or the Error explaining why a completed frame was rejected.
+   */
+  std::optional<std::expected<Frame, Error>> feed(uint8_t byte, Ms now) {
+    if (_len > 0 && (now - _last_advance) > FRAME_TIMEOUT) {
+      reset();
+    }
+    _last_advance = now;
+
+    if (byte != FRAME_DELIMITER) {
+      if (_len < _block.size()) {
+        _block[_len++] = byte;
+      } else {
+        _overflow = true;
+      }
+      return std::nullopt;
+    }
+
+    const bool overflowed = _overflow;
+    const std::size_t n = _len;
+    reset();
+    if (n == 0) {
+      return std::nullopt;
+    }
+    if (overflowed) {
+      return std::expected<Frame, Error> {std::unexpected(Error::Malformed)};
+    }
+    return parse({_block.data(), n});
+  }
+
+private:
+  std::expected<Frame, Error> parse(ByteSpan block) {
+    auto decoded = cobs_decode(block);
+    if (!decoded) {
+      return std::unexpected(Error::Malformed);
+    }
+    _decoded = *decoded;
+
+    ByteSpan body = _decoded.view();
+    if (body.size() < HEADER_BYTES + CRC_BYTES) {
+      return std::unexpected(Error::Malformed);
+    }
+    if (body[0] != PROTOCOL_VERSION) {
+      return std::unexpected(Error::WrongVersion);
+    }
+
+    const std::size_t crc_at = body.size() - CRC_BYTES;
+    const uint16_t want = crc16({body.data(), crc_at});
+    const uint16_t got =
+        plrs::read_u16_little_endian(body.subspan(crc_at, CRC_BYTES));
+    if (want != got) {
+      return std::unexpected(Error::BadCrc);
+    }
+
+    return Frame {
+        .id = static_cast<MsgId>(body[1]),
+        .seq = body[2],
+        .payload = body.subspan(HEADER_BYTES, crc_at - HEADER_BYTES),
+    };
+  }
+
+  Ms _last_advance {0};
+  std::size_t _len = 0;
+  bool _overflow = false;
+  std::array<uint8_t, MAX_FRAME> _block {};
+  Decoded _decoded {};
+};
 
 } // namespace rudder
