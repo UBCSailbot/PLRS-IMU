@@ -19,21 +19,21 @@ namespace mti {
  */
 class Uart {
 public:
-  explicit Uart(HardwareSerial &serial) : serial_(serial) {}
+  explicit Uart(HardwareSerial &serial) : _serial(serial) {}
 
   void write(xbus::ByteSpan bytes) {
-    serial_.write(bytes.data(), bytes.size());
+    _serial.write(bytes.data(), bytes.size());
   }
 
   std::optional<uint8_t> read() {
-    if (serial_.available()) {
-      return static_cast<uint8_t>(serial_.read());
+    if (_serial.available()) {
+      return static_cast<uint8_t>(_serial.read());
     }
     return std::nullopt;
   }
 
 private:
-  HardwareSerial &serial_;
+  HardwareSerial &_serial;
 };
 
 } // namespace mti
