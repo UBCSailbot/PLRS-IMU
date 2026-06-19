@@ -112,8 +112,11 @@ void task(void *params) {
         print_gnss(gnss);
       }
 
+      const fusion::FusionOutput out = filter.output();
+      xQueueOverwrite(p.heading_mailbox, &out);
+
       if (xTaskGetTickCount() >= next_print) {
-        print_fusion(filter.output());
+        print_fusion(out);
         print_imu(imu);
         next_print += pdMS_TO_TICKS(TELEMETRY_INTERVAL_MS);
       }
