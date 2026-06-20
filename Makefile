@@ -1,11 +1,12 @@
-.PHONY: help format test build flash tui sim-images sim-test sim-format
+.PHONY: help format nix-format test build flash tui sim-images sim-test sim-format
 
 SCENARIO ?=
 VIEW     ?=
 
 help:
 	@echo "Firmware targets:"
-	@echo "  format       clang-format all sources in-place + ruff format sim/"
+	@echo "  format       clang-format all sources in-place + nixfmt + ruff format sim/"
+	@echo "  nix-format   nixfmt all .nix files in-place"
 	@echo "  test         run host Unity test suite (pio test -e native)"
 	@echo "  build        compile firmware (pio run -e pico)"
 	@echo "  flash        build and flash the RP2040 (pio run -e pico -t upload)"
@@ -19,7 +20,12 @@ help:
 format:
 	find lib src test -type f \( -name "*.h" -o -name "*.cpp" \) -print0 \
 		| xargs -0 clang-format -i
+	$(MAKE) nix-format
 	$(MAKE) sim-format
+
+nix-format:
+	find . -name "*.nix" -not -path "./.git/*" -print0 \
+		| xargs -0 nixfmt
 
 test:
 	pio test -e native

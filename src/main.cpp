@@ -5,6 +5,7 @@
 #include "gnss_task.h"
 #include "hardware_config.h"
 #include "imu_task.h"
+#include "rudder_task.h"
 #include "tuning.h"
 
 #include <Arduino.h>
@@ -42,12 +43,15 @@ void setup() {
 
   QueueHandle_t imu_queue = xQueueCreate(8, sizeof(fusion::ImuSample));
   QueueHandle_t gnss_queue = xQueueCreate(4, sizeof(fusion::GnssSample));
+  QueueHandle_t heading_mailbox = xQueueCreate(1, sizeof(fusion::FusionOutput));
 
   static imu_task::TaskParams imu_params {mti::Uart(Serial2), imu_queue};
   static gnss_task::TaskParams gnss_params {
       septentrio_gnss::Uart(Serial1), gnss_queue, tuning::kGnssMount};
   static fusion_task::TaskParams fusion_params {
-      imu_queue, gnss_queue, tuning::kFilterConfig};
+      imu_queue, gnss_queue, heading_mailbox, tuning::kFilterConfig};
+  static rudder_task::TaskParams rudder_params {rudder::Uart(output_serial),
+                                                heading_mailbox};
 
   xTaskCreate(imu_task::task,
               "imu",
@@ -66,6 +70,12 @@ void setup() {
               FUSION_TASK_STACK_SIZE,
               &fusion_params,
               FUSION_TASK_PRIORITY,
+              nullptr);
+  xTaskCreate(rudder_task::task,
+              "rudder",
+              RUDDER_TASK_STACK_SIZE,
+              &rudder_params,
+              RUDDER_TASK_PRIORITY,
               nullptr);
   // Temporary heartbeat task
   xTaskCreate(heartbeat_task, "heartbeat", 128, nullptr, 4, nullptr);
