@@ -75,8 +75,8 @@ constexpr uint8_t twosComplement(const uint8_t num) {
   return static_cast<uint8_t>(0x100 - num);
 }
 
-// NOTA: Le tre funzioni big-endian che erano qui sono state rimosse 
-// perché spostate nel file comune "common.h" dentro il namespace plrs.
+// NOTE: The three big-endian functions that were here have been removed 
+// because they were moved to the shared "common.h" file inside the plrs namespace.
 
 /*
  * Messages and Validation.
