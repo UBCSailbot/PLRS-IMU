@@ -14,6 +14,7 @@ namespace fusion_task {
 struct TaskParams {
   QueueHandle_t imu_queue;
   QueueHandle_t gnss_queue;
+  QueueHandle_t heading_mailbox;
   fusion::TinyEkfFilter::Config filter_config;
 };
 

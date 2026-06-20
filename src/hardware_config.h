@@ -15,10 +15,15 @@
 static constexpr uint32_t GNSS_TASK_STACK_SIZE = 2048;
 static constexpr uint32_t IMU_TASK_STACK_SIZE = 512;
 static constexpr uint32_t FUSION_TASK_STACK_SIZE = 1024;
+static constexpr uint32_t RUDDER_TASK_STACK_SIZE = 512;
 
 static constexpr uint32_t GNSS_TASK_PRIORITY = 3;
 static constexpr uint32_t IMU_TASK_PRIORITY = 3;
 static constexpr uint32_t FUSION_TASK_PRIORITY = 2;
+static constexpr uint32_t RUDDER_TASK_PRIORITY = 2;
+
+// Rudder link heading send rate.
+static constexpr uint32_t RUDDER_SEND_INTERVAL_MS = 100;
 
 /**
  * Hardware configuration.
