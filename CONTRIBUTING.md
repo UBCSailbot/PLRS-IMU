@@ -2,8 +2,12 @@
 
 ## Coding style
 
-Formatting is enforced by CI. Format changed files with `clang-format -i <file>`
-before pushing.
+Formatting and linting are enforced by CI. Before pushing, run `make format`
+(formats all C++, Nix, and Python in one shot), or individually:
+
+- **C++ (`lib/`, `src/`, `test/`):** `clang-format -i <file>` (style in `.clang-format`; LLVM base, 80-column limit)
+- **Nix files:** `make nix-format`
+- **Python (`sim/`):** `make sim-format` (ruff format + lint)
 
 Naming conventions: types and enum members in `PascalCase`, free functions and
 methods in `snake_case`, constants in `UPPER_SNAKE_CASE`, private members with a
