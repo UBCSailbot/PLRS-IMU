@@ -195,7 +195,8 @@ constexpr std::array<uint8_t, N * OUTPUT_ITEM_BYTES>
 build_output_config(const std::array<OutputItem, N> &items) {
   std::array<uint8_t, N * OUTPUT_ITEM_BYTES> out {};
   for (std::size_t i = 0; i < N; i++) {
-    const auto id = plrs::write_u16_big_endian(static_cast<uint16_t>(items[i].id));
+    const auto id =
+        plrs::write_u16_big_endian(static_cast<uint16_t>(items[i].id));
     const auto rate = plrs::write_u16_big_endian(items[i].rate_hz);
     const std::size_t base = i * OUTPUT_ITEM_BYTES;
     out[base + 0] = id[0];
