@@ -4,7 +4,6 @@
 
 #pragma once
 
-// 1. Aggiungiamo le librerie standard necessarie
 #include <array>
 #include <bit>
 #include <cstdint>
@@ -12,7 +11,6 @@
 
 namespace plrs {
 
-// 2. Definiamo ByteSpan dentro il namespace plrs
 using ByteSpan = std::span<const uint8_t>;
 
 /**

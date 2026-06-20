@@ -198,7 +198,7 @@ constexpr std::array<uint8_t, N * OUTPUT_ITEM_BYTES>
 build_output_config(const std::array<OutputItem, N> &items) {
   std::array<uint8_t, N * OUTPUT_ITEM_BYTES> out {};
   for (std::size_t i = 0; i < N; i++) {
-    // Aggiornato con il prefisso plrs::
+    // Qualified with plrs:: prefix
     const auto id = plrs::write_u16_big_endian(static_cast<uint16_t>(items[i].id));
     const auto rate = plrs::write_u16_big_endian(items[i].rate_hz);
     const std::size_t base = i * OUTPUT_ITEM_BYTES;
@@ -416,7 +416,7 @@ inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet) {
     return std::nullopt;
   }
   auto take = [&](std::size_t idx) {
-    // Aggiornato con il prefisso plrs::
+    // Qualified with plrs:: prefix
     return plrs::read_f32_big_endian(
         sub->bytes.subspan(idx * sizeof(float), sizeof(float)));
   };
