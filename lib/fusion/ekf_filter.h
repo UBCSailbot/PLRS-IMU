@@ -125,6 +125,7 @@ public:
     const float pitch_rad = _ekf.x[IDX_PITCH] * DEG_TO_RAD;
     const EulerRates rates =
         euler_rates_zyx(roll_rad, pitch_rad, imu.angular_velocity_rad_s);
+    _yaw_rate_dps = -rates.yaw_dot * RAD_TO_DEG - _ekf.x[IDX_GYRO_BIAS];
     const EulerRatesJacobian jac =
         euler_rates_jacobian(roll_rad, pitch_rad, imu.angular_velocity_rad_s);
 
@@ -219,6 +220,7 @@ public:
         .pitch_variance_deg2 =
             _has_predicted ? _ekf.P[IDX_PITCH * N_STATE + IDX_PITCH] : FLT_MAX,
         .timestamp = _last_predict_time,
+        .yaw_rate_dps = _yaw_rate_dps,
     };
   }
 
@@ -253,6 +255,7 @@ private:
   Config _cfg;
   float _Q[N_STATE * N_STATE];
   Ms _last_predict_time {0};
+  float _yaw_rate_dps = 0.0f;
   bool _initialized = false;
   bool _has_predicted = false;
 };

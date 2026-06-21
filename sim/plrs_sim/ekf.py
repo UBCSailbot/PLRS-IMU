@@ -122,6 +122,7 @@ def _from_native_output(o: _native.FusionOutput) -> FusionOutput:
         pitch_deg=o.pitch_deg,
         pitch_variance_deg2=o.pitch_variance_deg2,
         timestamp_ms=o.timestamp_ms,
+        yaw_rate_dps=o.yaw_rate_dps,
     )
 
 
