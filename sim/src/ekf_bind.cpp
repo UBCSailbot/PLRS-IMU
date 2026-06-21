@@ -21,7 +21,9 @@ NB_MODULE(_native, m) {
 
   nb::class_<plrs::Vec3>(m, "Vec3")
       .def(nb::init<>())
-      .def(nb::init<float, float, float>(), nb::arg("x"), nb::arg("y"),
+      .def(nb::init<float, float, float>(),
+           nb::arg("x"),
+           nb::arg("y"),
            nb::arg("z"))
       .def_rw("x", &plrs::Vec3::x)
       .def_rw("y", &plrs::Vec3::y)
@@ -29,8 +31,11 @@ NB_MODULE(_native, m) {
 
   nb::class_<Quaternion>(m, "Quaternion")
       .def(nb::init<>())
-      .def(nb::init<float, float, float, float>(), nb::arg("w"), nb::arg("x"),
-           nb::arg("y"), nb::arg("z"))
+      .def(nb::init<float, float, float, float>(),
+           nb::arg("w"),
+           nb::arg("x"),
+           nb::arg("y"),
+           nb::arg("z"))
       .def_rw("w", &Quaternion::w)
       .def_rw("x", &Quaternion::x)
       .def_rw("y", &Quaternion::y)
@@ -65,7 +70,7 @@ NB_MODULE(_native, m) {
       .def_prop_rw(
           "timestamp_ms",
           [](const ImuSample &s) { return s.timestamp.count(); },
-          [](ImuSample &s, Ms::rep v) { s.timestamp = Ms{v}; });
+          [](ImuSample &s, Ms::rep v) { s.timestamp = Ms {v}; });
 
   nb::class_<GnssSample>(m, "GnssSample")
       .def(nb::init<>())
@@ -75,7 +80,7 @@ NB_MODULE(_native, m) {
       .def_prop_rw(
           "timestamp_ms",
           [](const GnssSample &s) { return s.timestamp.count(); },
-          [](GnssSample &s, Ms::rep v) { s.timestamp = Ms{v}; });
+          [](GnssSample &s, Ms::rep v) { s.timestamp = Ms {v}; });
 
   nb::class_<FusionOutput>(m, "FusionOutput")
       .def_ro("heading_deg", &FusionOutput::heading_deg)
@@ -85,7 +90,8 @@ NB_MODULE(_native, m) {
       .def_ro("pitch_deg", &FusionOutput::pitch_deg)
       .def_ro("pitch_variance_deg2", &FusionOutput::pitch_variance_deg2)
       .def_prop_ro("timestamp_ms",
-                   [](const FusionOutput &s) { return s.timestamp.count(); });
+                   [](const FusionOutput &s) { return s.timestamp.count(); })
+      .def_ro("yaw_rate_dps", &FusionOutput::yaw_rate_dps);
 
   nb::class_<TinyEkfFilter::Config>(m, "Config")
       .def(nb::init<>())
@@ -134,6 +140,9 @@ NB_MODULE(_native, m) {
       .def_rw("fallback_heading_variance_deg2",
               &GnssAttitudeMount::fallback_heading_variance_deg2);
 
-  m.def("att_euler_to_gnss_sample", &att_euler_to_gnss_sample, nb::arg("att"),
-        nb::arg("cov"), nb::arg("mount"));
+  m.def("att_euler_to_gnss_sample",
+        &att_euler_to_gnss_sample,
+        nb::arg("att"),
+        nb::arg("cov"),
+        nb::arg("mount"));
 }

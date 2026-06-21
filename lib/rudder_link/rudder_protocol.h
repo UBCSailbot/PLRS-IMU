@@ -39,6 +39,7 @@ using Ms = std::chrono::milliseconds;
  */
 enum class MsgId : uint8_t {
   Heading = 0x01,
+  Attitude = 0x02,
 };
 
 /*
@@ -223,6 +224,55 @@ struct Heading {
       return std::nullopt;
     }
     return Heading {.deg = plrs::read_f32_little_endian(payload)};
+  }
+};
+
+/**
+ * Attitude message: heading, roll, pitch (degrees) and yaw rate (deg/s).
+ *
+ * All four fields come from the same FusionOutput tick, keeping them
+ * consistent across the latest-wins channel.
+ */
+struct Attitude {
+  static constexpr MsgId ID = MsgId::Attitude;
+  float heading_deg;
+  float roll_deg;
+  float pitch_deg;
+  float yaw_rate_dps;
+
+  constexpr std::array<uint8_t, 4 * sizeof(float)> to_payload() const {
+    const auto h = plrs::write_f32_little_endian(heading_deg);
+    const auto r = plrs::write_f32_little_endian(roll_deg);
+    const auto p = plrs::write_f32_little_endian(pitch_deg);
+    const auto y = plrs::write_f32_little_endian(yaw_rate_dps);
+    return {h[0],
+            h[1],
+            h[2],
+            h[3],
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            p[0],
+            p[1],
+            p[2],
+            p[3],
+            y[0],
+            y[1],
+            y[2],
+            y[3]};
+  }
+
+  static constexpr std::optional<Attitude> from_payload(ByteSpan payload) {
+    if (payload.size() != 4 * sizeof(float)) {
+      return std::nullopt;
+    }
+    return Attitude {
+        .heading_deg = plrs::read_f32_little_endian(payload.subspan(0, 4)),
+        .roll_deg = plrs::read_f32_little_endian(payload.subspan(4, 4)),
+        .pitch_deg = plrs::read_f32_little_endian(payload.subspan(8, 4)),
+        .yaw_rate_dps = plrs::read_f32_little_endian(payload.subspan(12, 4)),
+    };
   }
 };
 

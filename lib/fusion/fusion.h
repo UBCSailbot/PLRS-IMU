@@ -151,6 +151,7 @@ struct FusionOutput {
   float pitch_deg;
   float pitch_variance_deg2;
   Ms timestamp;
+  float yaw_rate_dps;
 };
 
 /**

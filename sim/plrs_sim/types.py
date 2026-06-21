@@ -74,6 +74,7 @@ class FusionOutput:
     pitch_deg: float
     pitch_variance_deg2: float
     timestamp_ms: int
+    yaw_rate_dps: float
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

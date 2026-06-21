@@ -20,7 +20,12 @@ void task(void *params) {
     fusion::FusionOutput out;
     if (xQueuePeek(p.heading_mailbox, &out, 0) == pdTRUE) {
       p.uart.write(
-          sender.next(rudder::Heading {.deg = out.heading_deg}).view());
+          sender
+              .next(rudder::Attitude {.heading_deg = out.heading_deg,
+                                      .roll_deg = out.roll_deg,
+                                      .pitch_deg = out.pitch_deg,
+                                      .yaw_rate_dps = out.yaw_rate_dps})
+              .view());
     }
   }
 }
