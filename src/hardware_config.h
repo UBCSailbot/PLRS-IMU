@@ -1,9 +1,10 @@
 /**
- * For pin assignment and hardware configuration of the RP2040.
+ * For pin assignment and hardware configuration of the RP2040 / RP2350 boards.
  */
 
 #pragma once
 
+#include <Arduino.h>
 #include <cstdint>
 
 /**
@@ -45,4 +46,4 @@ static constexpr uint32_t OUTPUT_UART_TX_PIN = 20;
 static constexpr uint32_t OUTPUT_UART_RX_PIN = 19;
 
 // Heartbeat
-static constexpr uint32_t HEARTBEAT_LED_PIN = 25;
+static constexpr uint32_t HEARTBEAT_LED_PIN = LED_BUILTIN;
