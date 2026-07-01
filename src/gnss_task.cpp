@@ -76,7 +76,8 @@ static void bring_up(septentrio_gnss::Uart &uart,
                                         septentrio_gnss::SbfInterval::Msec100);
 
     if (!cmd) {
-      if (Serial) Serial.println("# GNSS: failed to build command, retrying");
+      if (Serial)
+        Serial.println("# GNSS: failed to build command, retrying");
       vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
       continue;
     }
@@ -85,17 +86,20 @@ static void bring_up(septentrio_gnss::Uart &uart,
 
     auto reply = wait_for_reply(uart, parser, REPLY_TIMEOUT_MS);
     if (!reply) {
-      if (Serial) Serial.println("# GNSS: setSBFOutput timeout, retrying");
+      if (Serial)
+        Serial.println("# GNSS: setSBFOutput timeout, retrying");
       vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
       continue;
     }
     if (reply->kind == septentrio_gnss::ReplyKind::Err) {
-      if (Serial) Serial.println("# GNSS: setSBFOutput rejected, retrying");
+      if (Serial)
+        Serial.println("# GNSS: setSBFOutput rejected, retrying");
       vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
       continue;
     }
 
-    if (Serial) Serial.println("# GNSS: ready");
+    if (Serial)
+      Serial.println("# GNSS: ready");
     return;
   }
 }
