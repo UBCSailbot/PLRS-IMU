@@ -26,6 +26,9 @@ static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;
  * @param out  Fused estimate to print.
  */
 static void print_fusion(const fusion::FusionOutput &out) {
+  if (!Serial) {
+    return;
+  }
   Serial.print("F,");
   Serial.print(out.timestamp.count());
   Serial.print(',');
@@ -51,6 +54,9 @@ static void print_fusion(const fusion::FusionOutput &out) {
  * @param imu  Raw IMU sample as received from the IMU task.
  */
 static void print_imu(const fusion::ImuSample &imu) {
+  if (!Serial) {
+    return;
+  }
   const plrs::Quaternion q = imu.orientation.components();
   Serial.print("I,");
   Serial.print(imu.timestamp.count());
@@ -84,6 +90,9 @@ static void print_imu(const fusion::ImuSample &imu) {
  * @param gnss  Raw GNSS sample as received from the GNSS task.
  */
 static void print_gnss(const fusion::GnssSample &gnss) {
+  if (!Serial) {
+    return;
+  }
   Serial.print("G,");
   Serial.print(gnss.timestamp.count());
   Serial.print(',');
