@@ -31,13 +31,13 @@ void setup() {
 
   static SerialPIO output_serial(OUTPUT_UART_TX_PIN, OUTPUT_UART_RX_PIN);
 
-  Serial1.setTX(GNSS_UART_TX_PIN);
-  Serial1.setRX(GNSS_UART_RX_PIN);
-  Serial1.begin(GNSS_UART_BAUD);
+  Serial1.setTX(IMU_UART_TX_PIN);
+  Serial1.setRX(IMU_UART_RX_PIN);
+  Serial1.begin(IMU_UART_BAUD);
 
-  Serial2.setTX(IMU_UART_TX_PIN);
-  Serial2.setRX(IMU_UART_RX_PIN);
-  Serial2.begin(IMU_UART_BAUD);
+  Serial2.setTX(GNSS_UART_TX_PIN);
+  Serial2.setRX(GNSS_UART_RX_PIN);
+  Serial2.begin(GNSS_UART_BAUD);
 
   output_serial.begin(OUTPUT_UART_BAUD);
 
@@ -45,9 +45,9 @@ void setup() {
   QueueHandle_t gnss_queue = xQueueCreate(4, sizeof(fusion::GnssSample));
   QueueHandle_t heading_mailbox = xQueueCreate(1, sizeof(fusion::FusionOutput));
 
-  static imu_task::TaskParams imu_params {mti::Uart(Serial2), imu_queue};
+  static imu_task::TaskParams imu_params {mti::Uart(Serial1), imu_queue};
   static gnss_task::TaskParams gnss_params {
-      septentrio_gnss::Uart(Serial1), gnss_queue, tuning::kGnssMount};
+      septentrio_gnss::Uart(Serial2), gnss_queue, tuning::kGnssMount};
   static fusion_task::TaskParams fusion_params {
       imu_queue, gnss_queue, heading_mailbox, tuning::kFilterConfig};
   static rudder_task::TaskParams rudder_params {rudder::Uart(output_serial),

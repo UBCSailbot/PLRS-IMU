@@ -31,19 +31,19 @@ static constexpr uint32_t RUDDER_SEND_INTERVAL_MS = 100;
  */
 
 // UART 0
-static constexpr uint32_t GNSS_UART_BAUD = 115200;
-static constexpr uint32_t GNSS_UART_TX_PIN = 0;
-static constexpr uint32_t GNSS_UART_RX_PIN = 1;
+static constexpr uint32_t IMU_UART_BAUD = 115200;
+static constexpr uint32_t IMU_UART_TX_PIN = 16;
+static constexpr uint32_t IMU_UART_RX_PIN = 17;
 
 // UART 1
-static constexpr uint32_t IMU_UART_BAUD = 115200;
-static constexpr uint32_t IMU_UART_TX_PIN = 4;
-static constexpr uint32_t IMU_UART_RX_PIN = 5;
+static constexpr uint32_t GNSS_UART_BAUD = 115200;
+static constexpr uint32_t GNSS_UART_TX_PIN = 8;
+static constexpr uint32_t GNSS_UART_RX_PIN = 9;
 
 // Emulated UART with PIO
 static constexpr uint32_t OUTPUT_UART_BAUD = 115200;
-static constexpr uint32_t OUTPUT_UART_TX_PIN = 20;
-static constexpr uint32_t OUTPUT_UART_RX_PIN = 19;
+static constexpr uint32_t OUTPUT_UART_TX_PIN = 4;
+static constexpr uint32_t OUTPUT_UART_RX_PIN = 3;
 
 // Heartbeat
 static constexpr uint32_t HEARTBEAT_LED_PIN = LED_BUILTIN;
