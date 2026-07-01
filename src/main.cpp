@@ -35,9 +35,8 @@ void setup() {
   Serial1.setRX(IMU_UART_RX_PIN);
   Serial1.begin(IMU_UART_BAUD);
 
-  Serial2.setTX(GNSS_UART_TX_PIN);
-  Serial2.setRX(GNSS_UART_RX_PIN);
-  Serial2.begin(GNSS_UART_BAUD);
+  static SerialPIO gnss_serial(GNSS_UART_TX_PIN, GNSS_UART_RX_PIN);
+  gnss_serial.begin(GNSS_UART_BAUD);
 
   output_serial.begin(OUTPUT_UART_BAUD);
 
@@ -47,7 +46,7 @@ void setup() {
 
   static imu_task::TaskParams imu_params {mti::Uart(Serial1), imu_queue};
   static gnss_task::TaskParams gnss_params {
-      septentrio_gnss::Uart(Serial2), gnss_queue, tuning::kGnssMount};
+      septentrio_gnss::Uart(gnss_serial), gnss_queue, tuning::kGnssMount};
   static fusion_task::TaskParams fusion_params {
       imu_queue, gnss_queue, heading_mailbox, tuning::kFilterConfig};
   static rudder_task::TaskParams rudder_params {rudder::Uart(output_serial),

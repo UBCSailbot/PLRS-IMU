@@ -35,10 +35,10 @@ static constexpr uint32_t IMU_UART_BAUD = 115200;
 static constexpr uint32_t IMU_UART_TX_PIN = 16;
 static constexpr uint32_t IMU_UART_RX_PIN = 17;
 
-// UART 1
+// PIO UART on GP6/GP7; the hardware UART1 TX pin (GP8) is dead on the board.
 static constexpr uint32_t GNSS_UART_BAUD = 115200;
-static constexpr uint32_t GNSS_UART_TX_PIN = 8;
-static constexpr uint32_t GNSS_UART_RX_PIN = 9;
+static constexpr uint32_t GNSS_UART_TX_PIN = 7;
+static constexpr uint32_t GNSS_UART_RX_PIN = 6;
 
 // Emulated UART with PIO
 static constexpr uint32_t OUTPUT_UART_BAUD = 115200;
