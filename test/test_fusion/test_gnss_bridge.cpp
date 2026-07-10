@@ -13,12 +13,16 @@ constexpr float TOLERANCE = 1e-4f;
 
 // Mode 2 == heading + pitch from a fixed-ambiguity 2-antenna baseline.
 constexpr uint16_t ATT_MODE_HEADING_PITCH = 2;
+// Mode 1 == the same baseline resolved with float ambiguities.
+constexpr uint16_t ATT_MODE_FLOAT_HEADING_PITCH = 1;
 
 sbf::AttEuler make_att(float heading_deg,
-                       uint16_t mode = ATT_MODE_HEADING_PITCH) {
+                       uint16_t mode = ATT_MODE_HEADING_PITCH,
+                       uint8_t error = 0) {
   sbf::AttEuler att {};
   att.tow = 1000;
   att.mode = mode;
+  att.error = error;
   att.heading = heading_deg;
   att.pitch = 0.0f;
   att.roll = sbf::DNU_F4;
@@ -65,6 +69,25 @@ void test_bridge_dnu_heading_is_invalid() {
 void test_bridge_no_attitude_mode_is_invalid() {
   const GnssSample s =
       att_euler_to_gnss_sample(make_att(45.0f, 0), make_cov(4.0f), {});
+  TEST_ASSERT_FALSE(s.valid);
+}
+
+void test_bridge_float_ambiguity_mode_is_invalid() {
+  const GnssSample s = att_euler_to_gnss_sample(
+      make_att(45.0f, ATT_MODE_FLOAT_HEADING_PITCH), make_cov(4.0f), {});
+  TEST_ASSERT_FALSE(s.valid);
+}
+
+void test_bridge_fixed_full_attitude_mode_is_valid() {
+  const GnssSample s = att_euler_to_gnss_sample(
+      make_att(45.0f, ATT_MODE_FIXED_FULL), make_cov(4.0f), {});
+  TEST_ASSERT_TRUE(s.valid);
+}
+
+void test_bridge_baseline_error_is_invalid() {
+  // Error bits 0-1 == 1: not enough measurements on the main-aux1 baseline.
+  const GnssSample s = att_euler_to_gnss_sample(
+      make_att(45.0f, ATT_MODE_HEADING_PITCH, 1), make_cov(4.0f), {});
   TEST_ASSERT_FALSE(s.valid);
 }
 

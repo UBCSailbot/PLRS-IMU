@@ -20,12 +20,16 @@
 namespace fusion {
 
 /*
- * AttEuler mode code 0 means the receiver has no attitude solution; codes 1-4
- * all carry a heading (sbf_blocks.h AttEuler::mode). Mode is the authoritative
- * heading-availability gate, and code 0 already covers the "attitude not
- * requested" error case.
+ * AttEuler mode codes (sbf_blocks.h AttEuler::mode): 0 is no attitude; 2 and 4
+ * carry a heading from a fixed-ambiguity baseline; 1 and 3 are float-ambiguity
+ * solutions, whose heading can be tens of degrees off while the reported
+ * covariance stays optimistic, so only fixed modes reach the filter. The error
+ * bit field must also be clear: a nonzero code flags a degraded baseline even
+ * when mode still reports a solution.
  */
-constexpr uint16_t ATT_MODE_NO_ATTITUDE = 0;
+constexpr uint16_t ATT_MODE_FIXED_HEADING_PITCH = 2;
+constexpr uint16_t ATT_MODE_FIXED_FULL = 4;
+constexpr uint8_t ATT_ERROR_NONE = 0;
 
 /**
  * Static calibration relating the GNSS antenna baseline to boat-forward.
@@ -48,17 +52,19 @@ struct GnssAttitudeMount {
  * @param cov   Decoded AttCovEuler (block 5939) for the same epoch.
  * @param mount Static baseline-to-boat calibration.
  *
- * @return A heading measurement for update(). valid is false when the
- *         receiver has no attitude solution or a Do-Not-Use heading, in
- *         which case the filter skips it. Heading is converted to boat
- *         frame and wrapped to +-180; variance falls back to the mount
- *         default when the covariance is Do-Not-Use.
+ * @return A heading measurement for update(). valid is false unless the
+ *         receiver reports an error-free fixed-ambiguity solution with a
+ *         usable heading, in which case the filter skips it. Heading is
+ *         converted to boat frame and wrapped to +-180; variance falls back
+ *         to the mount default when the covariance is Do-Not-Use.
  */
 inline GnssSample att_euler_to_gnss_sample(const sbf::AttEuler &att,
                                            const sbf::AttCovEuler &cov,
                                            const GnssAttitudeMount &mount) {
-  const bool has_heading =
-      att.mode != ATT_MODE_NO_ATTITUDE && att.heading != sbf::DNU_F4;
+  const bool has_heading = (att.mode == ATT_MODE_FIXED_HEADING_PITCH ||
+                            att.mode == ATT_MODE_FIXED_FULL) &&
+                           att.error == ATT_ERROR_NONE &&
+                           att.heading != sbf::DNU_F4;
   const float variance = cov.cov_headhead != sbf::DNU_F4
                              ? cov.cov_headhead
                              : mount.fallback_heading_variance_deg2;
