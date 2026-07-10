@@ -47,6 +47,13 @@ class FusionOutput:
     pitch_deg: float
     pitch_variance_deg2: float
     timestamp_ms: int
+    yaw_rate_dps: float
+
+class MtiYawConfig:
+    variance_deg2: float
+    q_offset_deg2: float
+    p0_offset_deg2: float
+    def __init__(self) -> None: ...
 
 class Config:
     q_heading_deg2: float
@@ -59,6 +66,7 @@ class Config:
     p0_bias_deg2_s2: float
     mti_roll_variance_deg2: float
     mti_pitch_variance_deg2: float
+    mti_yaw: MtiYawConfig | None
     mount: MountRotation
     def __init__(self) -> None: ...
 

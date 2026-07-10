@@ -73,10 +73,20 @@ def test_generated_scalars_match_sim() -> None:
     mount = load_mount()
     for name in _CONFIG_FIELDS:
         assert fields[name] == pytest.approx(getattr(cfg, name))
+    assert cfg.mti_yaw is not None
+    assert fields["variance_deg2"] == pytest.approx(cfg.mti_yaw.variance_deg2)
+    assert fields["q_offset_deg2"] == pytest.approx(cfg.mti_yaw.q_offset_deg2)
+    assert fields["p0_offset_deg2"] == pytest.approx(cfg.mti_yaw.p0_offset_deg2)
     assert fields["baseline_offset_deg"] == pytest.approx(mount.baseline_offset_deg)
     assert fields["fallback_heading_variance_deg2"] == pytest.approx(
         mount.fallback_heading_variance_deg2
     )
+
+
+def test_render_omits_mti_yaw_when_absent() -> None:
+    tuning = _default_tuning()
+    del tuning["mti_yaw"]
+    assert "mti_yaw" not in gen_tuning.render(tuning)
 
 
 @pytest.mark.parametrize(

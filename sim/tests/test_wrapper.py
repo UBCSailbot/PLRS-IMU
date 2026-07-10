@@ -18,10 +18,12 @@ from plrs_sim import (
     GnssAttitudeMount,
     GnssSample,
     ImuSample,
+    MtiYawConfig,
     TinyEkfFilter,
     Vec3,
     gnss_sample_from_attitude,
 )
+from plrs_sim.attitude import euler_to_quaternion
 
 CFG = EkfConfig(
     q_heading_deg2=0.01,
@@ -104,6 +106,39 @@ def test_input_dataclass_unaffected_by_filter_call() -> None:
     f.predict(imu)
     assert imu.angular_velocity_rad_s.z == 0.5
     assert imu.timestamp_ms == 2500
+
+
+def test_mti_yaw_config_round_trips_to_filter() -> None:
+    """A mag-enabled config engages the MTi yaw measurement through the FFI.
+
+    With no GNSS at all, a filter watching a quaternion whose compass yaw is
+    65 deg pulls heading decisively toward it (split with the offset prior),
+    while the mag-less filter never moves off 0.
+    """
+    cfg = EkfConfig(
+        q_heading_deg2=0.01,
+        q_bias_deg2_s2=0.0001,
+        p0_heading_deg2=1000.0,
+        p0_bias_deg2_s2=1.0,
+        mti_yaw=MtiYawConfig(
+            variance_deg2=4.0, q_offset_deg2=0.0001, p0_offset_deg2=100.0
+        ),
+    )
+    # ENU yaw is CCW-positive; -65 reads as 65 on the compass.
+    orientation = euler_to_quaternion(0.0, 0.0, -65.0)
+    mag = TinyEkfFilter(cfg)
+    bare = TinyEkfFilter(CFG)
+    for i in range(51):
+        imu = ImuSample(
+            angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=0.0),
+            accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
+            orientation=orientation,
+            timestamp_ms=1000 + 100 * i,
+        )
+        mag.predict(imu)
+        bare.predict(imu)
+    assert mag.output().heading_deg > 40.0
+    assert bare.output().heading_deg == pytest.approx(0.0)
 
 
 def test_bridge_wrapper_subtracts_offset_and_wraps() -> None:

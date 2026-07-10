@@ -11,6 +11,7 @@
 #include "ekf_filter.h"
 #include "gnss_bridge.h"
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/optional.h>
 
 namespace nb = nanobind;
 using namespace fusion;
@@ -93,6 +94,12 @@ NB_MODULE(_native, m) {
                    [](const FusionOutput &s) { return s.timestamp.count(); })
       .def_ro("yaw_rate_dps", &FusionOutput::yaw_rate_dps);
 
+  nb::class_<TinyEkfFilter::MtiYawConfig>(m, "MtiYawConfig")
+      .def(nb::init<>())
+      .def_rw("variance_deg2", &TinyEkfFilter::MtiYawConfig::variance_deg2)
+      .def_rw("q_offset_deg2", &TinyEkfFilter::MtiYawConfig::q_offset_deg2)
+      .def_rw("p0_offset_deg2", &TinyEkfFilter::MtiYawConfig::p0_offset_deg2);
+
   nb::class_<TinyEkfFilter::Config>(m, "Config")
       .def(nb::init<>())
       .def_rw("q_heading_deg2", &TinyEkfFilter::Config::q_heading_deg2)
@@ -107,6 +114,7 @@ NB_MODULE(_native, m) {
               &TinyEkfFilter::Config::mti_roll_variance_deg2)
       .def_rw("mti_pitch_variance_deg2",
               &TinyEkfFilter::Config::mti_pitch_variance_deg2)
+      .def_rw("mti_yaw", &TinyEkfFilter::Config::mti_yaw)
       .def_rw("mount", &TinyEkfFilter::Config::mount);
 
   nb::class_<TinyEkfFilter>(m, "TinyEkfFilter")

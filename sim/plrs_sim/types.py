@@ -78,6 +78,20 @@ class FusionOutput:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class MtiYawConfig:
+    """MTi yaw (magnetometer) heading aiding; mirrors the C++ MtiYawConfig.
+
+    The yaw measures heading plus a learned offset (declination, boat iron,
+    frame constant); see docs/tuning.md. EkfConfig.mti_yaw = None runs the
+    filter without the measurement.
+    """
+
+    variance_deg2: float
+    q_offset_deg2: float
+    p0_offset_deg2: float
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class EkfConfig:
     q_heading_deg2: float
     q_bias_deg2_s2: float
@@ -91,6 +105,7 @@ class EkfConfig:
     p0_pitch_deg2: float = 1000.0
     mti_roll_variance_deg2: float = 1.0
     mti_pitch_variance_deg2: float = 1.0
+    mti_yaw: MtiYawConfig | None = None
     # Boat-to-IMU mounting offset as ZYX Euler angles. The filter rotates the
     # MTi quaternion by this to recover boat attitude; identity when the IMU
     # is bolted square to the boat axes.

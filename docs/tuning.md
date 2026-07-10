@@ -12,6 +12,9 @@ field of `TinyEkfFilter::Config`:
 | `q_bias_deg2_s2` | Gyro bias random walk per step ((deg/s)^2) |
 | `p0_*` | Initial uncertainty for each state; only affects startup convergence |
 | `mti_roll_variance_deg2` / `mti_pitch_variance_deg2` | Trust in the MTi's roll / pitch each sample (deg^2) |
+| `mti_yaw.variance_deg2` | Trust in the MTi's mag yaw each sample (deg^2) |
+| `mti_yaw.q_offset_deg2` | Mag-offset random walk per step (deg^2); how fast boat iron may change |
+| `mti_yaw.p0_offset_deg2` | Initial mag-offset uncertainty; trust in mag yaw as absolute heading before the first GNSS fix |
 
 Q controls how much the filter trusts the gyro integration relative to the
 measurements. P0 only affects convergence from startup and can be set large.
@@ -22,6 +25,21 @@ Two sections of `tuning.toml` are calibration, not filter tuning: `[gnss]` (the
 antenna baseline offset and a fallback heading variance, covered in
 `docs/gnss.md`) and `[imu_mount]` (the boat-to-IMU mounting offset, covered in
 `docs/attitude.md`).
+
+## Mag yaw aiding
+
+The `[mti_yaw]` section enables the MTi's magnetometer-referenced yaw as a
+heading measurement; removing the section disables it and the filter reduces
+to its four effective states. The yaw does not measure heading directly: it
+measures heading plus the mag-offset state, which absorbs declination, boat
+iron, and the ENU-to-compass frame constant. The offset is only observable
+when GNSS is also delivering fixes, so the split of authority is structural:
+GNSS owns absolute heading, and the mag pins the heading + offset sum, which
+holds heading through a GNSS outage and keeps gyro bias observable there. A
+persistent mag disturbance drains into the offset (at a rate set by
+`q_offset_deg2`) instead of bending heading. `p0_offset_deg2` matters only
+before the first fix: it sets how far the filter will follow the mag as an
+absolute reference from a cold start.
 
 ## Deriving Q from the MTi-3 datasheet
 
@@ -114,16 +132,18 @@ calibrated.
 
 ## P0: initialization
 
-P0 only matters during the first few GNSS cycles after startup. Set both values
-large so the filter converges aggressively:
+For the angle states P0 only matters during the first few GNSS cycles after
+startup; set them large so the filter converges aggressively:
 
 ```cpp
 p0_heading_deg2 = 1000.0; // very uncertain about initial heading
-p0_bias_deg2_s2 = 1.0;    // uncertain about gyro bias
 ```
 
-After a handful of updates P0 is effectively overwritten by Q and R, and the
-initial value is forgotten. Do not spend time tuning it.
+The gyro-bias prior is the exception: it is a physical bound, not a
+convergence knob. Set it to the gyro's turn-on bias repeatability (~0.2 deg/s
+for the MTi-3, so p0 ~= 0.05 (deg/s)^2). A loose bias prior lets a run of
+marginal heading fixes retrain the bias by whole deg/s, which then integrates
+into a heading ramp through the next outage.
 
 ## Tuning with recorded data
 

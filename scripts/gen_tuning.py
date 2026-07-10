@@ -74,6 +74,17 @@ def render(tuning: dict) -> str:
     mti = tuning["mti_noise"]
     gnss = tuning["gnss"]
     mount = tuning.get("imu_mount", {})
+    yaw = tuning.get("mti_yaw")
+    # Omitted entirely when the toml has no [mti_yaw]: the Config field
+    # defaults to nullopt and the filter runs without the mag measurement.
+    mti_yaw_field = "" if yaw is None else (
+        "    .mti_yaw =\n"
+        "        fusion::TinyEkfFilter::MtiYawConfig {\n"
+        f"            .variance_deg2 = {_lit(yaw['variance_deg2'])},\n"
+        f"            .q_offset_deg2 = {_lit(yaw['q_offset_deg2'])},\n"
+        f"            .p0_offset_deg2 = {_lit(yaw['p0_offset_deg2'])},\n"
+        "        },\n"
+    )
     qw, qx, qy, qz = euler_to_quaternion(
         mount.get("mount_roll_deg", 0.0),
         mount.get("mount_pitch_deg", 0.0),
@@ -103,7 +114,7 @@ inline constexpr fusion::TinyEkfFilter::Config kFilterConfig {{
     .p0_bias_deg2_s2 = {_lit(init["gyro_bias_deg2_s2"])},
     .mti_roll_variance_deg2 = {_lit(mti["roll_deg2"])},
     .mti_pitch_variance_deg2 = {_lit(mti["pitch_deg2"])},
-    .mount = {{.boat_to_imu = fusion::UnitQuaternion::from_unit_unchecked(
+{mti_yaw_field}    .mount = {{.boat_to_imu = fusion::UnitQuaternion::from_unit_unchecked(
                   {{{_lit(qw)}, {_lit(qx)}, {_lit(qy)}, {_lit(qz)}}})}},
 }};
 

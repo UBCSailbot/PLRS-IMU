@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from plrs_sim import load_mount, load_tuning
+from plrs_sim import MtiYawConfig, load_mount, load_tuning
 from plrs_sim.tuning import DEFAULT_PATH
 
 
@@ -15,10 +15,19 @@ def test_default_tuning_loads_all_fields() -> None:
     assert cfg.q_heading_deg2 == 0.01
     assert cfg.q_roll_deg2 == 0.01
     assert cfg.q_pitch_deg2 == 0.01
-    assert cfg.q_bias_deg2_s2 == 0.0001
+    assert cfg.q_bias_deg2_s2 == 0.000001
     assert cfg.p0_heading_deg2 == 1000.0
     assert cfg.mti_roll_variance_deg2 == 1.0
     assert cfg.mti_pitch_variance_deg2 == 1.0
+
+
+def test_default_tuning_enables_mti_yaw() -> None:
+    cfg = load_tuning()
+    assert cfg.mti_yaw == MtiYawConfig(
+        variance_deg2=4.0,
+        q_offset_deg2=0.0001,
+        p0_offset_deg2=100.0,
+    )
 
 
 def test_load_tuning_reads_a_custom_file(tmp_path) -> None:
@@ -42,6 +51,8 @@ def test_load_tuning_reads_a_custom_file(tmp_path) -> None:
     assert cfg.q_heading_deg2 == 0.5
     assert cfg.p0_pitch_deg2 == 30.0
     assert cfg.mti_pitch_variance_deg2 == 4.0
+    # No [mti_yaw] section: the mag measurement is disabled.
+    assert cfg.mti_yaw is None
 
 
 def test_load_mount_reads_gnss_section() -> None:

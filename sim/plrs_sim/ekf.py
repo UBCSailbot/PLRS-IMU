@@ -67,6 +67,12 @@ def _to_native_config(c: EkfConfig) -> _native.Config:
     n.p0_bias_deg2_s2 = c.p0_bias_deg2_s2
     n.mti_roll_variance_deg2 = c.mti_roll_variance_deg2
     n.mti_pitch_variance_deg2 = c.mti_pitch_variance_deg2
+    if c.mti_yaw is not None:
+        yaw = _native.MtiYawConfig()
+        yaw.variance_deg2 = c.mti_yaw.variance_deg2
+        yaw.q_offset_deg2 = c.mti_yaw.q_offset_deg2
+        yaw.p0_offset_deg2 = c.mti_yaw.p0_offset_deg2
+        n.mti_yaw = yaw
     mount = _native.MountRotation()
     mount.boat_to_imu = _to_native_unit_quaternion(
         euler_to_quaternion(c.mount_roll_deg, c.mount_pitch_deg, c.mount_yaw_deg)
