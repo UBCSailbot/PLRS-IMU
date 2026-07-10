@@ -11,8 +11,7 @@
  * FreeRTOS configuration.
  */
 
-// The GNSS parser embeds full SBF/NMEA/reply frame buffers (~1.1 KB) and lives
-// on its task stack, so this is sized well above the others.
+// The GNSS parser embeds full SBF/NMEA/reply frame buffers (~1.1 KB)
 static constexpr uint32_t GNSS_TASK_STACK_SIZE = 2048;
 static constexpr uint32_t IMU_TASK_STACK_SIZE = 512;
 static constexpr uint32_t FUSION_TASK_STACK_SIZE = 1024;
@@ -30,17 +29,17 @@ static constexpr uint32_t RUDDER_SEND_INTERVAL_MS = 100;
  * Hardware configuration.
  */
 
-// UART 0
+// UART 0 for the IMU.
 static constexpr uint32_t IMU_UART_BAUD = 115200;
 static constexpr uint32_t IMU_UART_TX_PIN = 16;
 static constexpr uint32_t IMU_UART_RX_PIN = 17;
 
-// PIO UART on GP6/GP7.
+// PIO UART for GNSS.
 static constexpr uint32_t GNSS_UART_BAUD = 115200;
 static constexpr uint32_t GNSS_UART_TX_PIN = 7;
 static constexpr uint32_t GNSS_UART_RX_PIN = 6;
 
-// Emulated UART with PIO
+// PIO UART for communicating with the rudder module.
 static constexpr uint32_t OUTPUT_UART_BAUD = 115200;
 static constexpr uint32_t OUTPUT_UART_TX_PIN = 3;
 static constexpr uint32_t OUTPUT_UART_RX_PIN = 4;
