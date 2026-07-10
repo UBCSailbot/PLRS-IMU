@@ -1,11 +1,19 @@
 /**
- * Four-state EKF for heading + roll + pitch + gyro_z bias.
+ * Five-state EKF for heading + roll + pitch + gyro_z bias + mag offset.
  *
  * Satisfies the FusionFilter concept. State: x[IDX_HEADING] = heading (deg),
  * x[IDX_ROLL] = roll (deg), x[IDX_PITCH] = pitch (deg), x[IDX_GYRO_BIAS] =
- * gyro_z bias (deg/s). Roll/pitch/yaw propagate from the body gyro through the
- * ZYX Euler kinematics; the MTi quaternion is a roll/pitch measurement and the
- * GNSS fix is the heading measurement, both applied as scalar updates.
+ * gyro_z bias (deg/s), x[IDX_MAG_OFFSET] = MTi-yaw-to-heading offset (deg).
+ * Roll/pitch/yaw propagate from the body gyro through the ZYX Euler
+ * kinematics; the MTi quaternion is a roll/pitch measurement and the GNSS fix
+ * is the heading measurement, both applied as scalar updates.
+ *
+ * When Config::mti_yaw is set, the MTi yaw is a third measurement, of
+ * heading + mag_offset. The offset state absorbs whatever separates the MTi's
+ * magnetic yaw from GNSS heading (declination, boat iron, the ENU-to-compass
+ * frame constant), so the mag stiffens heading between fixes and keeps the
+ * gyro bias observable through an outage, but can never pull absolute heading
+ * against GNSS.
  *
  * TinyEKF dimensions are passed in as EKF_N / EKF_M macros, captured as
  * N_STATE / N_MEAS constants, then #undef'd so they do not leak into
@@ -18,8 +26,10 @@
 #include "fusion.h"
 #include <cfloat>
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 
-#define EKF_N 4
+#define EKF_N 5
 #define EKF_M 1
 #include <tinyekf.h>
 namespace fusion {
@@ -35,20 +45,49 @@ constexpr std::size_t IDX_HEADING = 0;
 constexpr std::size_t IDX_ROLL = 1;
 constexpr std::size_t IDX_PITCH = 2;
 constexpr std::size_t IDX_GYRO_BIAS = 3;
+constexpr std::size_t IDX_MAG_OFFSET = 4;
 
 /**
- * Observation Jacobians for the scalar updates: each measurement reads one
- * state directly. Heading is shared by the GNSS fix and (in future) any
- * heading source; roll and pitch are read from the MTi quaternion.
+ * Observation Jacobians for the scalar updates. The GNSS fix reads heading
+ * directly; roll and pitch are read from the MTi quaternion; the MTi yaw
+ * reads heading + mag_offset, which is what makes the offset observable only
+ * when GNSS is also present.
  */
-constexpr float H_HEADING[N_STATE] = {1.0f, 0.0f, 0.0f, 0.0f};
-constexpr float H_ROLL[N_STATE] = {0.0f, 1.0f, 0.0f, 0.0f};
-constexpr float H_PITCH[N_STATE] = {0.0f, 0.0f, 1.0f, 0.0f};
+constexpr float H_HEADING[N_STATE] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+constexpr float H_ROLL[N_STATE] = {0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
+constexpr float H_PITCH[N_STATE] = {0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+constexpr float H_MAG_YAW[N_STATE] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
 
 class TinyEkfFilter {
 public:
   /**
-   * Filter tuning parameters. See docs/tuning.md.
+   * Reject a heading fix whose innovation exceeds this many sigma of the
+   * combined state + measurement uncertainty (chi-square gate, 1 dof).
+   */
+  static constexpr float HEADING_GATE_SIGMA = 3.0f;
+
+  /**
+   * Consecutive gated fixes after which one is accepted anyway, so a filter
+   * converged on a wrong heading cannot reject reacquisition forever.
+   */
+  static constexpr uint32_t HEADING_GATE_LIMIT = 10;
+
+  /**
+   * MTi yaw (magnetometer-referenced) heading aiding. variance_deg2 is the
+   * per-sample measurement noise; q_offset_deg2 and p0_offset_deg2 shape the
+   * mag-offset state (slow iron/declination wander, and how much the mag yaw
+   * is trusted as absolute heading before the first GNSS fix).
+   */
+  struct MtiYawConfig {
+    float variance_deg2;
+    float q_offset_deg2;
+    float p0_offset_deg2;
+  };
+
+  /**
+   * Filter tuning parameters. See docs/tuning.md. mti_yaw disengages the mag
+   * measurement entirely when unset; the filter is then numerically identical
+   * to the four-state version.
    */
   struct Config {
     float q_heading_deg2;
@@ -61,6 +100,7 @@ public:
     float p0_bias_deg2_s2;
     float mti_roll_variance_deg2;
     float mti_pitch_variance_deg2;
+    std::optional<MtiYawConfig> mti_yaw {};
     MountRotation mount {};
   };
 
@@ -69,37 +109,27 @@ public:
    *
    * @param cfg. Filter tuning parameters.
    */
-  explicit TinyEkfFilter(Config cfg)
-      : _cfg(cfg), _Q {
-                       cfg.q_heading_deg2,
-                       0.0f,
-                       0.0f,
-                       0.0f,
-                       0.0f,
-                       cfg.q_roll_deg2,
-                       0.0f,
-                       0.0f,
-                       0.0f,
-                       0.0f,
-                       cfg.q_pitch_deg2,
-                       0.0f,
-                       0.0f,
-                       0.0f,
-                       0.0f,
-                       cfg.q_bias_deg2_s2,
-                   } {
+  explicit TinyEkfFilter(Config cfg) : _cfg(cfg) {
+    _Q[IDX_HEADING * N_STATE + IDX_HEADING] = cfg.q_heading_deg2;
+    _Q[IDX_ROLL * N_STATE + IDX_ROLL] = cfg.q_roll_deg2;
+    _Q[IDX_PITCH * N_STATE + IDX_PITCH] = cfg.q_pitch_deg2;
+    _Q[IDX_GYRO_BIAS * N_STATE + IDX_GYRO_BIAS] = cfg.q_bias_deg2_s2;
+    _Q[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET] =
+        cfg.mti_yaw ? cfg.mti_yaw->q_offset_deg2 : 0.0f;
     const float pdiag[N_STATE] = {
         _cfg.p0_heading_deg2,
         _cfg.p0_roll_deg2,
         _cfg.p0_pitch_deg2,
         _cfg.p0_bias_deg2_s2,
+        _cfg.mti_yaw ? _cfg.mti_yaw->p0_offset_deg2 : 0.0f,
     };
     ekf_initialize(&_ekf, pdiag);
   }
 
   /**
    * @brief Advance the filter with the gyro, then correct roll/pitch from the
-   * MTi quaternion. Called at IMU rate.
+   * MTi quaternion and, when Config::mti_yaw is set, heading + mag offset
+   * from the MTi yaw. Called at IMU rate.
    *
    * The first call sets the timestamp baseline and seeds roll/pitch from the
    * MTi quaternion without advancing state.
@@ -137,30 +167,24 @@ public:
         _ekf.x[IDX_ROLL] + rates.roll_dot * RAD_TO_DEG * dt_s,
         _ekf.x[IDX_PITCH] + rates.pitch_dot * RAD_TO_DEG * dt_s,
         _ekf.x[IDX_GYRO_BIAS],
+        _ekf.x[IDX_MAG_OFFSET],
     };
 
-    // F = d fx / d x. Euler rates depend on roll/pitch but not heading, so
-    // those columns carry the kinematic coupling; gyro bias couples only into
-    // heading. The per-radian Jacobian entries times dt land in degree space:
-    // the RAD_TO_DEG and DEG_TO_RAD conversions cancel.
-    const float F[N_STATE * N_STATE] = {
-        1.0f,
-        -jac.dyaw_droll * dt_s,
-        -jac.dyaw_dpitch * dt_s,
-        -dt_s,
-        0.0f,
-        1.0f + jac.droll_droll * dt_s,
-        jac.droll_dpitch * dt_s,
-        0.0f,
-        0.0f,
-        jac.dpitch_droll * dt_s,
-        1.0f + jac.dpitch_dpitch * dt_s,
-        0.0f,
-        0.0f,
-        0.0f,
-        0.0f,
-        1.0f,
-    };
+    // F = d fx / d x: identity plus the kinematic couplings. Euler rates
+    // depend on roll/pitch but not heading or the mag offset; gyro bias
+    // couples only into heading. The per-radian Jacobian entries times dt
+    // land in degree space: the RAD_TO_DEG and DEG_TO_RAD conversions cancel.
+    float F[N_STATE * N_STATE] {};
+    for (std::size_t i = 0; i < N_STATE; i++) {
+      F[i * N_STATE + i] = 1.0f;
+    }
+    F[IDX_HEADING * N_STATE + IDX_ROLL] = -jac.dyaw_droll * dt_s;
+    F[IDX_HEADING * N_STATE + IDX_PITCH] = -jac.dyaw_dpitch * dt_s;
+    F[IDX_HEADING * N_STATE + IDX_GYRO_BIAS] = -dt_s;
+    F[IDX_ROLL * N_STATE + IDX_ROLL] += jac.droll_droll * dt_s;
+    F[IDX_ROLL * N_STATE + IDX_PITCH] = jac.droll_dpitch * dt_s;
+    F[IDX_PITCH * N_STATE + IDX_ROLL] = jac.dpitch_droll * dt_s;
+    F[IDX_PITCH * N_STATE + IDX_PITCH] += jac.dpitch_dpitch * dt_s;
 
     ekf_predict(&_ekf, fx, F, _Q);
     _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
@@ -173,6 +197,16 @@ public:
                   _ekf.x[IDX_PITCH],
                   attitude.pitch_deg,
                   _cfg.mti_pitch_variance_deg2);
+
+    if (_cfg.mti_yaw) {
+      // ENU yaw negated into compass sign; the offset state absorbs the
+      // remaining frame constant along with declination and iron, so only
+      // the sign has to be right here.
+      const float hx = _ekf.x[IDX_HEADING] + _ekf.x[IDX_MAG_OFFSET];
+      const float z = hx + wrap180(-attitude.yaw_deg - hx);
+      scalar_update(H_MAG_YAW, hx, z, _cfg.mti_yaw->variance_deg2);
+      _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
+    }
   }
 
   /**
@@ -183,6 +217,12 @@ public:
    * scalar update with the innovation wrapped to +-180 so a fix across the
    * +-180 seam does not drag heading the long way around.
    *
+   * A fix whose innovation fails the HEADING_GATE_SIGMA gate is dropped, so a
+   * lone bad fix cannot slam the state (and, through the covariance cross
+   * terms, the gyro-bias estimate). After HEADING_GATE_LIMIT consecutive
+   * rejections the fix is accepted: persistent disagreement means the filter,
+   * not the receiver, is wrong.
+   *
    * @param gnss. GNSS sample.
    */
   void update(GnssSample gnss) {
@@ -190,13 +230,26 @@ public:
       return;
     }
     if (!_initialized) {
+      // Shift the mag offset by the seed jump so heading + offset is
+      // unchanged and the next MTi yaw sample does not fight the seed.
+      const float delta = wrap180(gnss.heading_deg - _ekf.x[IDX_HEADING]);
       _ekf.x[IDX_HEADING] = wrap180(gnss.heading_deg);
+      _ekf.x[IDX_MAG_OFFSET] = wrap180(_ekf.x[IDX_MAG_OFFSET] - delta);
       _initialized = true;
       return;
     }
     const float hx = _ekf.x[IDX_HEADING];
-    const float z = hx + wrap180(gnss.heading_deg - hx);
-    scalar_update(H_HEADING, hx, z, gnss.heading_variance_deg2);
+    const float innovation = wrap180(gnss.heading_deg - hx);
+    const float s = _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING] +
+                    gnss.heading_variance_deg2;
+    if (innovation * innovation > HEADING_GATE_SIGMA * HEADING_GATE_SIGMA * s) {
+      _gate_rejects++;
+      if (_gate_rejects < HEADING_GATE_LIMIT) {
+        return;
+      }
+    }
+    _gate_rejects = 0;
+    scalar_update(H_HEADING, hx, hx + innovation, gnss.heading_variance_deg2);
     _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
   }
 
@@ -253,9 +306,10 @@ private:
 
   ekf_t _ekf;
   Config _cfg;
-  float _Q[N_STATE * N_STATE];
+  float _Q[N_STATE * N_STATE] {};
   Ms _last_predict_time {0};
   float _yaw_rate_dps = 0.0f;
+  uint32_t _gate_rejects = 0;
   bool _initialized = false;
   bool _has_predicted = false;
 };

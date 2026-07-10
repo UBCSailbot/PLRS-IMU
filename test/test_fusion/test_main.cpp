@@ -142,6 +142,51 @@ void test_update_shrinks_variance() {
   TEST_ASSERT_TRUE(after < before);
 }
 
+namespace {
+
+/** @brief Converge heading to 0 with tight fixes so P_hh is small. */
+TinyEkfFilter make_converged_filter() {
+  TinyEkfFilter f(kTestConfig);
+  f.update(make_gnss(0.0f, 1.0f, Ms {1000}));
+  f.predict(make_imu(0.0f, Ms {1000}));
+  for (int i = 2; i <= 10; i++) {
+    f.predict(make_imu(0.0f, Ms {1000 * i}));
+    f.update(make_gnss(0.0f, 0.1f, Ms {1000 * i}));
+  }
+  return f;
+}
+
+} // namespace
+
+/** @brief A fix far outside the innovation gate is rejected. */
+void test_update_gates_outlier_fix() {
+  TinyEkfFilter f = make_converged_filter();
+  const float before = f.output().heading_deg;
+  f.update(make_gnss(60.0f, 0.1f, Ms {11000}));
+  TEST_ASSERT_FLOAT_WITHIN(0.5f, before, f.output().heading_deg);
+}
+
+/** @brief Consistent fixes after a gated outlier are still accepted. */
+void test_update_gate_passes_consistent_fix_after_outlier() {
+  TinyEkfFilter f = make_converged_filter();
+  f.update(make_gnss(60.0f, 0.1f, Ms {11000})); // gated
+  auto before = f.output().heading_variance_deg2;
+  f.update(make_gnss(0.0f, 0.05f, Ms {11000}));
+  TEST_ASSERT_TRUE(f.output().heading_variance_deg2 < before);
+}
+
+/** @brief HEADING_GATE_LIMIT consecutive rejections force an acceptance, so a
+ * persistently disagreeing receiver pulls the filter back eventually. */
+void test_update_gate_reopens_after_limit() {
+  TinyEkfFilter f = make_converged_filter();
+  for (uint32_t i = 0; i < TinyEkfFilter::HEADING_GATE_LIMIT; i++) {
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, f.output().heading_deg);
+    f.update(make_gnss(60.0f, 0.1f, Ms {11000 + i}));
+  }
+  // The limit-th fix was applied: heading moved decisively toward 60.
+  TEST_ASSERT_TRUE(f.output().heading_deg > 5.0f);
+}
+
 // ---------------------------------------------------------------------------
 // predict()
 // ---------------------------------------------------------------------------
@@ -275,6 +320,125 @@ void test_gnss_update_wraps_across_seam() {
   TEST_ASSERT_FLOAT_WITHIN(1.0f, 0.0f, wrap180(out.heading_deg - (-179.0f)));
 }
 
+// ---------------------------------------------------------------------------
+// MTi yaw aiding (mag offset state)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// True heading 45, mag yaw reading 65 in compass sign: the offset state must
+// converge to their 20 deg difference once GNSS anchors absolute heading,
+// which the tests observe through the heading staying at 45.
+constexpr float TRUE_HEADING = 45.0f;
+constexpr float MAG_COMPASS = 65.0f;
+
+TinyEkfFilter::Config make_mag_config() {
+  TinyEkfFilter::Config cfg = kTestConfig;
+  cfg.mti_yaw = TinyEkfFilter::MtiYawConfig {
+      .variance_deg2 = 4.0f,
+      .q_offset_deg2 = 0.0001f,
+      .p0_offset_deg2 = 100.0f,
+  };
+  return cfg;
+}
+
+/** @brief Stationary sample whose quaternion yaw reads MAG_COMPASS on the
+ * compass (ENU yaw is CCW-positive, so the quaternion carries its negation),
+ * with an optional raw gyro-z bias. */
+ImuSample make_mag_imu(float gyro_bias_dps, Ms t) {
+  return make_imu_with(plrs::Vec3 {0.0f, 0.0f, -gyro_bias_dps * DEG_TO_RAD},
+                       axis_angle(0.0f, 0.0f, 1.0f, -MAG_COMPASS * DEG_TO_RAD),
+                       t);
+}
+
+/** @brief Converge a mag-enabled filter: 10 s of 10 Hz IMU + 1 Hz GNSS. */
+template <typename Fix>
+void run_converged(TinyEkfFilter &f, Fix fix, float gyro_bias_dps = 0.0f) {
+  for (int i = 0; i <= 100; i++) {
+    const Ms t {1000 + 100 * i};
+    f.predict(make_mag_imu(gyro_bias_dps, t));
+    if (i % 10 == 0) {
+      fix(f, t);
+    }
+  }
+}
+
+} // namespace
+
+/** @brief With GNSS present the offset state converges to mag minus GNSS. */
+void test_mag_offset_converges_under_gnss() {
+  TinyEkfFilter f(make_mag_config());
+  run_converged(f, [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  });
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, TRUE_HEADING, f.output().heading_deg);
+}
+
+/** @brief Through a GNSS outage the mag pins heading against a gyro bias the
+ * filter never saw while GNSS was up, and reacquisition does not snap. */
+void test_mag_holds_heading_through_gnss_dropout() {
+  TinyEkfFilter f(make_mag_config());
+  TinyEkfFilter bare(kTestConfig);
+  auto fix = [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  };
+  run_converged(f, fix);
+  run_converged(bare, fix);
+
+  // 30 s outage with a 0.3 deg/s raw gyro bias appearing mid-flight.
+  for (int i = 1; i <= 300; i++) {
+    const Ms t {11100 + 100 * i};
+    f.predict(make_mag_imu(0.3f, t));
+    bare.predict(make_mag_imu(0.3f, t));
+  }
+  TEST_ASSERT_FLOAT_WITHIN(2.0f, TRUE_HEADING, f.output().heading_deg);
+  // Without the mag the same bias integrates into a ~9 deg ramp.
+  TEST_ASSERT_TRUE(std::abs(wrap180(bare.output().heading_deg - TRUE_HEADING)) >
+                   5.0f);
+
+  // Reacquisition: a fix at the held heading barely moves the estimate.
+  const float before = f.output().heading_deg;
+  f.update(make_gnss(TRUE_HEADING, 1.0f, Ms {41200}));
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, before, f.output().heading_deg);
+}
+
+/** @brief A persistent mag shift (iron event) drains into the offset state;
+ * GNSS keeps ownership of absolute heading. */
+void test_mag_cannot_pull_heading_against_gnss() {
+  TinyEkfFilter f(make_mag_config());
+  run_converged(f, [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  });
+
+  // The mag jumps +30 deg; GNSS keeps reporting the true heading for 60 s.
+  for (int i = 1; i <= 600; i++) {
+    const Ms t {11100 + 100 * i};
+    ImuSample imu = make_mag_imu(0.0f, t);
+    imu.orientation =
+        axis_angle(0.0f, 0.0f, 1.0f, -(MAG_COMPASS + 30.0f) * DEG_TO_RAD);
+    f.predict(imu);
+    if (i % 10 == 0) {
+      f.update(make_gnss(TRUE_HEADING, 1.0f, t));
+    }
+  }
+  TEST_ASSERT_FLOAT_WITHIN(5.0f, TRUE_HEADING, f.output().heading_deg);
+}
+
+/** @brief The first GNSS fix shifts the offset with the seed, so the next mag
+ * sample does not drag heading back toward its pre-fix value. */
+void test_mag_gnss_seed_keeps_offset_consistent() {
+  TinyEkfFilter f(make_mag_config());
+  // Mag-only warmup: heading converges toward the mag compass value.
+  for (int i = 0; i <= 50; i++) {
+    f.predict(make_mag_imu(0.0f, Ms {1000 + 100 * i}));
+  }
+  f.update(make_gnss(TRUE_HEADING, 1.0f, Ms {6100}));
+  for (int i = 1; i <= 50; i++) {
+    f.predict(make_mag_imu(0.0f, Ms {6100 + 100 * i}));
+  }
+  TEST_ASSERT_FLOAT_WITHIN(1.5f, TRUE_HEADING, f.output().heading_deg);
+}
+
 /** @brief Heading stays wrapped to (-180, 180] after integrating past 180. */
 void test_predict_wraps_heading_past_180() {
   TinyEkfFilter f(kTestConfig);
@@ -322,6 +486,9 @@ void test_bridge_subtracts_baseline_offset();
 void test_bridge_wraps_heading_into_plus_minus_180();
 void test_bridge_dnu_heading_is_invalid();
 void test_bridge_no_attitude_mode_is_invalid();
+void test_bridge_float_ambiguity_mode_is_invalid();
+void test_bridge_fixed_full_attitude_mode_is_valid();
+void test_bridge_baseline_error_is_invalid();
 void test_bridge_dnu_covariance_uses_fallback();
 
 // ---------------------------------------------------------------------------
@@ -333,6 +500,9 @@ int main(int, char **) {
   RUN_TEST(test_first_valid_gnss_seeds_heading);
   RUN_TEST(test_update_pulls_toward_measurement);
   RUN_TEST(test_update_shrinks_variance);
+  RUN_TEST(test_update_gates_outlier_fix);
+  RUN_TEST(test_update_gate_passes_consistent_fix_after_outlier);
+  RUN_TEST(test_update_gate_reopens_after_limit);
   RUN_TEST(test_first_predict_baseline_only);
   RUN_TEST(test_predict_integrates_gyro);
   RUN_TEST(test_predict_grows_variance);
@@ -343,6 +513,10 @@ int main(int, char **) {
   RUN_TEST(test_attitude_variance_finite_after_predict);
   RUN_TEST(test_mti_corrects_roll_and_shrinks_variance);
   RUN_TEST(test_gnss_update_wraps_across_seam);
+  RUN_TEST(test_mag_offset_converges_under_gnss);
+  RUN_TEST(test_mag_holds_heading_through_gnss_dropout);
+  RUN_TEST(test_mag_cannot_pull_heading_against_gnss);
+  RUN_TEST(test_mag_gnss_seed_keeps_offset_consistent);
   RUN_TEST(test_predict_wraps_heading_past_180);
 
   RUN_TEST(test_unit_quaternion_identity_components);
@@ -376,6 +550,9 @@ int main(int, char **) {
   RUN_TEST(test_bridge_wraps_heading_into_plus_minus_180);
   RUN_TEST(test_bridge_dnu_heading_is_invalid);
   RUN_TEST(test_bridge_no_attitude_mode_is_invalid);
+  RUN_TEST(test_bridge_float_ambiguity_mode_is_invalid);
+  RUN_TEST(test_bridge_fixed_full_attitude_mode_is_valid);
+  RUN_TEST(test_bridge_baseline_error_is_invalid);
   RUN_TEST(test_bridge_dnu_covariance_uses_fallback);
   return UNITY_END();
 }
