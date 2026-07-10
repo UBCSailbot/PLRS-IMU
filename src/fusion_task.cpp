@@ -83,6 +83,41 @@ static void print_imu(const fusion::ImuSample &imu) {
 }
 
 /**
+ * @brief Emit the raw MEMS sensor triad as an `M` telemetry line.
+ *
+ * `M,ts_ms,ax,ay,az,gx,gy,gz,mx,my,mz` (accel m/s^2, gyro rad/s, magnetic
+ * field a.u.). Accel and gyro duplicate the `I` frame so this line stands
+ * alone as the bare MEMS output; the magnetometer appears only here.
+ *
+ * @param imu  Raw IMU sample as received from the IMU task.
+ */
+static void print_mems(const fusion::ImuSample &imu) {
+  if (!Serial) {
+    return;
+  }
+  Serial.print("M,");
+  Serial.print(imu.timestamp.count());
+  Serial.print(',');
+  Serial.print(imu.accel_ms2.x, 4);
+  Serial.print(',');
+  Serial.print(imu.accel_ms2.y, 4);
+  Serial.print(',');
+  Serial.print(imu.accel_ms2.z, 4);
+  Serial.print(',');
+  Serial.print(imu.angular_velocity_rad_s.x, 5);
+  Serial.print(',');
+  Serial.print(imu.angular_velocity_rad_s.y, 5);
+  Serial.print(',');
+  Serial.print(imu.angular_velocity_rad_s.z, 5);
+  Serial.print(',');
+  Serial.print(imu.magnetic_field_au.x, 5);
+  Serial.print(',');
+  Serial.print(imu.magnetic_field_au.y, 5);
+  Serial.print(',');
+  Serial.println(imu.magnetic_field_au.z, 5);
+}
+
+/**
  * @brief Emit a raw GNSS attitude sample as a `G` telemetry line.
  *
  * `G,ts_ms,heading,hdg_sigma,valid` (deg).
@@ -100,7 +135,11 @@ static void print_gnss(const fusion::GnssSample &gnss) {
   Serial.print(',');
   Serial.print(std::sqrt(gnss.heading_variance_deg2), 3);
   Serial.print(',');
-  Serial.println(gnss.valid ? 1 : 0);
+  Serial.print(gnss.valid ? 1 : 0);
+  Serial.print(',');
+  Serial.print(gnss.mode);
+  Serial.print(',');
+  Serial.println(gnss.error);
 }
 
 void task(void *params) {
@@ -127,6 +166,7 @@ void task(void *params) {
       if (xTaskGetTickCount() >= next_print) {
         print_fusion(out);
         print_imu(imu);
+        print_mems(imu);
         next_print += pdMS_TO_TICKS(TELEMETRY_INTERVAL_MS);
       }
     }

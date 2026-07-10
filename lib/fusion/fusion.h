@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <concepts>
+#include <cstdint>
 #include <expected>
 #include <numbers>
 
@@ -122,6 +123,10 @@ struct MountRotation {
 struct ImuSample {
   plrs::Vec3 angular_velocity_rad_s;
   plrs::Vec3 accel_ms2;
+  // Raw MTi magnetometer, arbitrary units (normalized ~1 after calibration).
+  // Carried for telemetry only; the filter aids heading off the MTi quaternion,
+  // not the raw mag. Zero when the packet carries no MagneticField field.
+  plrs::Vec3 magnetic_field_au = {};
   UnitQuaternion orientation = UnitQuaternion::identity();
   Ms timestamp;
 };
@@ -138,6 +143,11 @@ struct GnssSample {
   // TODO: add heading_dot_deg_s + heading_dot_variance_deg2_s2 for m=2 update
   Ms timestamp;
   bool valid;
+  // Raw AttEuler mode/error carried through for telemetry only; the filter
+  // uses valid (derived from these). Lets a monitor tell float from
+  // no-attitude from a flagged baseline without re-deriving the gate.
+  uint16_t mode = 0;
+  uint8_t error = 0;
 };
 
 /**

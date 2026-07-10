@@ -73,6 +73,8 @@ inline GnssSample att_euler_to_gnss_sample(const sbf::AttEuler &att,
       .heading_variance_deg2 = variance,
       .timestamp = Ms {att.tow},
       .valid = has_heading,
+      .mode = att.mode,
+      .error = att.error,
   };
 }
 

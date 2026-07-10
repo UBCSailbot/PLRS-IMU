@@ -372,13 +372,14 @@ void test_attitude_from_payload_wrong_size() {
   TEST_ASSERT_FALSE(Attitude::from_payload(twelve).has_value());
 }
 
-/** @brief An Attitude frame carries all four floats as little-endian float32.
+/** @brief An Attitude frame carries four little-endian floats then a flag byte.
  */
 void test_encode_attitude_payload() {
   const Attitude msg {.heading_deg = -90.0f,
                       .roll_deg = 12.5f,
                       .pitch_deg = -3.0f,
-                      .yaw_rate_dps = 7.25f};
+                      .yaw_rate_dps = 7.25f,
+                      .heading_valid = true};
   const auto body = decode_block(encode(3, msg).view());
   TEST_ASSERT_EQUAL_HEX8(static_cast<uint8_t>(MsgId::Attitude), body[1]);
   TEST_ASSERT_EQUAL_HEX8(3, body[2]);
@@ -394,15 +395,17 @@ void test_encode_attitude_payload() {
   TEST_ASSERT_EQUAL_FLOAT(
       msg.yaw_rate_dps,
       plrs::read_f32_little_endian({body.data() + HEADER_BYTES + 12, 4}));
+  TEST_ASSERT_EQUAL_HEX8(1, body[HEADER_BYTES + 16]);
 }
 
-/** @brief encode -> Parser -> Attitude::from_payload recovers all four fields.
+/** @brief encode -> Parser -> Attitude::from_payload recovers all five fields.
  */
 void test_attitude_end_to_end() {
   const Attitude msg {.heading_deg = 45.0f,
                       .roll_deg = -8.0f,
                       .pitch_deg = 2.5f,
-                      .yaw_rate_dps = -1.5f};
+                      .yaw_rate_dps = -1.5f,
+                      .heading_valid = false};
   const auto frame = encode(5, msg);
   Parser p;
   auto out = feed_all(p, frame.view());
@@ -416,6 +419,7 @@ void test_attitude_end_to_end() {
   TEST_ASSERT_EQUAL_FLOAT(msg.roll_deg, a->roll_deg);
   TEST_ASSERT_EQUAL_FLOAT(msg.pitch_deg, a->pitch_deg);
   TEST_ASSERT_EQUAL_FLOAT(msg.yaw_rate_dps, a->yaw_rate_dps);
+  TEST_ASSERT_FALSE(a->heading_valid);
 }
 
 // ---------------------------------------------------------------------------

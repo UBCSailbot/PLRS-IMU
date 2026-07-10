@@ -20,10 +20,11 @@ static constexpr uint32_t RETRY_DELAY_MS = 1000;
 static constexpr uint16_t IMU_RATE_HZ = 100;
 
 static constexpr auto OUTPUT_CONFIG =
-    xbus::build_output_config(std::array<xbus::OutputItem, 3> {{
+    xbus::build_output_config(std::array<xbus::OutputItem, 4> {{
         {xbus::DataId::Quaternion, IMU_RATE_HZ},
         {xbus::DataId::RateOfTurn, IMU_RATE_HZ},
         {xbus::DataId::Acceleration, IMU_RATE_HZ},
+        {xbus::DataId::MagneticField, IMU_RATE_HZ},
     }});
 
 static std::chrono::milliseconds now() {
@@ -128,6 +129,7 @@ void task(void *params) {
     auto quat = xbus::read_quaternion(*packet);
     auto gyro_data = xbus::find_data(*packet, xbus::DataId::RateOfTurn);
     auto accel_data = xbus::find_data(*packet, xbus::DataId::Acceleration);
+    auto mag_data = xbus::find_data(*packet, xbus::DataId::MagneticField);
 
     if (!quat || !gyro_data || !accel_data)
       continue;
@@ -148,6 +150,8 @@ void task(void *params) {
     fusion::ImuSample sample {
         .angular_velocity_rad_s = read_vec3(gyro_data->bytes),
         .accel_ms2 = read_vec3(accel_data->bytes),
+        .magnetic_field_au =
+            mag_data ? read_vec3(mag_data->bytes) : plrs::Vec3 {},
         .orientation = *orientation,
         .timestamp = now(),
     };

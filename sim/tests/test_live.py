@@ -10,10 +10,12 @@ from plrs_sim.live import (
     FusionRecord,
     GnssRecord,
     ImuRecord,
+    MemsRecord,
     MonitorState,
     format_fusion,
     format_gnss,
     format_imu,
+    format_mems,
     heading_offset_deg,
     monitor,
     pace,
@@ -62,6 +64,24 @@ def test_parse_gnss_line_valid_and_invalid() -> None:
     )
     bad = parse_line("G,42,0.000,0.000,0")
     assert isinstance(bad, GnssRecord) and not bad.valid
+
+
+def test_parse_gnss_line_with_mode_error() -> None:
+    rec = parse_line("G,42,160.000,2.000,0,1,4")
+    assert isinstance(rec, GnssRecord)
+    assert (rec.valid, rec.mode, rec.error) == (False, 1, 4)
+
+
+def test_parse_mems_line_roundtrips() -> None:
+    rec = parse_line(
+        "M,5000,0.0100,-0.0200,9.8100,0.10000,-0.20000,0.30000,0.40000,-0.50000,0.60000"
+    )
+    assert isinstance(rec, MemsRecord)
+    assert rec.timestamp_ms == 5000
+    assert rec.accel_ms2.z == pytest.approx(9.81)
+    assert rec.angular_velocity_rad_s.x == pytest.approx(0.1)
+    assert rec.magnetic_field_au.y == pytest.approx(-0.5)
+    assert parse_line(format_mems(rec)) == rec
 
 
 def test_parse_diagnostic_strips_hash() -> None:

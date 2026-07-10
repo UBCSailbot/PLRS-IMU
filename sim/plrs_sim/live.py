@@ -5,7 +5,8 @@ The firmware emits one tagged, comma-separated line per record over USB CDC
 
     F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma   fused estimate
     I,ts_ms,qw,qx,qy,qz,gx,gy,gz,ax,ay,az                         raw IMU
-    G,ts_ms,heading,hdg_sigma,valid                               raw GNSS attitude
+    M,ts_ms,ax,ay,az,gx,gy,gz,mx,my,mz                            raw MEMS triad
+    G,ts_ms,heading,hdg_sigma,valid,mode,error                    raw GNSS attitude
     # text                                                        human diagnostic
 
 parse_line is tolerant: a malformed or partial line (a glitched byte, an
@@ -49,11 +50,24 @@ class ImuRecord:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class MemsRecord:
+    timestamp_ms: int
+    accel_ms2: Vec3
+    angular_velocity_rad_s: Vec3
+    magnetic_field_au: Vec3
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GnssRecord:
     timestamp_ms: int
     heading_deg: float
     heading_sigma_deg: float
     valid: bool
+    # Raw AttEuler mode/error, for diagnosing why valid is false (float
+    # ambiguity vs no-attitude vs a flagged baseline). Default to the
+    # no-solution codes so older logs without these fields still parse.
+    mode: int = 0
+    error: int = 0
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -61,10 +75,11 @@ class DiagRecord:
     text: str
 
 
-Record = FusionRecord | ImuRecord | GnssRecord | DiagRecord
+Record = FusionRecord | ImuRecord | MemsRecord | GnssRecord | DiagRecord
 
-# Token counts including the leading tag.
-_FIELD_COUNTS = {"F": 8, "I": 12, "G": 5}
+# Accepted token counts (including the leading tag) per record type. G accepts
+# both widths: 5 is the pre-mode/error format, 7 carries them.
+_FIELD_COUNTS = {"F": (8,), "I": (12,), "M": (11,), "G": (5, 7)}
 
 
 def parse_line(line: str) -> Record | None:
@@ -81,7 +96,7 @@ def parse_line(line: str) -> Record | None:
 
     fields = line.split(",")
     tag = fields[0]
-    if len(fields) != _FIELD_COUNTS.get(tag, -1):
+    if len(fields) not in _FIELD_COUNTS.get(tag, ()):
         return None
 
     try:
@@ -111,12 +126,27 @@ def parse_line(line: str) -> Record | None:
                     x=float(fields[9]), y=float(fields[10]), z=float(fields[11])
                 ),
             )
+        if tag == "M":
+            return MemsRecord(
+                timestamp_ms=int(fields[1]),
+                accel_ms2=Vec3(
+                    x=float(fields[2]), y=float(fields[3]), z=float(fields[4])
+                ),
+                angular_velocity_rad_s=Vec3(
+                    x=float(fields[5]), y=float(fields[6]), z=float(fields[7])
+                ),
+                magnetic_field_au=Vec3(
+                    x=float(fields[8]), y=float(fields[9]), z=float(fields[10])
+                ),
+            )
         if tag == "G":
             return GnssRecord(
                 timestamp_ms=int(fields[1]),
                 heading_deg=float(fields[2]),
                 heading_sigma_deg=float(fields[3]),
                 valid=fields[4] == "1",
+                mode=int(fields[5]) if len(fields) == 7 else 0,
+                error=int(fields[6]) if len(fields) == 7 else 0,
             )
     except ValueError:
         return None
@@ -139,10 +169,18 @@ def format_imu(r: ImuRecord) -> str:
     )
 
 
+def format_mems(r: MemsRecord) -> str:
+    a, g, m = r.accel_ms2, r.angular_velocity_rad_s, r.magnetic_field_au
+    return (
+        f"M,{r.timestamp_ms},{a.x:.4f},{a.y:.4f},{a.z:.4f},"
+        f"{g.x:.5f},{g.y:.5f},{g.z:.5f},{m.x:.5f},{m.y:.5f},{m.z:.5f}"
+    )
+
+
 def format_gnss(r: GnssRecord) -> str:
     return (
         f"G,{r.timestamp_ms},{r.heading_deg:.3f},{r.heading_sigma_deg:.3f},"
-        f"{1 if r.valid else 0}"
+        f"{1 if r.valid else 0},{r.mode},{r.error}"
     )
 
 

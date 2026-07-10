@@ -21,7 +21,7 @@ namespace rudder {
  * Constants and Definitions.
  */
 
-constexpr uint8_t PROTOCOL_VERSION = 1;
+constexpr uint8_t PROTOCOL_VERSION = 2;
 constexpr uint8_t FRAME_DELIMITER = 0x00;
 
 constexpr std::size_t MAX_PAYLOAD = 64;
@@ -228,19 +228,25 @@ struct Heading {
 };
 
 /**
- * Attitude message: heading, roll, pitch (degrees) and yaw rate (deg/s).
+ * Attitude message: heading, roll, pitch (degrees), yaw rate (deg/s), and a
+ * heading_valid flag.
  *
- * All four fields come from the same FusionOutput tick, keeping them
- * consistent across the latest-wins channel.
+ * All five fields come from the same FusionOutput tick, keeping them
+ * consistent across the latest-wins channel. heading_valid is true when the
+ * fused heading is GNSS-anchored (its uncertainty is within tolerance); when
+ * false the rudder should treat heading as free-drifting and not steer to it.
+ * Payload is the four floats followed by one flag byte (little-endian).
  */
 struct Attitude {
   static constexpr MsgId ID = MsgId::Attitude;
+  static constexpr std::size_t PAYLOAD_SIZE = 4 * sizeof(float) + 1;
   float heading_deg;
   float roll_deg;
   float pitch_deg;
   float yaw_rate_dps;
+  bool heading_valid;
 
-  constexpr std::array<uint8_t, 4 * sizeof(float)> to_payload() const {
+  constexpr std::array<uint8_t, PAYLOAD_SIZE> to_payload() const {
     const auto h = plrs::write_f32_little_endian(heading_deg);
     const auto r = plrs::write_f32_little_endian(roll_deg);
     const auto p = plrs::write_f32_little_endian(pitch_deg);
@@ -260,11 +266,12 @@ struct Attitude {
             y[0],
             y[1],
             y[2],
-            y[3]};
+            y[3],
+            static_cast<uint8_t>(heading_valid ? 1 : 0)};
   }
 
   static constexpr std::optional<Attitude> from_payload(ByteSpan payload) {
-    if (payload.size() != 4 * sizeof(float)) {
+    if (payload.size() != PAYLOAD_SIZE) {
       return std::nullopt;
     }
     return Attitude {
@@ -272,6 +279,7 @@ struct Attitude {
         .roll_deg = plrs::read_f32_little_endian(payload.subspan(4, 4)),
         .pitch_deg = plrs::read_f32_little_endian(payload.subspan(8, 4)),
         .yaw_rate_dps = plrs::read_f32_little_endian(payload.subspan(12, 4)),
+        .heading_valid = payload[16] != 0,
     };
   }
 };

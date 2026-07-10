@@ -65,11 +65,11 @@ wait_for_reply(septentrio_gnss::Uart &uart,
  * @return true if the receiver acknowledged; false on build failure, timeout,
  *   or an error reply. The caller retries the whole sequence on false.
  */
-static bool send_verified(
-    septentrio_gnss::Uart &uart,
-    septentrio_gnss::Parser &parser,
-    const std::expected<septentrio_gnss::Command, const char *> &cmd,
-    const char *label) {
+static bool
+send_verified(septentrio_gnss::Uart &uart,
+              septentrio_gnss::Parser &parser,
+              const std::expected<septentrio_gnss::Command, const char *> &cmd,
+              const char *label) {
   const auto fail = [&](const char *why) {
     if (Serial) {
       Serial.print("# GNSS: ");
@@ -122,14 +122,14 @@ static void bring_up(septentrio_gnss::Uart &uart,
                       septentrio_gnss::set_gnss_attitude(
                           septentrio_gnss::GnssAttitudeMode::MultiAntenna),
                       "setGNSSAttitude") &&
-        send_verified(
-            uart,
-            parser,
-            septentrio_gnss::set_sbf_output(septentrio_gnss::SbfStream::Stream1,
-                                            septentrio_gnss::Connection::COM1,
-                                            blocks,
-                                            septentrio_gnss::SbfInterval::Msec100),
-            "setSBFOutput");
+        send_verified(uart,
+                      parser,
+                      septentrio_gnss::set_sbf_output(
+                          septentrio_gnss::SbfStream::Stream1,
+                          septentrio_gnss::Connection::COM1,
+                          blocks,
+                          septentrio_gnss::SbfInterval::Msec100),
+                      "setSBFOutput");
 
     if (ready) {
       if (Serial)
