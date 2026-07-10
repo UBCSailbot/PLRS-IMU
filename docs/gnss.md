@@ -50,12 +50,16 @@ command, but we leave that at zero so the correction lives in exactly one place.
 The receiver streams nothing useful until told to. The typed builders in
 `lib/septentrio_gnss/command.h` assemble the setup commands:
 
-- `set_gnss_attitude(MovingBase)` — compute attitude from the antenna baseline.
+- `set_gnss_attitude(MultiAntenna)` — compute attitude from the two antennas on
+  a single receiver. Without this the receiver reports `NO_ATTITUDE` and no
+  heading is available.
 - `set_sbf_output(...)` — stream `AttEuler` and `AttCovEuler` on a port at a rate.
 - `set_attitude_offset(0, 0)` — leave the receiver's own offset at zero.
 
 Each returns a ready-to-send command (an ASCII line ending in a carriage return);
-the wire format and reply parsing are in the same directory.
+the wire format and reply parsing are in the same directory. The GNSS task sends
+these on every boot and retries until acknowledged, so a factory-reset or
+reflashed receiver still comes up producing headings.
 
 ## Tuning
 

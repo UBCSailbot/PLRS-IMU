@@ -104,7 +104,7 @@ struct Reply {
  * formats floats and is runtime-only.
  */
 
-enum class GnssAttitudeMode : uint8_t { None, MovingBase };
+enum class GnssAttitudeMode : uint8_t { None, MultiAntenna };
 enum class Connection : uint8_t { COM1, COM2, COM3, USB1, USB2 };
 enum class SbfStream : uint8_t { Stream1, Stream2, Stream3, Stream4 };
 enum class SbfInterval : uint8_t { Msec100, Msec200, Msec500, Sec1 };
@@ -119,8 +119,8 @@ constexpr std::string_view to_token(GnssAttitudeMode mode) {
   switch (mode) {
   case GnssAttitudeMode::None:
     return "none";
-  case GnssAttitudeMode::MovingBase:
-    return "MovingBase";
+  case GnssAttitudeMode::MultiAntenna:
+    return "MultiAntenna";
   }
   return {};
 }

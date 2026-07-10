@@ -787,9 +787,9 @@ constexpr std::array<SbfBlock, 2> kAttBlocks {SbfBlock::AttEuler,
 
 // Framing is pinned at compile time; the runtime tests below just exercise
 // the same builders through the suite.
-constexpr auto kAttitudeCmd = set_gnss_attitude(GnssAttitudeMode::MovingBase);
+constexpr auto kAttitudeCmd = set_gnss_attitude(GnssAttitudeMode::MultiAntenna);
 static_assert(kAttitudeCmd.has_value());
-static_assert(kAttitudeCmd->view() == "setGNSSAttitude,MovingBase\r");
+static_assert(kAttitudeCmd->view() == "setGNSSAttitude,MultiAntenna\r");
 
 constexpr auto kSbfOutputCmd = set_sbf_output(
     SbfStream::Stream1, Connection::COM1, kAttBlocks, SbfInterval::Msec100);
@@ -798,11 +798,11 @@ static_assert(kSbfOutputCmd->view() ==
               "setSBFOutput,Stream1,COM1,AttEuler+AttCovEuler,msec100\r");
 } // namespace
 
-/** @brief setGNSSAttitude selects the moving-base attitude source. */
-void test_set_gnss_attitude_moving_base() {
-  auto cmd = set_gnss_attitude(GnssAttitudeMode::MovingBase);
+/** @brief setGNSSAttitude selects the multi-antenna attitude source. */
+void test_set_gnss_attitude_multi_antenna() {
+  auto cmd = set_gnss_attitude(GnssAttitudeMode::MultiAntenna);
   TEST_ASSERT_TRUE(cmd.has_value());
-  TEST_ASSERT_TRUE(cmd->view() == "setGNSSAttitude,MovingBase\r");
+  TEST_ASSERT_TRUE(cmd->view() == "setGNSSAttitude,MultiAntenna\r");
 }
 
 /** @brief setSBFOutput joins the requested blocks with '+'. */
@@ -860,7 +860,7 @@ int main(int, char **) {
   RUN_TEST(test_dollar_mid_nmea_then_sbf_dispatches);
   RUN_TEST(test_command_build_appends_cr);
   RUN_TEST(test_command_build_rejects_oversize);
-  RUN_TEST(test_set_gnss_attitude_moving_base);
+  RUN_TEST(test_set_gnss_attitude_multi_antenna);
   RUN_TEST(test_set_sbf_output_joins_blocks);
   RUN_TEST(test_set_attitude_offset_formats_floats);
   RUN_TEST(test_parse_clean_reply_ok);

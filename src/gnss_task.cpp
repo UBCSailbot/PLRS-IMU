@@ -55,8 +55,55 @@ wait_for_reply(septentrio_gnss::Uart &uart,
 }
 
 /**
- * @brief Configure SBF output and verify the receiver accepted it.
- *        Retries indefinitely on timeout or error reply.
+ * @brief Send one command and wait for a non-error acknowledgement.
+ *
+ * @param uart    Transport to the mosaic-go-H.
+ * @param parser  Wire parser instance.
+ * @param cmd     Built command, or the build error carried through.
+ * @param label   Command name for the failure log.
+ *
+ * @return true if the receiver acknowledged; false on build failure, timeout,
+ *   or an error reply. The caller retries the whole sequence on false.
+ */
+static bool send_verified(
+    septentrio_gnss::Uart &uart,
+    septentrio_gnss::Parser &parser,
+    const std::expected<septentrio_gnss::Command, const char *> &cmd,
+    const char *label) {
+  const auto fail = [&](const char *why) {
+    if (Serial) {
+      Serial.print("# GNSS: ");
+      Serial.print(label);
+      Serial.print(' ');
+      Serial.println(why);
+    }
+    return false;
+  };
+
+  if (!cmd) {
+    return fail("build failed");
+  }
+  uart.write(cmd->view());
+
+  auto reply = wait_for_reply(uart, parser, REPLY_TIMEOUT_MS);
+  if (!reply) {
+    return fail("timeout");
+  }
+  if (reply->kind == septentrio_gnss::ReplyKind::Err) {
+    return fail("rejected");
+  }
+  return true;
+}
+
+/**
+ * @brief Configure the receiver for dual-antenna heading and verify each step.
+ *        Retries the whole sequence indefinitely on any failure.
+ *
+ * Enables multi-antenna attitude, then turns on the attitude blocks. The
+ * attitude source is asserted here every boot rather than relying on the
+ * receiver's saved config, so a factory-reset or reflashed unit still produces
+ * headings. Without it the receiver emits AttEuler with mode NO_ATTITUDE and
+ * the filter never gets a heading fix.
  *
  * @param uart    Transport to the mosaic-go-H.
  * @param parser  Wire parser instance.
@@ -69,38 +116,27 @@ static void bring_up(septentrio_gnss::Uart &uart,
   };
 
   while (true) {
-    auto cmd =
-        septentrio_gnss::set_sbf_output(septentrio_gnss::SbfStream::Stream1,
-                                        septentrio_gnss::Connection::COM1,
-                                        blocks,
-                                        septentrio_gnss::SbfInterval::Msec100);
+    const bool ready =
+        send_verified(uart,
+                      parser,
+                      septentrio_gnss::set_gnss_attitude(
+                          septentrio_gnss::GnssAttitudeMode::MultiAntenna),
+                      "setGNSSAttitude") &&
+        send_verified(
+            uart,
+            parser,
+            septentrio_gnss::set_sbf_output(septentrio_gnss::SbfStream::Stream1,
+                                            septentrio_gnss::Connection::COM1,
+                                            blocks,
+                                            septentrio_gnss::SbfInterval::Msec100),
+            "setSBFOutput");
 
-    if (!cmd) {
+    if (ready) {
       if (Serial)
-        Serial.println("# GNSS: failed to build command, retrying");
-      vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-      continue;
+        Serial.println("# GNSS: ready");
+      return;
     }
-
-    uart.write(cmd->view());
-
-    auto reply = wait_for_reply(uart, parser, REPLY_TIMEOUT_MS);
-    if (!reply) {
-      if (Serial)
-        Serial.println("# GNSS: setSBFOutput timeout, retrying");
-      vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-      continue;
-    }
-    if (reply->kind == septentrio_gnss::ReplyKind::Err) {
-      if (Serial)
-        Serial.println("# GNSS: setSBFOutput rejected, retrying");
-      vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-      continue;
-    }
-
-    if (Serial)
-      Serial.println("# GNSS: ready");
-    return;
+    vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
   }
 }
 
