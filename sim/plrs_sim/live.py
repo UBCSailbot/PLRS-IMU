@@ -186,8 +186,10 @@ class MonitorState:
 
     `fused` is the EKF estimate (`F` lines); `openloop` is the IMU-only
     dead-reckon -- roll/pitch from the `I`-line quaternion, heading seeded from
-    the boot quaternion yaw and then propagated by integrating gyro-z. A valid
-    GNSS fix re-anchors that heading to the absolute reference once it arrives;
+    the first fused heading (so the two tracks start identical and any later
+    separation is pure gyro drift) and then propagated by integrating gyro-z. A
+    valid GNSS fix re-anchors that heading to the absolute reference once it
+    arrives;
     without GNSS it still tracks (relative) so the bench is usable. The two
     tracks diverge as the gyro drifts and the EKF holds, which is the value of
     the EKF made visible. `last_gnss` / `last_diag` hold the most recent of each.
@@ -220,12 +222,15 @@ class MonitorState:
             self.latest_t_ms = rec.timestamp_ms
         elif isinstance(rec, ImuRecord):
             roll, pitch, yaw = quaternion_to_euler_zyx(rec.orientation)
-            # Seed the dead-reckon heading from the boot yaw, then propagate it
-            # by integrating gyro-z. If a GNSS fix already anchored the heading,
-            # keep that absolute reference rather than the arbitrary boot yaw.
+            # Seed the dead-reckon heading from the first fused heading so the
+            # two tracks start on the same absolute reference, then propagate it
+            # by integrating gyro-z. Fall back to the boot yaw if no fused sample
+            # has arrived yet; a GNSS fix, if any, re-anchors it later.
             if self._dr_prev_ms is None:
                 if not self._dr_anchored_to_gnss:
-                    self._dr_heading = yaw
+                    self._dr_heading = (
+                        self.fused.heading[-1] if self.fused.t_ms else yaw
+                    )
             else:
                 dt_s = (rec.timestamp_ms - self._dr_prev_ms) / 1000.0
                 # Wrap to (-180, 180] like the firmware so the open-loop track

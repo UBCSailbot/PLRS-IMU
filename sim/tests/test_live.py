@@ -97,9 +97,9 @@ def test_monitor_state_accumulates_both_attitude_sources() -> None:
     # Identity quaternion -> level attitude on the open-loop series.
     assert list(state.openloop.t_ms) == [1000, 2000]
     assert state.openloop.roll[-1] == pytest.approx(0.0)
-    # The first I (t=1000) seeds heading from the identity-quaternion yaw (0);
+    # The first I (t=1000) seeds heading from the first fused heading (10);
     # the GNSS fix then re-anchors it to 90, and the zero gyro adds no drift.
-    assert list(state.openloop.heading) == pytest.approx([0.0, 90.0])
+    assert list(state.openloop.heading) == pytest.approx([10.0, 90.0])
     assert state.last_gnss is not None and state.last_gnss.heading_deg == 90.0
     assert state.last_diag == "IMU: ready"
     assert state.latest_t_ms == 2000
