@@ -126,6 +126,133 @@ def plot_pose(
     plt.close(fig)
 
 
+_ANIM_INTERVAL_MS = 50
+_ANIM_DPI = 96
+# GIF rendering is slow (Agg 3D per-frame); cap the frame count and lower the DPI.
+_GIF_MAX_FRAMES = 200
+_GIF_FPS = 12
+_GIF_DPI = 72
+
+
+def _draw_boat_frame(ax, trace: Trace, i: int) -> None:
+    """Render one animation frame: truth hull (blue), EKF estimate (ghost
+    orange), and the IMU-raw dead-reckon (green) when present, with a
+    timestamped title."""
+    heading = trace.channels["heading"]
+    roll = trace.channels["roll"]
+    pitch = trace.channels["pitch"]
+    ax.cla()
+    draw_boat(
+        ax,
+        roll.truth[i],
+        pitch.truth[i],
+        heading.truth[i],
+        color="tab:blue",
+        label="truth",
+    )
+    draw_boat(
+        ax,
+        roll.estimate[i],
+        pitch.estimate[i],
+        heading.estimate[i],
+        color="tab:orange",
+        alpha=0.5,
+        label="EKF estimate",
+    )
+    ol_roll, ol_pitch, ol_head = roll.openloop, pitch.openloop, heading.openloop
+    if (
+        ol_roll is not None
+        and ol_pitch is not None
+        and ol_head is not None
+        and not np.isnan(ol_head[i])
+    ):
+        draw_boat(
+            ax,
+            ol_roll[i],
+            ol_pitch[i],
+            ol_head[i],
+            color="tab:green",
+            alpha=0.4,
+            label="IMU raw",
+        )
+    set_equal_3d(ax)
+    ax.legend(loc="upper left", fontsize=8)
+    ax.set_title(
+        f"t={trace.t_ms[i] / 1000.0:.1f}s  hdg {heading.truth[i]:.0f}  "
+        f"roll {roll.truth[i]:.0f}  pitch {pitch.truth[i]:.0f}",
+        fontsize=9,
+    )
+
+
+def _render_movie(fig, draw, indices, writer, path: Path, dpi: int, *, progress=False):
+    """Grab one frame per index through any matplotlib movie writer."""
+    total = len(indices)
+    with writer.saving(fig, path, dpi=dpi):
+        for k, i in enumerate(indices):
+            draw(i)
+            writer.grab_frame()
+            if progress:
+                print(f"\rRendering... {k + 1}/{total}", end="", flush=True)
+    if progress:
+        print()
+
+
+def _write_gif(fig, draw, indices, path: Path) -> None:
+    from matplotlib.animation import PillowWriter
+
+    gif_step = max(1, len(indices) // _GIF_MAX_FRAMES)
+    _render_movie(
+        fig,
+        draw,
+        indices[::gif_step],
+        PillowWriter(fps=_GIF_FPS),
+        path,
+        _GIF_DPI,
+        progress=True,
+    )
+
+
+def _write_video(fig, draw, indices, path: Path, fps: int) -> None:
+    from matplotlib.animation import FFMpegWriter
+
+    _render_movie(fig, draw, indices, FFMpegWriter(fps=fps), path, _ANIM_DPI)
+
+
+def _save_final_frame(fig, draw, index: int, path: Path) -> None:
+    draw(index)
+    fig.savefig(path, dpi=_ANIM_DPI, bbox_inches="tight", pil_kwargs={"optimize": True})
+
+
+def _show_gif_terminal(fig, draw, indices, existing_gif: Path | None) -> None:
+    """Display the animation inline on a terminal backend via kitty icat,
+    reusing an already-rendered save GIF or writing a throwaway one."""
+    import subprocess
+    import tempfile
+
+    gif_path = existing_gif
+    tmp: Path | None = None
+    if gif_path is None:
+        with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as f:
+            tmp = Path(f.name)
+        _write_gif(fig, draw, indices, tmp)
+        gif_path = tmp
+    try:
+        subprocess.run(["kitty", "+kitten", "icat", str(gif_path)], check=False)
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+
+
+def _show_interactive(fig, draw, indices, interval_ms: int) -> None:
+    """Loop the animation in a GUI window until the figure is closed."""
+    while plt.fignum_exists(fig.number):
+        for i in indices:
+            if not plt.fignum_exists(fig.number):
+                break
+            draw(i)
+            plt.pause(interval_ms / 1000.0)
+
+
 def plot_animate(
     trace: Trace,
     *,
@@ -141,144 +268,47 @@ def plot_animate(
     displays it with `kitty +kitten icat --hold`; press any key to continue.
     On GUI backends, opens a Qt window that loops until closed.
     """
-    import subprocess
-    import tempfile
-
     import matplotlib
 
-    heading = trace.channels["heading"]
-    roll = trace.channels["roll"]
-    pitch = trace.channels["pitch"]
     n = len(trace.t_ms)
-
-    _interval_ms = 50
-    dt_ms = float(np.mean(np.diff(trace.t_ms))) if n > 1 else _interval_ms
-    step = max(1, round(_interval_ms / dt_ms))
+    dt_ms = float(np.mean(np.diff(trace.t_ms))) if n > 1 else _ANIM_INTERVAL_MS
+    step = max(1, round(_ANIM_INTERVAL_MS / dt_ms))
     indices = np.arange(0, n, step)
-    fps = max(1, round(1000 / _interval_ms))
+    fps = max(1, round(1000 / _ANIM_INTERVAL_MS))
 
-    # GIF rendering is slow (Agg 3D per-frame); cap at 40 frames and lower DPI.
-    _GIF_MAX = 200
-    _GIF_FPS = 12
-    _GIF_DPI = 72
-    gif_step = max(1, len(indices) // _GIF_MAX)
-    gif_indices = indices[::gif_step]
-
-    _prev_backend = matplotlib.get_backend()
-    _is_terminal = _prev_backend.startswith("module://")
-
-    # Use Agg (headless) for terminal backends so savefig works for GIF
-    # rendering; use QtAgg for an interactive window otherwise.
+    prev_backend = matplotlib.get_backend()
+    is_terminal = prev_backend.startswith("module://")
+    # Agg (headless) for terminal backends so savefig works for GIF rendering;
+    # QtAgg for an interactive window otherwise. Restored in the finally.
     if show:
-        plt.switch_backend("agg" if _is_terminal else "QtAgg")
+        plt.switch_backend("agg" if is_terminal else "QtAgg")
 
     fig = plt.figure(figsize=(7, 6))
     ax = fig.add_subplot(projection="3d")
     if title is not None:
         fig.suptitle(title)
 
-    _has_imu_raw = (
-        roll.openloop is not None
-        and pitch.openloop is not None
-        and heading.openloop is not None
-    )
-
-    def draw_frame(i: int) -> None:
-        ax.cla()
-        draw_boat(
-            ax,
-            roll.truth[i],
-            pitch.truth[i],
-            heading.truth[i],
-            color="tab:blue",
-            label="truth",
-        )
-        draw_boat(
-            ax,
-            roll.estimate[i],
-            pitch.estimate[i],
-            heading.estimate[i],
-            color="tab:orange",
-            alpha=0.5,
-            label="EKF estimate",
-        )
-        if _has_imu_raw and not np.isnan(heading.openloop[i]):  # type: ignore[index]
-            draw_boat(
-                ax,
-                roll.openloop[i],  # type: ignore[index]
-                pitch.openloop[i],  # type: ignore[index]
-                heading.openloop[i],  # type: ignore[index]
-                color="tab:green",
-                alpha=0.4,
-                label="IMU raw",
-            )
-        set_equal_3d(ax)
-        ax.legend(loc="upper left", fontsize=8)
-        ax.set_title(
-            f"t={trace.t_ms[i] / 1000.0:.1f}s  "
-            f"hdg {heading.truth[i]:.0f}  "
-            f"roll {roll.truth[i]:.0f}  "
-            f"pitch {pitch.truth[i]:.0f}",
-            fontsize=9,
-        )
-
-    def _write_gif(path: Path) -> None:
-        from matplotlib.animation import PillowWriter
-
-        total = len(gif_indices)
-        w = PillowWriter(fps=_GIF_FPS)
-        with w.saving(fig, path, dpi=_GIF_DPI):
-            for k, i in enumerate(gif_indices):
-                draw_frame(i)
-                w.grab_frame()
-                print(f"\rRendering... {k + 1}/{total}", end="", flush=True)
-        print()
-
-    if save is not None:
-        if str(save).endswith(".gif"):
-            _write_gif(save)
-        elif str(save).endswith(".png"):
-            draw_frame(indices[-1])
-            fig.savefig(
-                save, dpi=96, bbox_inches="tight", pil_kwargs={"optimize": True}
-            )
-        else:
-            from matplotlib.animation import FFMpegWriter
-
-            w = FFMpegWriter(fps=fps)
-            with w.saving(fig, save, dpi=96):
-                for i in indices:
-                    draw_frame(i)
-                    w.grab_frame()
+    def draw(i: int) -> None:
+        _draw_boat_frame(ax, trace, i)
 
     try:
-        if show and _is_terminal:
-            # Reuse an already-rendered save gif; otherwise write a temp one.
-            gif_path: Path | None = (
-                save if (save is not None and str(save).endswith(".gif")) else None
-            )
-            tmp: Path | None = None
-            if gif_path is None:
-                with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as f:
-                    tmp = Path(f.name)
-                _write_gif(tmp)
-                gif_path = tmp
-            try:
-                subprocess.run(["kitty", "+kitten", "icat", str(gif_path)], check=False)
-            finally:
-                if tmp is not None:
-                    tmp.unlink(missing_ok=True)
+        if save is not None:
+            if str(save).endswith(".gif"):
+                _write_gif(fig, draw, indices, save)
+            elif str(save).endswith(".png"):
+                _save_final_frame(fig, draw, indices[-1], save)
+            else:
+                _write_video(fig, draw, indices, save, fps)
+
+        if show and is_terminal:
+            existing = save if (save and str(save).endswith(".gif")) else None
+            _show_gif_terminal(fig, draw, indices, existing)
         elif show:
-            while plt.fignum_exists(fig.number):
-                for i in indices:
-                    if not plt.fignum_exists(fig.number):
-                        break
-                    draw_frame(i)
-                    plt.pause(_interval_ms / 1000.0)
+            _show_interactive(fig, draw, indices, _ANIM_INTERVAL_MS)
     finally:
         plt.close(fig)
         if show:
-            plt.switch_backend(_prev_backend)
+            plt.switch_backend(prev_backend)
 
 
 def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
