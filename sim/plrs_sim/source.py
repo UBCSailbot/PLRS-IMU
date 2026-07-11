@@ -41,6 +41,8 @@ from .types import (
     Vec3,
 )
 
+_WORLD_Z = Vec3(x=0.0, y=0.0, z=1.0)
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SimulatedSource:
@@ -78,8 +80,7 @@ class SimulatedSource:
             # orientation carries yaw = -heading and the world-Z yaw rate
             # is the negated heading rate.
             orientation = multiply(
-                from_axis_angle(Vec3(x=0.0, y=0.0, z=1.0), math.radians(-truth_h)),
-                attitude_q,
+                from_axis_angle(_WORLD_Z, math.radians(-truth_h)), attitude_q
             )
 
             # Yaw is a world-frame angular velocity about world Z. The

@@ -13,10 +13,10 @@ from plrs_sim import (
     EkfConfig,
     GnssNoiseModel,
     ImuNoiseModel,
-    MtiYawConfig,
     Scenario,
     Sinusoidal,
     Static,
+    load_tuning,
 )
 from plrs_sim.attitude import euler_to_quaternion
 from plrs_sim.runner import run
@@ -45,6 +45,11 @@ def _src(
         duration_s=duration_s,
         seed=seed,
     )
+
+
+def _wrapped_residual(ch) -> np.ndarray:
+    """Estimate-minus-truth, the short way around the +-180 seam."""
+    return (ch.estimate - ch.truth + 180.0) % 360.0 - 180.0
 
 
 def test_trace_arrays_have_matching_length() -> None:
@@ -85,7 +90,7 @@ def test_filter_tracks_heading_across_the_180_seam() -> None:
         duration_s=40.0,
     )
     ch = run(src, CFG).channels["heading"]
-    residual = (ch.estimate - ch.truth + 180.0) % 360.0 - 180.0
+    residual = _wrapped_residual(ch)
     # Skip the cold-start transient; after convergence the error is small and,
     # crucially, has no spike where truth crosses 180 deg (~36 s in).
     steady = residual[len(residual) // 4 :]
@@ -136,18 +141,10 @@ def test_estimate_converges_to_truth_without_noise() -> None:
 
 
 def test_tracks_through_realistic_noise_with_mag_aiding() -> None:
-    # The docs-image scenario: full noise model, gate and mag yaw active.
-    # Guards the sim/firmware convention agreement; a sign flip on either
-    # side turns this into a tens-of-degrees staircase, not a small miss.
-    cfg = EkfConfig(
-        q_heading_deg2=0.01,
-        q_bias_deg2_s2=0.000001,
-        p0_heading_deg2=1000.0,
-        p0_bias_deg2_s2=0.05,
-        mti_yaw=MtiYawConfig(
-            variance_deg2=4.0, q_offset_deg2=0.0001, p0_offset_deg2=100.0
-        ),
-    )
+    # The docs-image scenario under the shipped tuning.toml: full noise
+    # model, gate and mag yaw active. Guards the sim/firmware convention
+    # agreement; a sign flip on either side turns this into a
+    # tens-of-degrees staircase, not a small miss.
     src = _src(
         Sinusoidal(amplitude_deg=30.0, period_s=20.0),
         imu_noise=ImuNoiseModel(
@@ -159,8 +156,8 @@ def test_tracks_through_realistic_noise_with_mag_aiding() -> None:
         gnss_noise=GnssNoiseModel(heading_std_deg=1.0),
         duration_s=10.0,
     )
-    ch = run(src, cfg).channels["heading"]
-    residual = (ch.estimate - ch.truth + 180.0) % 360.0 - 180.0
+    ch = run(src, load_tuning()).channels["heading"]
+    residual = _wrapped_residual(ch)
     assert math.sqrt(np.mean(residual**2)) < 2.0
 
 
