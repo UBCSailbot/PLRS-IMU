@@ -64,10 +64,10 @@ class MonitorState:
     the first fused heading (so the two tracks start identical and any later
     separation is pure gyro drift) and then propagated by integrating gyro-z. A
     valid GNSS fix re-anchors that heading to the absolute reference once it
-    arrives;
-    without GNSS it still tracks (relative) so the bench is usable. The two
-    tracks diverge as the gyro drifts and the EKF holds, which is the value of
-    the EKF made visible. `last_gnss` / `last_diag` hold the most recent of each.
+    arrives; without GNSS it still tracks (relative) so the bench is usable. The
+    two tracks diverge as the gyro drifts and the EKF holds, which is the value
+    of the EKF made visible. `last_gnss` / `last_diag` hold the most recent of
+    each.
     """
 
     fused: Series = field(default_factory=Series)

@@ -195,7 +195,7 @@ class _LiveBlitView:
     """Drive the live figure by blitting the scroll panels every tick.
 
     Blitting (restore a cached axis background, draw just the moving line, push
-    the pixels) costs ~7 ms for all three panels versus ~230 ms for a full
+    the pixels) costs ~5 ms for all three panels versus ~230 ms for a full
     figure redraw, so the view stays smooth without pegging the event loop. A
     panel whose y-limits had to grow needs one real redraw to refresh its ticks;
     that also re-captures the backgrounds via the draw_event handler.
