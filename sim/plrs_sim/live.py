@@ -21,47 +21,60 @@ import math
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Generator, Iterable, Iterator
-from dataclasses import dataclass, field
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
+from dataclasses import MISSING, dataclass, field, fields
 from pathlib import Path
-from typing import TextIO
+from typing import Annotated, TextIO, get_args, get_origin, get_type_hints
 
 from .attitude import quaternion_to_euler_zyx
 from .types import Quaternion, Vec3
+
+# The record dataclasses ARE the wire schema: field order is token order,
+# Vec3/Quaternion fields flatten to their components, the Annotated metadata
+# is the wire precision, and a trailing run of defaulted fields is a
+# format-version boundary (all present or all absent). parse_line,
+# format_record, and the accepted field counts all derive from them, so the
+# three cannot drift apart.
+
+_Deg = Annotated[float, 3]
+_Quat = Annotated[Quaternion, 5]
+_Gyro = Annotated[Vec3, 5]
+_Accel = Annotated[Vec3, 4]
+_Mag = Annotated[Vec3, 5]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FusionRecord:
     timestamp_ms: int
-    heading_deg: float
-    roll_deg: float
-    pitch_deg: float
-    heading_sigma_deg: float
-    roll_sigma_deg: float
-    pitch_sigma_deg: float
+    heading_deg: _Deg
+    roll_deg: _Deg
+    pitch_deg: _Deg
+    heading_sigma_deg: _Deg
+    roll_sigma_deg: _Deg
+    pitch_sigma_deg: _Deg
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ImuRecord:
     timestamp_ms: int
-    orientation: Quaternion
-    angular_velocity_rad_s: Vec3
-    accel_ms2: Vec3
+    orientation: _Quat
+    angular_velocity_rad_s: _Gyro
+    accel_ms2: _Accel
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MemsRecord:
     timestamp_ms: int
-    accel_ms2: Vec3
-    angular_velocity_rad_s: Vec3
-    magnetic_field_au: Vec3
+    accel_ms2: _Accel
+    angular_velocity_rad_s: _Gyro
+    magnetic_field_au: _Mag
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GnssRecord:
     timestamp_ms: int
-    heading_deg: float
-    heading_sigma_deg: float
+    heading_deg: _Deg
+    heading_sigma_deg: _Deg
     valid: bool
     # Raw AttEuler mode/error, for diagnosing why valid is false (float
     # ambiguity vs no-attitude vs a flagged baseline). Default to the
@@ -77,9 +90,95 @@ class DiagRecord:
 
 Record = FusionRecord | ImuRecord | MemsRecord | GnssRecord | DiagRecord
 
-# Accepted token counts (including the leading tag) per record type. G accepts
-# both widths: 5 is the pre-mode/error format, 7 carries them.
-_FIELD_COUNTS = {"F": (8,), "I": (12,), "M": (11,), "G": (5, 7)}
+_NESTED_COMPONENTS = {Vec3: ("x", "y", "z"), Quaternion: ("w", "x", "y", "z")}
+
+
+def _parse_float(token: str) -> float:
+    # The firmware prints out-of-range floats as "ovf" (Arduino Print).
+    return math.inf if token == "ovf" else float(token)
+
+
+def _format_float(v: float, prec: int) -> str:
+    return "ovf" if not math.isfinite(v) else f"{v:.{prec}f}"
+
+
+@dataclass(frozen=True, slots=True)
+class _FieldCodec:
+    """Wire layout of one record field: `width` consecutive tokens."""
+
+    name: str
+    width: int
+    parse: Callable[[Sequence[str]], object]
+    unparse: Callable[[object], list[str]]
+    optional: bool
+
+
+def _field_codec(name: str, hint: type, optional: bool) -> _FieldCodec:
+    t, prec = (
+        (get_args(hint)[0], get_args(hint)[1])
+        if get_origin(hint) is Annotated
+        else (hint, None)
+    )
+    if t in _NESTED_COMPONENTS:
+        comps = _NESTED_COMPONENTS[t]
+        return _FieldCodec(
+            name,
+            len(comps),
+            lambda toks: t(
+                **{c: _parse_float(k) for c, k in zip(comps, toks, strict=True)}
+            ),
+            lambda v: [_format_float(getattr(v, c), prec) for c in comps],
+            optional,
+        )
+    if t is float:
+        return _FieldCodec(
+            name,
+            1,
+            lambda toks: _parse_float(toks[0]),
+            lambda v: [_format_float(v, prec)],
+            optional,
+        )
+    if t is bool:
+        return _FieldCodec(
+            name,
+            1,
+            lambda toks: toks[0] == "1",
+            lambda v: ["1" if v else "0"],
+            optional,
+        )
+    if t is int:
+        return _FieldCodec(
+            name, 1, lambda toks: int(toks[0]), lambda v: [str(v)], optional
+        )
+    raise TypeError(f"unsupported wire field type: {t!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class _RecordCodec:
+    cls: type
+    fields: tuple[_FieldCodec, ...]
+    widths: tuple[int, ...]  # accepted token counts, including the tag
+
+
+def _record_codec(cls: type) -> _RecordCodec:
+    hints = get_type_hints(cls, include_extras=True)
+    codecs = tuple(
+        _field_codec(f.name, hints[f.name], f.default is not MISSING)
+        for f in fields(cls)
+    )
+    full = 1 + sum(f.width for f in codecs)
+    required = full - sum(f.width for f in codecs if f.optional)
+    widths = (required,) if required == full else (required, full)
+    return _RecordCodec(cls, codecs, widths)
+
+
+_CODECS = {
+    "F": _record_codec(FusionRecord),
+    "I": _record_codec(ImuRecord),
+    "M": _record_codec(MemsRecord),
+    "G": _record_codec(GnssRecord),
+}
+_TAGS = {codec.cls: tag for tag, codec in _CODECS.items()}
 
 
 def parse_line(line: str) -> Record | None:
@@ -94,94 +193,31 @@ def parse_line(line: str) -> Record | None:
     if line.startswith("#"):
         return DiagRecord(text=line[1:].strip())
 
-    fields = line.split(",")
-    tag = fields[0]
-    if len(fields) not in _FIELD_COUNTS.get(tag, ()):
+    tokens = line.split(",")
+    codec = _CODECS.get(tokens[0])
+    if codec is None or len(tokens) not in codec.widths:
         return None
 
+    kwargs = {}
+    at = 1
     try:
-        if tag == "F":
-            return FusionRecord(
-                timestamp_ms=int(fields[1]),
-                heading_deg=float(fields[2]),
-                roll_deg=float(fields[3]),
-                pitch_deg=float(fields[4]),
-                heading_sigma_deg=math.inf if fields[5] == "ovf" else float(fields[5]),
-                roll_sigma_deg=float(fields[6]),
-                pitch_sigma_deg=float(fields[7]),
-            )
-        if tag == "I":
-            return ImuRecord(
-                timestamp_ms=int(fields[1]),
-                orientation=Quaternion(
-                    w=float(fields[2]),
-                    x=float(fields[3]),
-                    y=float(fields[4]),
-                    z=float(fields[5]),
-                ),
-                angular_velocity_rad_s=Vec3(
-                    x=float(fields[6]), y=float(fields[7]), z=float(fields[8])
-                ),
-                accel_ms2=Vec3(
-                    x=float(fields[9]), y=float(fields[10]), z=float(fields[11])
-                ),
-            )
-        if tag == "M":
-            return MemsRecord(
-                timestamp_ms=int(fields[1]),
-                accel_ms2=Vec3(
-                    x=float(fields[2]), y=float(fields[3]), z=float(fields[4])
-                ),
-                angular_velocity_rad_s=Vec3(
-                    x=float(fields[5]), y=float(fields[6]), z=float(fields[7])
-                ),
-                magnetic_field_au=Vec3(
-                    x=float(fields[8]), y=float(fields[9]), z=float(fields[10])
-                ),
-            )
-        if tag == "G":
-            return GnssRecord(
-                timestamp_ms=int(fields[1]),
-                heading_deg=float(fields[2]),
-                heading_sigma_deg=float(fields[3]),
-                valid=fields[4] == "1",
-                mode=int(fields[5]) if len(fields) == 7 else 0,
-                error=int(fields[6]) if len(fields) == 7 else 0,
-            )
+        for fc in codec.fields:
+            if at >= len(tokens):
+                break  # absent optional tail keeps its defaults
+            kwargs[fc.name] = fc.parse(tokens[at : at + fc.width])
+            at += fc.width
+        return codec.cls(**kwargs)
     except ValueError:
         return None
-    return None
 
 
-def format_fusion(r: FusionRecord) -> str:
-    return (
-        f"F,{r.timestamp_ms},{r.heading_deg:.3f},{r.roll_deg:.3f},"
-        f"{r.pitch_deg:.3f},{r.heading_sigma_deg:.3f},{r.roll_sigma_deg:.3f},"
-        f"{r.pitch_sigma_deg:.3f}"
-    )
-
-
-def format_imu(r: ImuRecord) -> str:
-    q, g, a = r.orientation, r.angular_velocity_rad_s, r.accel_ms2
-    return (
-        f"I,{r.timestamp_ms},{q.w:.5f},{q.x:.5f},{q.y:.5f},{q.z:.5f},"
-        f"{g.x:.5f},{g.y:.5f},{g.z:.5f},{a.x:.4f},{a.y:.4f},{a.z:.4f}"
-    )
-
-
-def format_mems(r: MemsRecord) -> str:
-    a, g, m = r.accel_ms2, r.angular_velocity_rad_s, r.magnetic_field_au
-    return (
-        f"M,{r.timestamp_ms},{a.x:.4f},{a.y:.4f},{a.z:.4f},"
-        f"{g.x:.5f},{g.y:.5f},{g.z:.5f},{m.x:.5f},{m.y:.5f},{m.z:.5f}"
-    )
-
-
-def format_gnss(r: GnssRecord) -> str:
-    return (
-        f"G,{r.timestamp_ms},{r.heading_deg:.3f},{r.heading_sigma_deg:.3f},"
-        f"{1 if r.valid else 0},{r.mode},{r.error}"
-    )
+def format_record(r: FusionRecord | ImuRecord | MemsRecord | GnssRecord) -> str:
+    """Render a record as its wire line, the inverse of parse_line."""
+    tag = _TAGS[type(r)]
+    tokens = [tag]
+    for fc in _CODECS[tag].fields:
+        tokens += fc.unparse(getattr(r, fc.name))
+    return ",".join(tokens)
 
 
 # Default rolling-buffer depth: 2000 samples at 10 Hz is ~200 s of history.

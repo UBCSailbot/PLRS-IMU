@@ -16,14 +16,7 @@ import math
 from collections.abc import Iterable, Iterator
 
 from .ekf import TinyEkfFilter
-from .live import (
-    FusionRecord,
-    GnssRecord,
-    ImuRecord,
-    format_fusion,
-    format_gnss,
-    format_imu,
-)
+from .live import FusionRecord, GnssRecord, ImuRecord, format_record
 from .types import EkfConfig, Tick
 
 _DEFAULT_TELEMETRY_INTERVAL_MS = 100
@@ -50,7 +43,7 @@ def export_telemetry(
         ekf.predict(tick.imu)
         if tick.gnss is not None:
             ekf.update(tick.gnss)
-            yield format_gnss(
+            yield format_record(
                 GnssRecord(
                     timestamp_ms=tick.gnss.timestamp_ms,
                     heading_deg=tick.gnss.heading_deg,
@@ -66,7 +59,7 @@ def export_telemetry(
         next_emit_ms += telemetry_interval_ms
 
         out = ekf.output()
-        yield format_fusion(
+        yield format_record(
             FusionRecord(
                 timestamp_ms=out.timestamp_ms,
                 heading_deg=out.heading_deg,
@@ -77,7 +70,7 @@ def export_telemetry(
                 pitch_sigma_deg=_sigma(out.pitch_variance_deg2),
             )
         )
-        yield format_imu(
+        yield format_record(
             ImuRecord(
                 timestamp_ms=tick.imu.timestamp_ms,
                 orientation=tick.imu.orientation,

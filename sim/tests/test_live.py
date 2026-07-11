@@ -12,10 +12,7 @@ from plrs_sim.live import (
     ImuRecord,
     MemsRecord,
     MonitorState,
-    format_fusion,
-    format_gnss,
-    format_imu,
-    format_mems,
+    format_record,
     heading_offset_deg,
     monitor,
     pace,
@@ -81,7 +78,7 @@ def test_parse_mems_line_roundtrips() -> None:
     assert rec.accel_ms2.z == pytest.approx(9.81)
     assert rec.angular_velocity_rad_s.x == pytest.approx(0.1)
     assert rec.magnetic_field_au.y == pytest.approx(-0.5)
-    assert parse_line(format_mems(rec)) == rec
+    assert parse_line(format_record(rec)) == rec
 
 
 def test_parse_diagnostic_strips_hash() -> None:
@@ -230,9 +227,9 @@ def test_format_parse_round_trips() -> None:
     gnss = GnssRecord(
         timestamp_ms=42, heading_deg=90.0, heading_sigma_deg=1.5, valid=True
     )
-    assert parse_line(format_fusion(fusion)) == fusion
-    assert parse_line(format_gnss(gnss)) == gnss
-    back = parse_line(format_imu(imu))
+    assert parse_line(format_record(fusion)) == fusion
+    assert parse_line(format_record(gnss)) == gnss
+    back = parse_line(format_record(imu))
     assert isinstance(back, ImuRecord)
     assert back.orientation.w == pytest.approx(0.70711)
     assert back.accel_ms2.z == pytest.approx(9.81)
