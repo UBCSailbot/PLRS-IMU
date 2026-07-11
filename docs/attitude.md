@@ -1,14 +1,43 @@
 # Attitude
 
-Heading, roll, and pitch are reported on `FusionOutput` as ZYX intrinsic Euler
-angles in the ENU frame. This page covers the frame conventions and the mount
-calibration; how the filter estimates them is in `ekf.md`.
+Heading, roll, and pitch are reported on `FusionOutput`. Roll and pitch are the
+ZYX intrinsic Euler angles in the ENU frame; heading is a compass heading, the
+negated ENU yaw (see [Compass heading vs ENU yaw](#compass-heading-vs-enu-yaw)).
+This page covers the frame conventions and the mount calibration; how the filter
+estimates them is in `ekf.md`.
 
 ## What the angles mean
 
 - **Roll (heel)**: rotation about body X, positive = starboard down.
 - **Pitch (trim)**: rotation about body Y, positive = bow up.
-- **Heading (yaw)**: rotation about world Z.
+- **Heading**: rotation about world Z, compass convention (see below).
+
+## Compass heading vs ENU yaw
+
+Two sign conventions for rotation about vertical meet here, and keeping them
+straight is the difference between a filter that tracks and one that mirrors:
+
+- **ENU yaw** is the Z angle of the boat's ZYX Euler decomposition:
+  CCW-positive, the way the quaternion and the world-Z gyro rate report it.
+  Anything named `yaw` (`yaw_deg`, `yaw_dot`, `yaw_rate_dps`) is ENU.
+- **Compass heading** is CW-positive from north, the way a helm reads it and
+  GNSS reports course. Anything named `heading` is compass, including
+  `FusionOutput.heading_deg` and the EKF heading state.
+
+The two differ by a sign: `heading = -yaw` (wrapped to (-180, 180]). Roll and
+pitch carry no such split; only the vertical axis flips.
+
+That flip is crossed at exactly these boundaries, each of which negates as it
+converts:
+
+- `sim/plrs_sim/source.py` synthesizes the MTi's ENU orientation from the truth
+  compass heading and projects the negated heading rate onto the gyro.
+- `sim/plrs_sim/deadreckon.py` integrates the ENU gyro rate into a compass
+  heading.
+- `lib/fusion/ekf_filter.h` negates the ENU yaw rate in `predict` and the MTi
+  ENU yaw in the mag update, keeping the heading state in compass convention.
+
+Everywhere else, stay in one frame and let the name say which.
 
 ## Frames
 

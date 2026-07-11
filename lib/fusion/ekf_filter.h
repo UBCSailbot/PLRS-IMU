@@ -160,7 +160,8 @@ public:
         euler_rates_jacobian(roll_rad, pitch_rad, imu.angular_velocity_rad_s);
 
     // ENU yaw is CCW-positive; compass heading is CW-positive. Negate the ENU
-    // yaw rate so the heading state stays in compass convention.
+    // yaw rate so the heading state stays in compass convention. See
+    // docs/attitude.md.
     const float fx[N_STATE] = {
         _ekf.x[IDX_HEADING] +
             (-rates.yaw_dot * RAD_TO_DEG - _ekf.x[IDX_GYRO_BIAS]) * dt_s,
@@ -199,9 +200,9 @@ public:
                   _cfg.mti_pitch_variance_deg2);
 
     if (_cfg.mti_yaw) {
-      // ENU yaw negated into compass sign; the offset state absorbs the
-      // remaining frame constant along with declination and iron, so only
-      // the sign has to be right here.
+      // ENU yaw negated into compass sign (see docs/attitude.md); the offset
+      // state absorbs the remaining frame constant along with declination and
+      // iron, so only the sign has to be right here.
       const float hx = _ekf.x[IDX_HEADING] + _ekf.x[IDX_MAG_OFFSET];
       const float z = hx + wrap180(-attitude.yaw_deg - hx);
       scalar_update(H_MAG_YAW, hx, z, _cfg.mti_yaw->variance_deg2);

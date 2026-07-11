@@ -200,7 +200,7 @@ class WaveMotion:
     pitch_period_s: float
 
 
-YawProfile = ConstantTurn | Sinusoidal | StepTurns | Static
+HeadingProfile = ConstantTurn | Sinusoidal | StepTurns | Static
 AttitudeProfile = LevelAttitude | ConstantHeel | WaveMotion
 
 
@@ -208,12 +208,12 @@ AttitudeProfile = LevelAttitude | ConstantHeel | WaveMotion
 class Scenario:
     """A composition of independent truth profiles, one per quantity.
 
-    Each axis (yaw, attitude, eventually position/velocity) is sampled
+    Each axis (heading, attitude, eventually position/velocity) is sampled
     by its own pure function in truth.py. SimulatedSource composes the
     samplers into one ImuSample per tick.
     """
 
-    yaw: YawProfile
+    heading: HeadingProfile
     attitude: AttitudeProfile = LevelAttitude()
 
 

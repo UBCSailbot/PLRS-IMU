@@ -25,7 +25,7 @@ from plrs_sim.source import SimulatedSource
 
 def _source(duration_s: float = 3.0) -> SimulatedSource:
     return SimulatedSource(
-        scenario=Scenario(yaw=Sinusoidal(amplitude_deg=20.0, period_s=5.0)),
+        scenario=Scenario(heading=Sinusoidal(amplitude_deg=20.0, period_s=5.0)),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),
         duration_s=duration_s,

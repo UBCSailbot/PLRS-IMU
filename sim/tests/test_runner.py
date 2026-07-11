@@ -32,7 +32,7 @@ CFG = EkfConfig(
 
 
 def _src(
-    yaw,
+    heading,
     *,
     imu_noise: ImuNoiseModel | None = None,
     gnss_noise: GnssNoiseModel | None = None,
@@ -40,7 +40,7 @@ def _src(
     seed: int = 0,
 ) -> SimulatedSource:
     return SimulatedSource(
-        scenario=Scenario(yaw=yaw),
+        scenario=Scenario(heading=heading),
         imu_noise=imu_noise or ImuNoiseModel(),
         gnss_noise=gnss_noise or GnssNoiseModel(),
         duration_s=duration_s,
@@ -111,7 +111,7 @@ def test_filter_recovers_attitude_through_a_tilted_mount() -> None:
     )
     src = SimulatedSource(
         scenario=Scenario(
-            yaw=Static(heading_deg=0.0), attitude=ConstantHeel(angle_deg=20.0)
+            heading=Static(heading_deg=0.0), attitude=ConstantHeel(angle_deg=20.0)
         ),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),

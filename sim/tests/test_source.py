@@ -20,9 +20,9 @@ from plrs_sim.attitude import euler_to_quaternion, multiply, quaternion_to_euler
 from plrs_sim.source import SimulatedSource
 
 
-def _bare(yaw, duration_s: float = 1.0, seed: int = 0) -> SimulatedSource:
+def _bare(heading, duration_s: float = 1.0, seed: int = 0) -> SimulatedSource:
     return SimulatedSource(
-        scenario=Scenario(yaw=yaw),
+        scenario=Scenario(heading=heading),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),
         duration_s=duration_s,
@@ -73,7 +73,7 @@ def test_mti_orientation_carries_enu_yaw() -> None:
 
 def test_iteration_is_replayable() -> None:
     src = SimulatedSource(
-        scenario=Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
+        scenario=Scenario(heading=ConstantTurn(rate_deg_s=5.0)),
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=0.01,
             gyro_constant_bias_rad_s=0.005,
@@ -90,7 +90,7 @@ def test_iteration_is_replayable() -> None:
 
 def test_different_seeds_diverge() -> None:
     cfg = dict(
-        scenario=Scenario(yaw=Static(heading_deg=0.0)),
+        scenario=Scenario(heading=Static(heading_deg=0.0)),
         imu_noise=ImuNoiseModel(gyro_white_std_rad_s=0.01),
         gnss_noise=GnssNoiseModel(),
         duration_s=0.5,
@@ -102,7 +102,7 @@ def test_different_seeds_diverge() -> None:
 
 def test_custom_rates_respected() -> None:
     src = SimulatedSource(
-        scenario=Scenario(yaw=Static(heading_deg=0.0)),
+        scenario=Scenario(heading=Static(heading_deg=0.0)),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),
         duration_s=1.0,
@@ -120,7 +120,7 @@ def test_baseline_offset_round_trips_to_boat_heading() -> None:
     # A nonzero mount offset is added in the baseline frame and removed by the
     # bridge, so the GNSS heading the filter sees is boat-forward truth again.
     src = SimulatedSource(
-        scenario=Scenario(yaw=ConstantTurn(rate_deg_s=10.0)),
+        scenario=Scenario(heading=ConstantTurn(rate_deg_s=10.0)),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),
         duration_s=0.5,
@@ -134,7 +134,7 @@ def test_baseline_offset_round_trips_to_boat_heading() -> None:
 
 def test_dropout_emits_an_invalid_sample() -> None:
     src = SimulatedSource(
-        scenario=Scenario(yaw=Static(heading_deg=0.0)),
+        scenario=Scenario(heading=Static(heading_deg=0.0)),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(dropout_prob=1.0),
         duration_s=0.5,
@@ -151,7 +151,7 @@ def test_imu_mount_tilts_the_reported_orientation() -> None:
     mount = euler_to_quaternion(8.0, 0.0, 0.0)
     src = SimulatedSource(
         scenario=Scenario(
-            yaw=Static(heading_deg=0.0), attitude=ConstantHeel(angle_deg=20.0)
+            heading=Static(heading_deg=0.0), attitude=ConstantHeel(angle_deg=20.0)
         ),
         imu_noise=ImuNoiseModel(),
         gnss_noise=GnssNoiseModel(),

@@ -2,8 +2,9 @@
 
 Both integrate gyro-z into a compass heading the same way; only the anchor
 policy (when to anchor, and to what reference) differs, so that stays in the
-callers. The compass heading integrates the *negated* ENU yaw rate, and the
-result is wrapped to (-180, 180] to match fusion::wrap180 on the firmware.
+callers. The compass heading integrates the *negated* ENU yaw rate (see
+docs/attitude.md), and the result is wrapped to (-180, 180] to match
+fusion::wrap180 on the firmware.
 """
 
 from __future__ import annotations

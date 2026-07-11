@@ -4,12 +4,12 @@ Each profile variant has a closed-form sampler — no internal state to
 defend. Dispatch is a `match` statement; adding a variant is a type
 error in its sampler until handled.
 
-sample_yaw(profile, t) -> (heading_deg, heading_dot_rad_s) returns the
+sample_heading(profile, t) -> (heading_deg, heading_dot_rad_s) returns the
 truth compass heading and its derivative.
 
 sample_attitude(profile, t) -> (orientation, body_omega_rad_s) returns
 the world<-body quaternion and the body-frame angular velocity
-contributed by attitude motion alone (not yaw).
+contributed by attitude motion alone (not heading).
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from .types import (
     AttitudeProfile,
     ConstantHeel,
     ConstantTurn,
+    HeadingProfile,
     LevelAttitude,
     Quaternion,
     Sinusoidal,
@@ -28,14 +29,13 @@ from .types import (
     StepTurns,
     Vec3,
     WaveMotion,
-    YawProfile,
 )
 
 DEG_TO_RAD = math.pi / 180.0
 _BODY_X = Vec3(x=1.0, y=0.0, z=0.0)
 
 
-def sample_yaw(profile: YawProfile, t_ms: int) -> tuple[float, float]:
+def sample_heading(profile: HeadingProfile, t_ms: int) -> tuple[float, float]:
     """Return (heading_deg, heading_dot_rad_s) at t."""
     t_s = t_ms / 1000.0
     match profile:

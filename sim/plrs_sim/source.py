@@ -27,7 +27,7 @@ from .attitude import (
 )
 from .ekf import gnss_sample_from_attitude
 from .noise import GnssNoise, ImuNoise
-from .truth import sample_attitude, sample_yaw
+from .truth import sample_attitude, sample_heading
 from .types import (
     GRAVITY_MS2,
     GnssAttitudeMount,
@@ -71,16 +71,16 @@ class SimulatedSource:
 
         next_gnss_ms = 0
         for t_ms in range(0, end_ms + 1, imu_dt_ms):
-            truth_h, heading_dot = sample_yaw(self.scenario.yaw, t_ms)
+            truth_heading, heading_dot = sample_heading(self.scenario.heading, t_ms)
             attitude_q, attitude_body_omega = sample_attitude(
                 self.scenario.attitude, t_ms
             )
 
             # The MTi reports in ENU, where yaw is CCW-positive: the
             # orientation carries yaw = -heading and the world-Z yaw rate
-            # is the negated heading rate.
+            # is the negated heading rate. See docs/attitude.md.
             orientation = multiply(
-                from_axis_angle(_WORLD_Z, math.radians(-truth_h)), attitude_q
+                from_axis_angle(_WORLD_Z, math.radians(-truth_heading)), attitude_q
             )
 
             # Yaw is a world-frame angular velocity about world Z. The
@@ -110,7 +110,7 @@ class SimulatedSource:
                 # Measure in the antenna-baseline frame, corrupt there, then
                 # run through the real bridge so it undoes the offset and the
                 # filter sees the same path as on hardware.
-                baseline_heading = truth_h + self.mount.baseline_offset_deg
+                baseline_heading = truth_heading + self.mount.baseline_offset_deg
                 clean_gnss = GnssSample(
                     heading_deg=baseline_heading,
                     heading_variance_deg2=0.0,
@@ -134,7 +134,7 @@ class SimulatedSource:
             truth_roll, truth_pitch, _ = quaternion_to_euler_zyx(orientation)
             yield Tick(
                 timestamp_ms=t_ms,
-                truth_heading_deg=truth_h,
+                truth_heading_deg=truth_heading,
                 truth_roll_deg=truth_roll,
                 truth_pitch_deg=truth_pitch,
                 imu=corrupted_imu,

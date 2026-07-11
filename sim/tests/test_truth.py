@@ -21,15 +21,15 @@ from plrs_sim import (
     WaveMotion,
 )
 from plrs_sim.attitude import conjugate, multiply
-from plrs_sim.truth import DEG_TO_RAD, sample_attitude, sample_yaw
+from plrs_sim.truth import DEG_TO_RAD, sample_attitude, sample_heading
 
 
 def _heading(profile, t_ms: int) -> float:
-    return sample_yaw(profile, t_ms)[0]
+    return sample_heading(profile, t_ms)[0]
 
 
 def _gyro_z(profile, t_ms: int) -> float:
-    return sample_yaw(profile, t_ms)[1]
+    return sample_heading(profile, t_ms)[1]
 
 
 def test_constant_turn_heading_is_linear() -> None:

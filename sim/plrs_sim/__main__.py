@@ -45,10 +45,10 @@ _VIEW_LABELS = {
 }
 
 SCENARIOS: dict[str, Scenario] = {
-    "constant_turn": Scenario(yaw=ConstantTurn(rate_deg_s=5.0)),
-    "sinusoidal": Scenario(yaw=Sinusoidal(amplitude_deg=30.0, period_s=20.0)),
+    "constant_turn": Scenario(heading=ConstantTurn(rate_deg_s=5.0)),
+    "sinusoidal": Scenario(heading=Sinusoidal(amplitude_deg=30.0, period_s=20.0)),
     "step_turns": Scenario(
-        yaw=StepTurns(
+        heading=StepTurns(
             legs=(
                 (10.0, 0.0),
                 (2.0, 45.0),
@@ -58,9 +58,9 @@ SCENARIOS: dict[str, Scenario] = {
             ),
         ),
     ),
-    "static": Scenario(yaw=Static(heading_deg=0.0)),
+    "static": Scenario(heading=Static(heading_deg=0.0)),
     "heeling_tack": Scenario(
-        yaw=StepTurns(
+        heading=StepTurns(
             legs=(
                 (5.0, 0.0),
                 (3.0, 30.0),
@@ -70,7 +70,7 @@ SCENARIOS: dict[str, Scenario] = {
         attitude=ConstantHeel(angle_deg=20.0),
     ),
     "wave_tack": Scenario(
-        yaw=StepTurns(
+        heading=StepTurns(
             legs=(
                 (5.0, 0.0),
                 (3.0, 30.0),
