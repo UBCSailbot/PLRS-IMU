@@ -81,8 +81,8 @@ class FusionOutput:
 class EkfDebug:
     """EKF-internal states behind FusionOutput; mirrors TinyEkfFilter::Debug.
 
-    A gyro bias far outside its prior with GNSS absent is the heading drift
-    signature (docs/internal/heading_drift.md).
+    A gyro bias far outside its prior with GNSS absent means the filter, not
+    the boat, is turning: the heading-drift signature.
     """
 
     gyro_bias_dps: float
@@ -235,7 +235,7 @@ class Scenario:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MagNoiseModel:
-    """Disturbance of the MTi's mag-referenced yaw, per heading_drift.md.
+    """Disturbance of the MTi's mag-referenced yaw, as seen indoors.
 
     Only the reported orientation's yaw is corrupted; the gyro keeps the
     truth, reproducing the mag-vs-gyro inconsistency that indoor iron and

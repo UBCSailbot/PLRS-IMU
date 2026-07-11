@@ -76,9 +76,9 @@ public:
   /**
    * Same chi-square gate for the MTi yaw measurement. The mag is a
    * stabilizer, never the heading authority: a snap or re-convergence in the
-   * MTi's mag-referenced yaw (docs/internal/heading_drift.md) must not steer
-   * heading, so its forced-accept horizon is long (30 s at 100 Hz) where the
-   * GNSS one is short.
+   * MTi's mag-referenced yaw (see docs/tuning.md) must not steer heading, so
+   * its forced-accept horizon is long (30 s at 100 Hz) where the GNSS one is
+   * short.
    */
   static constexpr float MTI_YAW_GATE_SIGMA = 3.0f;
   static constexpr uint32_t MTI_YAW_GATE_LIMIT = 3000;
@@ -88,8 +88,8 @@ public:
    * heading + offset, so through an indefinite GNSS outage the individual
    * variances grow without bound, strongly anticorrelated; past ~1e5 deg2
    * the float32 gains degenerate into differences of near-equal entries and
-   * rounding noise steers heading (docs/internal/heading_drift.md). The
-   * ceilings are physical: 180 deg of heading sigma already means "anywhere
+   * rounding noise steers heading. The ceilings are physical: 180 deg of
+   * heading sigma already means "anywhere
    * on the circle", and a mag offset error cannot exceed the disturbance
    * lobe. Growth past them carries no information, so it is clamped.
    */
@@ -337,8 +337,8 @@ public:
   /**
    * Internal state usually hidden behind FusionOutput, for telemetry. A
    * healthy filter keeps the bias within its prior (see tuning.toml); a bias
-   * far outside it with GNSS absent is the drift signature described in
-   * docs/internal/heading_drift.md.
+   * far outside it with GNSS absent means the filter, not the boat, is
+   * turning: the heading-drift signature.
    */
   struct Debug {
     float gyro_bias_dps;

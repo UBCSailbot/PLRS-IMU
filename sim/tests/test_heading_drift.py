@@ -1,4 +1,4 @@
-"""Regression for the post-movement heading drift (docs/internal/heading_drift.md).
+"""Regression for post-movement heading drift (see docs/tuning.md, mti_yaw).
 
 The failure mode: with GNSS out, the MTi's mag-referenced yaw is the only
 heading authority, so when it snaps and re-converges after a disturbance the

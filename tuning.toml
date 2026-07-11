@@ -40,8 +40,8 @@ pitch_deg2 = 1.0
 # q_offset_deg2 is deliberately loose: the mag's yaw error is not a constant
 # indoors or near iron (it wanders with orientation, and the MTi re-converges
 # after disturbances), and a stiff offset forces all that wander into the
-# heading state instead -- the deg/s drift of docs/internal/heading_drift.md.
-# At 1.0 the offset absorbs mag wander within seconds while the 100 Hz
+# heading state instead, showing up as deg/s heading ramps whenever GNSS is
+# out. At 1.0 the offset absorbs mag wander within seconds while the 100 Hz
 # measurement keeps it bounded, so the mag still pins heading against gyro
 # bias (sweep: outage drift range 69 -> 3.5 deg, 30 s bias hold 1.9 -> 1.5).
 [mti_yaw]

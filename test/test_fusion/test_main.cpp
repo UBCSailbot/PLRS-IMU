@@ -440,7 +440,7 @@ void test_mag_gnss_seed_keeps_offset_consistent() {
 }
 
 /** @brief A mag snap during a GNSS outage is gated: heading holds instead of
- * walking toward the snapped yaw (docs/internal/heading_drift.md). */
+ * walking toward the snapped yaw. */
 void test_mag_gate_rejects_snap_during_outage() {
   TinyEkfFilter f(make_mag_config());
   run_converged(f, [](TinyEkfFilter &g, Ms t) {

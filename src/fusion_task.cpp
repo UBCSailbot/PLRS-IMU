@@ -49,7 +49,7 @@ static void print_line(char tag, Fields... fields) {
  * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,bias,
  * bias_sigma,mag_offset,offset_sigma,gate_rejects,mag_gate_rejects`
  * (deg, deg/s). The trailing debug fields expose the internal states behind
- * the heading drift signature (docs/internal/heading_drift.md); the parser
+ * heading drift (bias wind-up, mag-offset wander, gate activity); the parser
  * treats them as one optional format-version tail.
  *
  * @param out  Fused estimate to print.

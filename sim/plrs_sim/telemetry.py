@@ -51,9 +51,9 @@ class FusionRecord:
     heading_sigma_deg: _Deg
     roll_sigma_deg: _Deg
     pitch_sigma_deg: _Deg
-    # EKF-internal states, for diagnosing heading drift (see
-    # docs/internal/heading_drift.md). Defaults keep pre-debug captures
-    # parsing; NaN marks "not in this capture" without inventing a value.
+    # EKF-internal states, for diagnosing heading drift. Defaults keep
+    # pre-debug captures parsing; NaN marks "not in this capture" without
+    # inventing a value.
     gyro_bias_dps: _Dps = math.nan
     gyro_bias_sigma_dps: _Dps = math.nan
     mag_offset_deg: _Deg = math.nan
