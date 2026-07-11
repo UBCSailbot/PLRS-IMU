@@ -24,7 +24,6 @@ from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 from plrs_sim.tuning import load_tuning
 
-
 # Aggressive but realistic indoor mag: a snap roughly every 30 s, up to
 # 40 deg, re-converging over 20 s, on top of a 20 deg iron lobe.
 _MAG = MagNoiseModel(
