@@ -25,7 +25,7 @@ def test_default_tuning_enables_mti_yaw() -> None:
     cfg = load_tuning()
     assert cfg.mti_yaw == MtiYawConfig(
         variance_deg2=4.0,
-        q_offset_deg2=0.0001,
+        q_offset_deg2=1.0,
         p0_offset_deg2=100.0,
     )
 

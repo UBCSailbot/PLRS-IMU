@@ -13,7 +13,7 @@ field of `TinyEkfFilter::Config`:
 | `p0_*` | Initial uncertainty for each state; only affects startup convergence |
 | `mti_roll_variance_deg2` / `mti_pitch_variance_deg2` | Trust in the MTi's roll / pitch each sample (deg^2) |
 | `mti_yaw.variance_deg2` | Trust in the MTi's mag yaw each sample (deg^2) |
-| `mti_yaw.q_offset_deg2` | Mag-offset random walk per step (deg^2); how fast boat iron may change |
+| `mti_yaw.q_offset_deg2` | Mag-offset random walk per step (deg^2); how fast the mag's yaw error may move |
 | `mti_yaw.p0_offset_deg2` | Initial mag-offset uncertainty; trust in mag yaw as absolute heading before the first GNSS fix |
 
 Q controls how much the filter trusts the gyro integration relative to the
@@ -40,6 +40,17 @@ persistent mag disturbance drains into the offset (at a rate set by
 `q_offset_deg2`) instead of bending heading. `p0_offset_deg2` matters only
 before the first fix: it sets how far the filter will follow the mag as an
 absolute reference from a cold start.
+
+`q_offset_deg2` is the knob that decides whether mag misbehavior lands in the
+offset or in heading. The mag's yaw error is not a constant near iron or
+indoors: it wanders with orientation, and the MTi snaps and re-converges its
+own yaw after a disturbance. A stiff offset (1e-4) forces all of that into
+heading, which shows up as deg/s heading ramps whenever GNSS is out. Keep it
+loose (1.0): the offset then absorbs mag wander within seconds while the
+100 Hz measurement keeps it bounded, and the mag still pins heading against
+gyro bias through an outage. An MTi yaw snap larger than the innovation gate
+is rejected outright rather than absorbed (see `MTI_YAW_GATE_SIGMA` in
+`ekf_filter.h`).
 
 ## Deriving Q from the MTi-3 datasheet
 

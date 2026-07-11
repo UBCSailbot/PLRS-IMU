@@ -3,7 +3,9 @@
 The firmware emits one tagged, comma-separated line per record over USB CDC
 (see fusion_task.cpp). This module mirrors that wire format:
 
-    F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma   fused estimate
+    F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,
+      bias,bias_sigma,mag_offset,offset_sigma,gate_rejects,
+      mag_gate_rejects                                            fused estimate
     I,ts_ms,qw,qx,qy,qz,gx,gy,gz,ax,ay,az                         raw IMU
     M,ts_ms,ax,ay,az,gx,gy,gz,mx,my,mz                            raw MEMS triad
     G,ts_ms,heading,hdg_sigma,valid,mode,error                    raw GNSS attitude

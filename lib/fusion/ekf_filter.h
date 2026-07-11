@@ -85,8 +85,8 @@ public:
   /**
    * MTi yaw (magnetometer-referenced) heading aiding. variance_deg2 is the
    * per-sample measurement noise; q_offset_deg2 and p0_offset_deg2 shape the
-   * mag-offset state (slow iron/declination wander, and how much the mag yaw
-   * is trusted as absolute heading before the first GNSS fix).
+   * mag-offset state (how fast the mag's yaw error may move, and how much the
+   * mag yaw is trusted as absolute heading before the first GNSS fix).
    */
   struct MtiYawConfig {
     float variance_deg2;
