@@ -89,7 +89,7 @@ def test_filter_tracks_heading_across_the_180_seam() -> None:
     # Skip the cold-start transient; after convergence the error is small and,
     # crucially, has no spike where truth crosses 180 deg (~36 s in).
     steady = residual[len(residual) // 4 :]
-    assert np.max(np.abs(steady)) < 5.0
+    assert np.max(np.abs(steady)) < 2.0
 
 
 def test_filter_recovers_attitude_through_a_tilted_mount() -> None:
@@ -132,7 +132,7 @@ def test_estimate_converges_to_truth_without_noise() -> None:
     final_error = abs(
         trace.channels["heading"].estimate[-1] - trace.channels["heading"].truth[-1]
     )
-    assert final_error < 0.5
+    assert final_error < 0.1
 
 
 def test_tracks_through_realistic_noise_with_mag_aiding() -> None:
@@ -162,6 +162,13 @@ def test_tracks_through_realistic_noise_with_mag_aiding() -> None:
     ch = run(src, cfg).channels["heading"]
     residual = (ch.estimate - ch.truth + 180.0) % 360.0 - 180.0
     assert math.sqrt(np.mean(residual**2)) < 2.0
+
+
+def test_openloop_tracks_truth_without_noise() -> None:
+    # With a clean gyro the dead-reckon must equal truth, not its mirror.
+    trace = run(_src(ConstantTurn(rate_deg_s=10.0), duration_s=5.0), CFG)
+    ch = trace.channels["heading"]
+    assert ch.openloop[-1] == pytest.approx(ch.truth[-1], abs=0.1)
 
 
 def test_openloop_drifts_with_gyro_bias() -> None:
