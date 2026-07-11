@@ -17,6 +17,7 @@ from plrs_sim import (
     GnssSample,
     ImuNoiseModel,
     ImuSample,
+    MagNoiseModel,
     Vec3,
 )
 from plrs_sim.attitude import quaternion_to_euler_zyx
@@ -159,3 +160,72 @@ def test_gnss_same_seed_same_output() -> None:
     b = GnssNoise(cfg, np.random.default_rng(321))
     for _ in range(50):
         assert a.corrupt(_gnss(30.0)) == b.corrupt(_gnss(30.0))
+
+
+def _imu_at_yaw(yaw_deg: float) -> ImuSample:
+    from plrs_sim.attitude import euler_to_quaternion
+
+    return ImuSample(
+        angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=0.0),
+        accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
+        orientation=euler_to_quaternion(0.0, 0.0, yaw_deg),
+        timestamp_ms=0,
+    )
+
+
+def test_mag_none_leaves_orientation_untouched() -> None:
+    n = ImuNoise(ImuNoiseModel(), np.random.default_rng(0))
+    clean = _imu_at_yaw(30.0)
+    assert n.corrupt(clean, dt_s=0.01).orientation == clean.orientation
+
+
+def test_mag_iron_error_depends_on_orientation() -> None:
+    n = ImuNoise(
+        ImuNoiseModel(mag=MagNoiseModel(iron_deg=30.0)),
+        np.random.default_rng(0),
+    )
+    errs = []
+    for yaw in (0.0, 90.0, 180.0, -90.0):
+        out = n.corrupt(_imu_at_yaw(yaw), dt_s=0.01)
+        roll, pitch, out_yaw = quaternion_to_euler_zyx(out.orientation)
+        assert roll == pytest.approx(0.0, abs=1e-6)
+        assert pitch == pytest.approx(0.0, abs=1e-6)
+        err = (out_yaw - yaw + 180.0) % 360.0 - 180.0
+        assert abs(err) <= 30.0 + 1e-6
+        errs.append(err)
+    # A hard-iron lobe varies with heading; opposite headings flip its sign.
+    assert errs[0] == pytest.approx(-errs[2], abs=1e-6)
+    assert max(errs) - min(errs) > 1.0
+
+
+def test_mag_iron_leaves_gyro_truthful() -> None:
+    n = ImuNoise(
+        ImuNoiseModel(mag=MagNoiseModel(iron_deg=30.0)),
+        np.random.default_rng(0),
+    )
+    out = n.corrupt(_imu(0.5), dt_s=0.01)
+    assert out.angular_velocity_rad_s.z == pytest.approx(0.5)
+
+
+def test_mag_snap_steps_then_decays() -> None:
+    tau = 5.0
+    n = ImuNoise(
+        ImuNoiseModel(mag=MagNoiseModel(snap_deg=40.0, snap_tau_s=tau)),
+        np.random.default_rng(3),
+    )
+    n._mag_snap_err_deg = 40.0  # injected snap; interval left long so no more
+    for _ in range(500):  # 5 s at 100 Hz = one time constant
+        out = n.corrupt(_imu_at_yaw(0.0), dt_s=0.01)
+    _, _, yaw = quaternion_to_euler_zyx(out.orientation)
+    assert yaw == pytest.approx(40.0 * math.exp(-1.0), rel=0.05)
+
+
+def test_mag_snap_fires_at_configured_rate() -> None:
+    n = ImuNoise(
+        ImuNoiseModel(mag=MagNoiseModel(snap_deg=40.0, snap_interval_s=0.001)),
+        np.random.default_rng(4),
+    )
+    out = n.corrupt(_imu_at_yaw(0.0), dt_s=0.01)  # fires with certainty
+    _, _, yaw = quaternion_to_euler_zyx(out.orientation)
+    assert yaw != pytest.approx(0.0, abs=1e-3)
+    assert abs(yaw) <= 40.0

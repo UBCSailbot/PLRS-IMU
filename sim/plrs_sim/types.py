@@ -233,6 +233,24 @@ class Scenario:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class MagNoiseModel:
+    """Disturbance of the MTi's mag-referenced yaw, per heading_drift.md.
+
+    Only the reported orientation's yaw is corrupted; the gyro keeps the
+    truth, reproducing the mag-vs-gyro inconsistency that indoor iron and
+    the MTi's own re-convergence create. iron_deg is the amplitude of an
+    orientation-dependent error (a hard-iron lobe); snap events step the
+    yaw error by up to snap_deg at mean interval snap_interval_s and decay
+    with time constant snap_tau_s, like the MTi snapping and re-settling.
+    """
+
+    iron_deg: float = 0.0
+    snap_deg: float = 0.0
+    snap_interval_s: float = 120.0
+    snap_tau_s: float = 20.0
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ImuNoiseModel:
     """Additive gyro_z effects. None disables that effect.
 
@@ -246,6 +264,7 @@ class ImuNoiseModel:
     # Std of a small random rotation added to the MTi orientation each
     # sample, in degrees. None leaves the quaternion noise-free.
     mti_attitude_std_deg: float | None = None
+    mag: MagNoiseModel | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

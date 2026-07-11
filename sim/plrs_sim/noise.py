@@ -17,7 +17,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from .attitude import from_axis_angle, multiply
+from .attitude import from_axis_angle, multiply, quaternion_to_euler_zyx
 from .types import (
     GnssNoiseModel,
     GnssSample,
@@ -27,12 +27,16 @@ from .types import (
     Vec3,
 )
 
+_WORLD_Z = Vec3(x=0.0, y=0.0, z=1.0)
+
 
 class ImuNoise:
     def __init__(self, model: ImuNoiseModel, rng: np.random.Generator) -> None:
         self._model = model
         self._rng = rng
         self._bias = model.gyro_constant_bias_rad_s or 0.0
+        self._mag_snap_err_deg = 0.0
+        self._mag_iron_phase = rng.uniform(0.0, 2.0 * math.pi)
 
     def corrupt(self, clean: ImuSample, dt_s: float) -> ImuSample:
         walk_std = self._model.gyro_bias_walk_std_rad_s_sqrt_s
@@ -48,8 +52,28 @@ class ImuNoise:
             angular_velocity_rad_s=Vec3(
                 x=gyro.x, y=gyro.y, z=gyro.z + self._bias + noise
             ),
-            orientation=self._perturb(clean.orientation),
+            orientation=self._perturb(self._mag_disturb(clean.orientation, dt_s)),
         )
+
+    def _mag_disturb(self, orientation: Quaternion, dt_s: float) -> Quaternion:
+        mag = self._model.mag
+        if mag is None:
+            return orientation
+
+        if mag.snap_deg > 0.0 and dt_s > 0.0:
+            self._mag_snap_err_deg *= math.exp(-dt_s / mag.snap_tau_s)
+            if self._rng.random() < dt_s / mag.snap_interval_s:
+                self._mag_snap_err_deg += self._rng.uniform(
+                    -mag.snap_deg, mag.snap_deg
+                )
+
+        _, _, yaw_deg = quaternion_to_euler_zyx(orientation)
+        iron = mag.iron_deg * math.sin(math.radians(yaw_deg) + self._mag_iron_phase)
+        err_rad = math.radians(iron + self._mag_snap_err_deg)
+        if err_rad == 0.0:
+            return orientation
+        # A yaw-only error rotates about world Z, leaving roll/pitch intact.
+        return multiply(from_axis_angle(_WORLD_Z, err_rad), orientation)
 
     def _perturb(self, orientation: Quaternion) -> Quaternion:
         att_std = self._model.mti_attitude_std_deg
