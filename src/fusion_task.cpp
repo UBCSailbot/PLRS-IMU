@@ -19,6 +19,31 @@ static constexpr uint32_t IMU_QUEUE_TIMEOUT_MS = 20;
 static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;
 
 /**
+ * A float telemetry field with its wire precision (decimal digits). The
+ * precisions here mirror the Annotated types in sim/plrs_sim/live.py.
+ */
+struct Real {
+  float v;
+  uint8_t prec;
+};
+
+static void print_field(Real f) { Serial.print(f.v, f.prec); }
+template <typename T> static void print_field(T v) { Serial.print(v); }
+
+/**
+ * @brief Print one comma-separated telemetry line: tag, then each field.
+ */
+template <typename... Fields>
+static void print_line(char tag, Fields... fields) {
+  if (!Serial) {
+    return;
+  }
+  Serial.print(tag);
+  ((Serial.print(','), print_field(fields)), ...);
+  Serial.println();
+}
+
+/**
  * @brief Emit the fused estimate as an `F` telemetry line.
  *
  * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma` (deg).
@@ -26,23 +51,14 @@ static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;
  * @param out  Fused estimate to print.
  */
 static void print_fusion(const fusion::FusionOutput &out) {
-  if (!Serial) {
-    return;
-  }
-  Serial.print("F,");
-  Serial.print(out.timestamp.count());
-  Serial.print(',');
-  Serial.print(out.heading_deg, 3);
-  Serial.print(',');
-  Serial.print(out.roll_deg, 3);
-  Serial.print(',');
-  Serial.print(out.pitch_deg, 3);
-  Serial.print(',');
-  Serial.print(std::sqrt(out.heading_variance_deg2), 3);
-  Serial.print(',');
-  Serial.print(std::sqrt(out.roll_variance_deg2), 3);
-  Serial.print(',');
-  Serial.println(std::sqrt(out.pitch_variance_deg2), 3);
+  print_line('F',
+             out.timestamp.count(),
+             Real {out.heading_deg, 3},
+             Real {out.roll_deg, 3},
+             Real {out.pitch_deg, 3},
+             Real {std::sqrt(out.heading_variance_deg2), 3},
+             Real {std::sqrt(out.roll_variance_deg2), 3},
+             Real {std::sqrt(out.pitch_variance_deg2), 3});
 }
 
 /**
@@ -54,32 +70,21 @@ static void print_fusion(const fusion::FusionOutput &out) {
  * @param imu  Raw IMU sample as received from the IMU task.
  */
 static void print_imu(const fusion::ImuSample &imu) {
-  if (!Serial) {
-    return;
-  }
   const plrs::Quaternion q = imu.orientation.components();
-  Serial.print("I,");
-  Serial.print(imu.timestamp.count());
-  Serial.print(',');
-  Serial.print(q.w, 5);
-  Serial.print(',');
-  Serial.print(q.x, 5);
-  Serial.print(',');
-  Serial.print(q.y, 5);
-  Serial.print(',');
-  Serial.print(q.z, 5);
-  Serial.print(',');
-  Serial.print(imu.angular_velocity_rad_s.x, 5);
-  Serial.print(',');
-  Serial.print(imu.angular_velocity_rad_s.y, 5);
-  Serial.print(',');
-  Serial.print(imu.angular_velocity_rad_s.z, 5);
-  Serial.print(',');
-  Serial.print(imu.accel_ms2.x, 4);
-  Serial.print(',');
-  Serial.print(imu.accel_ms2.y, 4);
-  Serial.print(',');
-  Serial.println(imu.accel_ms2.z, 4);
+  const plrs::Vec3 &g = imu.angular_velocity_rad_s;
+  const plrs::Vec3 &a = imu.accel_ms2;
+  print_line('I',
+             imu.timestamp.count(),
+             Real {q.w, 5},
+             Real {q.x, 5},
+             Real {q.y, 5},
+             Real {q.z, 5},
+             Real {g.x, 5},
+             Real {g.y, 5},
+             Real {g.z, 5},
+             Real {a.x, 4},
+             Real {a.y, 4},
+             Real {a.z, 4});
 }
 
 /**
@@ -92,54 +97,38 @@ static void print_imu(const fusion::ImuSample &imu) {
  * @param imu  Raw IMU sample as received from the IMU task.
  */
 static void print_mems(const fusion::ImuSample &imu) {
-  if (!Serial) {
-    return;
-  }
-  Serial.print("M,");
-  Serial.print(imu.timestamp.count());
-  Serial.print(',');
-  Serial.print(imu.accel_ms2.x, 4);
-  Serial.print(',');
-  Serial.print(imu.accel_ms2.y, 4);
-  Serial.print(',');
-  Serial.print(imu.accel_ms2.z, 4);
-  Serial.print(',');
-  Serial.print(imu.angular_velocity_rad_s.x, 5);
-  Serial.print(',');
-  Serial.print(imu.angular_velocity_rad_s.y, 5);
-  Serial.print(',');
-  Serial.print(imu.angular_velocity_rad_s.z, 5);
-  Serial.print(',');
-  Serial.print(imu.magnetic_field_au.x, 5);
-  Serial.print(',');
-  Serial.print(imu.magnetic_field_au.y, 5);
-  Serial.print(',');
-  Serial.println(imu.magnetic_field_au.z, 5);
+  const plrs::Vec3 &a = imu.accel_ms2;
+  const plrs::Vec3 &g = imu.angular_velocity_rad_s;
+  const plrs::Vec3 &m = imu.magnetic_field_au;
+  print_line('M',
+             imu.timestamp.count(),
+             Real {a.x, 4},
+             Real {a.y, 4},
+             Real {a.z, 4},
+             Real {g.x, 5},
+             Real {g.y, 5},
+             Real {g.z, 5},
+             Real {m.x, 5},
+             Real {m.y, 5},
+             Real {m.z, 5});
 }
 
 /**
  * @brief Emit a raw GNSS attitude sample as a `G` telemetry line.
  *
- * `G,ts_ms,heading,hdg_sigma,valid` (deg).
+ * `G,ts_ms,heading,hdg_sigma,valid,mode,error` (deg; mode/error are the raw
+ * AttEuler codes).
  *
  * @param gnss  Raw GNSS sample as received from the GNSS task.
  */
 static void print_gnss(const fusion::GnssSample &gnss) {
-  if (!Serial) {
-    return;
-  }
-  Serial.print("G,");
-  Serial.print(gnss.timestamp.count());
-  Serial.print(',');
-  Serial.print(gnss.heading_deg, 3);
-  Serial.print(',');
-  Serial.print(std::sqrt(gnss.heading_variance_deg2), 3);
-  Serial.print(',');
-  Serial.print(gnss.valid ? 1 : 0);
-  Serial.print(',');
-  Serial.print(gnss.mode);
-  Serial.print(',');
-  Serial.println(gnss.error);
+  print_line('G',
+             gnss.timestamp.count(),
+             Real {gnss.heading_deg, 3},
+             Real {std::sqrt(gnss.heading_variance_deg2), 3},
+             gnss.valid ? 1 : 0,
+             gnss.mode,
+             gnss.error);
 }
 
 void task(void *params) {
