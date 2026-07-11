@@ -8,10 +8,9 @@ from collections.abc import Iterable
 import numpy as np
 
 from .attitude import quaternion_to_euler_zyx
+from .deadreckon import HeadingDeadReckoner
 from .ekf import TinyEkfFilter
 from .types import Channel, EkfConfig, Tick, Trace
-
-_RAD_TO_DEG = 180.0 / math.pi
 
 # Anything above this variance is uninitialized FLT_MAX; render as NaN
 # so matplotlib's fill_between skips it instead of blowing up the y-axis.
@@ -43,8 +42,8 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
     imu_roll_deg: list[float] = []
     imu_pitch_deg: list[float] = []
 
-    openloop: float | None = None
-    prev_t_ms: int | None = None
+    # Open-loop heading, anchored to the first valid GNSS fix; NaN before then.
+    dead_reckoner = HeadingDeadReckoner()
 
     for tick in source:
         ekf.predict(tick.imu)
@@ -54,13 +53,12 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
             if tick.gnss.valid:
                 gnss_t_ms.append(tick.gnss.timestamp_ms)
                 gnss_heading_deg.append(tick.gnss.heading_deg)
-                if openloop is None:
-                    openloop = tick.gnss.heading_deg
+                if not dead_reckoner.anchored:
+                    dead_reckoner.anchor(tick.gnss.heading_deg)
 
-        if openloop is not None and prev_t_ms is not None:
-            # Compass heading integrates the negated ENU yaw rate.
-            dt_s = (tick.timestamp_ms - prev_t_ms) / 1000.0
-            openloop -= tick.imu.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
+        openloop = dead_reckoner.step(
+            tick.timestamp_ms, tick.imu.angular_velocity_rad_s.z
+        )
 
         out = ekf.output()
         t_ms.append(tick.timestamp_ms)
@@ -77,8 +75,6 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
         imu_r, imu_p, _ = quaternion_to_euler_zyx(tick.imu.orientation)
         imu_roll_deg.append(imu_r)
         imu_pitch_deg.append(imu_p)
-
-        prev_t_ms = tick.timestamp_ms
 
     heading = Channel(
         name="heading (yaw)",

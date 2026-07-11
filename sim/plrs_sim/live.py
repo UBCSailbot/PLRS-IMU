@@ -28,6 +28,7 @@ from typing import Annotated, TextIO, get_args, get_origin, get_type_hints
 
 from .angles import wrap180
 from .attitude import quaternion_to_euler_zyx
+from .deadreckon import HeadingDeadReckoner
 from .types import Quaternion, Vec3
 
 # The record dataclasses ARE the wire schema: field order is token order,
@@ -224,8 +225,6 @@ def format_record(r: FusionRecord | ImuRecord | MemsRecord | GnssRecord) -> str:
 # Default rolling-buffer depth: 2000 samples at 10 Hz is ~200 s of history.
 _DEFAULT_HISTORY = 2000
 
-_RAD_TO_DEG = 180.0 / math.pi
-
 
 def heading_offset_deg(gnss_deg: float, imu_deg: float) -> float:
     """GNSS-minus-IMU heading residual, mapped into (-180, 180]."""
@@ -276,8 +275,9 @@ class MonitorState:
     # Guards the series against concurrent append (drain thread) and read (GUI
     # thread); without it a snapshot can catch a half-appended sample.
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
-    _dr_heading: float = 0.0
-    _dr_prev_ms: int | None = None
+    _dead_reckoner: HeadingDeadReckoner = field(
+        default_factory=HeadingDeadReckoner, repr=False
+    )
     _dr_anchored_to_gnss: bool = False
 
     def update(self, rec: Record) -> None:
@@ -293,32 +293,24 @@ class MonitorState:
         elif isinstance(rec, ImuRecord):
             roll, pitch, yaw = quaternion_to_euler_zyx(rec.orientation)
             # Seed the dead-reckon heading from the first fused heading so the
-            # two tracks start on the same absolute reference, then propagate it
-            # by integrating gyro-z. Fall back to the boot yaw if no fused sample
-            # has arrived yet; a GNSS fix, if any, re-anchors it later.
-            if self._dr_prev_ms is None:
-                if not self._dr_anchored_to_gnss:
-                    self._dr_heading = (
-                        self.fused.heading[-1] if self.fused.t_ms else yaw
-                    )
-            else:
-                dt_s = (rec.timestamp_ms - self._dr_prev_ms) / 1000.0
-                # Wrap to (-180, 180] like the firmware so the open-loop track
-                # crosses the seam together with the fused one, not past it.
-                self._dr_heading = float(
-                    wrap180(
-                        self._dr_heading
-                        - rec.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
-                    )
+            # two tracks start on the same absolute reference; fall back to the
+            # boot yaw if no fused sample has arrived yet. A GNSS fix, if any,
+            # re-anchors it later.
+            if not self._dead_reckoner.anchored and not self._dr_anchored_to_gnss:
+                self._dead_reckoner.anchor(
+                    self.fused.heading[-1] if self.fused.t_ms else yaw
                 )
-            self._dr_prev_ms = rec.timestamp_ms
-            self.openloop.append(rec.timestamp_ms, self._dr_heading, roll, pitch)
+            heading = self._dead_reckoner.step(
+                rec.timestamp_ms, rec.angular_velocity_rad_s.z
+            )
+            assert heading is not None  # anchored just above, or already by GNSS
+            self.openloop.append(rec.timestamp_ms, heading, roll, pitch)
             self.latest_t_ms = rec.timestamp_ms
         elif isinstance(rec, GnssRecord):
             self.last_gnss = rec
             # Re-anchor the relative dead-reckon to the absolute heading once.
             if rec.valid and not self._dr_anchored_to_gnss:
-                self._dr_heading = rec.heading_deg
+                self._dead_reckoner.anchor(rec.heading_deg)
                 self._dr_anchored_to_gnss = True
         elif isinstance(rec, DiagRecord):
             self.last_diag = rec.text
