@@ -47,10 +47,10 @@ static void print_line(char tag, Fields... fields) {
  * @brief Emit the fused estimate as an `F` telemetry line.
  *
  * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,bias,
- * bias_sigma,mag_offset,offset_sigma,gate_rejects` (deg, deg/s). The trailing
- * debug fields expose the internal states behind the heading drift signature
- * (docs/internal/heading_drift.md); the parser treats them as one optional
- * format-version tail.
+ * bias_sigma,mag_offset,offset_sigma,gate_rejects,mag_gate_rejects`
+ * (deg, deg/s). The trailing debug fields expose the internal states behind
+ * the heading drift signature (docs/internal/heading_drift.md); the parser
+ * treats them as one optional format-version tail.
  *
  * @param out  Fused estimate to print.
  * @param dbg  Internal state snapshot from the same filter tick.
@@ -69,7 +69,8 @@ static void print_fusion(const fusion::FusionOutput &out,
              Real {std::sqrt(dbg.gyro_bias_variance_deg2_s2), 4},
              Real {dbg.mag_offset_deg, 3},
              Real {std::sqrt(dbg.mag_offset_variance_deg2), 3},
-             dbg.gate_rejects);
+             dbg.gate_rejects,
+             dbg.mag_gate_rejects);
 }
 
 /**

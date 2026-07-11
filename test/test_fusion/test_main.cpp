@@ -439,6 +439,51 @@ void test_mag_gnss_seed_keeps_offset_consistent() {
   TEST_ASSERT_FLOAT_WITHIN(1.5f, TRUE_HEADING, f.output().heading_deg);
 }
 
+/** @brief A mag snap during a GNSS outage is gated: heading holds instead of
+ * walking toward the snapped yaw (docs/internal/heading_drift.md). */
+void test_mag_gate_rejects_snap_during_outage() {
+  TinyEkfFilter f(make_mag_config());
+  run_converged(f, [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  });
+
+  // GNSS gone; the mag snaps +40 deg and stays there for 10 s.
+  for (int i = 1; i <= 100; i++) {
+    ImuSample imu = make_mag_imu(0.0f, Ms {11100 + 100 * i});
+    imu.orientation =
+        axis_angle(0.0f, 0.0f, 1.0f, -(MAG_COMPASS + 40.0f) * DEG_TO_RAD);
+    f.predict(imu);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(2.0f, TRUE_HEADING, f.output().heading_deg);
+  TEST_ASSERT_TRUE(f.debug().mag_gate_rejects > 0);
+}
+
+/** @brief Persistent mag disagreement is force-accepted once per
+ * MTI_YAW_GATE_LIMIT rejects, so a filter converged wrong cannot ignore the
+ * mag forever, while a transient snap still cannot own heading. */
+void test_mag_gate_forced_accept_after_limit() {
+  TinyEkfFilter f(make_mag_config());
+  run_converged(f, [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  });
+
+  const float before = f.output().heading_deg;
+  const uint32_t steps = TinyEkfFilter::MTI_YAW_GATE_LIMIT + 100;
+  for (uint32_t i = 1; i <= steps; i++) {
+    ImuSample imu = make_mag_imu(0.0f, Ms {11100 + 100 * i});
+    imu.orientation =
+        axis_angle(0.0f, 0.0f, 1.0f, -(MAG_COMPASS + 40.0f) * DEG_TO_RAD);
+    f.predict(imu);
+  }
+  // By forced-accept time the unaided heading variance has grown enough
+  // that the accepted update hands the mag most of the authority: correct,
+  // since after 30 s with no other reference the mag is the best guess.
+  const float moved = std::abs(wrap180(f.output().heading_deg - before));
+  TEST_ASSERT_TRUE(moved > 5.0f);
+  TEST_ASSERT_TRUE(f.debug().mag_gate_rejects <
+                   TinyEkfFilter::MTI_YAW_GATE_LIMIT);
+}
+
 /** @brief Heading stays wrapped to (-180, 180] after integrating past 180. */
 void test_predict_wraps_heading_past_180() {
   TinyEkfFilter f(kTestConfig);
@@ -517,6 +562,8 @@ int main(int, char **) {
   RUN_TEST(test_mag_holds_heading_through_gnss_dropout);
   RUN_TEST(test_mag_cannot_pull_heading_against_gnss);
   RUN_TEST(test_mag_gnss_seed_keeps_offset_consistent);
+  RUN_TEST(test_mag_gate_rejects_snap_during_outage);
+  RUN_TEST(test_mag_gate_forced_accept_after_limit);
   RUN_TEST(test_predict_wraps_heading_past_180);
 
   RUN_TEST(test_unit_quaternion_identity_components);

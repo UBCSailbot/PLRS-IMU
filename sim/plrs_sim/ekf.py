@@ -159,4 +159,5 @@ class TinyEkfFilter:
             mag_offset_deg=d.mag_offset_deg,
             mag_offset_variance_deg2=d.mag_offset_variance_deg2,
             gate_rejects=d.gate_rejects,
+            mag_gate_rejects=d.mag_gate_rejects,
         )

@@ -48,7 +48,7 @@ def test_parse_fusion_line() -> None:
 def test_parse_fusion_line_with_debug_tail() -> None:
     rec = parse_line(
         "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,"
-        "2.2000,0.2236,-33.000,10.000,3"
+        "2.2000,0.2236,-33.000,10.000,3,7"
     )
     assert isinstance(rec, FusionRecord)
     assert rec.gyro_bias_dps == pytest.approx(2.2)
@@ -56,6 +56,7 @@ def test_parse_fusion_line_with_debug_tail() -> None:
     assert rec.mag_offset_deg == pytest.approx(-33.0)
     assert rec.mag_offset_sigma_deg == pytest.approx(10.0)
     assert rec.gate_rejects == 3
+    assert rec.mag_gate_rejects == 7
 
 
 def test_parse_imu_line() -> None:
@@ -238,10 +239,11 @@ def test_wire_format_is_pinned() -> None:
         mag_offset_deg=-33.0,
         mag_offset_sigma_deg=10.0,
         gate_rejects=3,
+        mag_gate_rejects=7,
     )
     assert format_record(fusion) == (
         "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,"
-        "2.2000,0.2236,-33.000,10.000,3"
+        "2.2000,0.2236,-33.000,10.000,3,7"
     )
     imu = ImuRecord(
         timestamp_ms=5000,

@@ -57,6 +57,7 @@ class FusionRecord:
     mag_offset_deg: _Deg = math.nan
     mag_offset_sigma_deg: _Deg = math.nan
     gate_rejects: int = 0
+    mag_gate_rejects: int = 0
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

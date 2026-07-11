@@ -73,6 +73,16 @@ public:
   static constexpr uint32_t HEADING_GATE_LIMIT = 10;
 
   /**
+   * Same chi-square gate for the MTi yaw measurement. The mag is a
+   * stabilizer, never the heading authority: a snap or re-convergence in the
+   * MTi's mag-referenced yaw (docs/internal/heading_drift.md) must not steer
+   * heading, so its forced-accept horizon is long (30 s at 100 Hz) where the
+   * GNSS one is short.
+   */
+  static constexpr float MTI_YAW_GATE_SIGMA = 3.0f;
+  static constexpr uint32_t MTI_YAW_GATE_LIMIT = 3000;
+
+  /**
    * MTi yaw (magnetometer-referenced) heading aiding. variance_deg2 is the
    * per-sample measurement noise; q_offset_deg2 and p0_offset_deg2 shape the
    * mag-offset state (slow iron/declination wander, and how much the mag yaw
@@ -217,8 +227,22 @@ public:
       // state absorbs the remaining frame constant along with declination and
       // iron, so only the sign has to be right here.
       const float hx = _ekf.x[IDX_HEADING] + _ekf.x[IDX_MAG_OFFSET];
-      const float z = hx + wrap180(-attitude.yaw_deg - hx);
-      scalar_update(H_MAG_YAW, hx, z, _cfg.mti_yaw->variance_deg2);
+      const float innovation = wrap180(-attitude.yaw_deg - hx);
+      const float s = _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING] +
+                      _ekf.P[IDX_HEADING * N_STATE + IDX_MAG_OFFSET] +
+                      _ekf.P[IDX_MAG_OFFSET * N_STATE + IDX_HEADING] +
+                      _ekf.P[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET] +
+                      _cfg.mti_yaw->variance_deg2;
+      if (innovation * innovation >
+          MTI_YAW_GATE_SIGMA * MTI_YAW_GATE_SIGMA * s) {
+        _mag_gate_rejects++;
+        if (_mag_gate_rejects < MTI_YAW_GATE_LIMIT) {
+          return;
+        }
+      }
+      _mag_gate_rejects = 0;
+      scalar_update(
+          H_MAG_YAW, hx, hx + innovation, _cfg.mti_yaw->variance_deg2);
       _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
     }
   }
@@ -305,6 +329,7 @@ public:
     float mag_offset_deg;
     float mag_offset_variance_deg2;
     uint32_t gate_rejects;
+    uint32_t mag_gate_rejects;
   };
 
   /**
@@ -321,6 +346,7 @@ public:
         .mag_offset_variance_deg2 =
             _ekf.P[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET],
         .gate_rejects = _gate_rejects,
+        .mag_gate_rejects = _mag_gate_rejects,
     };
   }
 
@@ -349,6 +375,25 @@ private:
     const float hxv[N_MEAS] = {hx};
     const float R[N_MEAS * N_MEAS] = {variance};
     ekf_update(&_ekf, zv, hxv, H, R);
+    symmetrize_covariance();
+  }
+
+  /**
+   * @brief Restore P = P^T after an update.
+   *
+   * TinyEKF's `(I-GH)P` update form lets float32 roundoff skew the cross
+   * terms over the ~300 updates/s this filter runs; averaging the halves
+   * keeps the gates and gains honest over long runs.
+   */
+  void symmetrize_covariance() {
+    for (std::size_t i = 0; i < N_STATE; i++) {
+      for (std::size_t j = i + 1; j < N_STATE; j++) {
+        const float mean =
+            0.5f * (_ekf.P[i * N_STATE + j] + _ekf.P[j * N_STATE + i]);
+        _ekf.P[i * N_STATE + j] = mean;
+        _ekf.P[j * N_STATE + i] = mean;
+      }
+    }
   }
 
   ekf_t _ekf;
@@ -359,6 +404,7 @@ private:
   float _raw_roll_deg = 0.0f;
   float _raw_yaw_rate_dps = 0.0f;
   uint32_t _gate_rejects = 0;
+  uint32_t _mag_gate_rejects = 0;
   bool _initialized = false;
   bool _has_predicted = false;
 };

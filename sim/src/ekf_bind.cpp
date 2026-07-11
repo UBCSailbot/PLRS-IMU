@@ -124,7 +124,8 @@ NB_MODULE(_native, m) {
       .def_ro("mag_offset_deg", &TinyEkfFilter::Debug::mag_offset_deg)
       .def_ro("mag_offset_variance_deg2",
               &TinyEkfFilter::Debug::mag_offset_variance_deg2)
-      .def_ro("gate_rejects", &TinyEkfFilter::Debug::gate_rejects);
+      .def_ro("gate_rejects", &TinyEkfFilter::Debug::gate_rejects)
+      .def_ro("mag_gate_rejects", &TinyEkfFilter::Debug::mag_gate_rejects);
 
   nb::class_<TinyEkfFilter>(m, "TinyEkfFilter")
       .def(nb::init<TinyEkfFilter::Config>(), nb::arg("cfg"))

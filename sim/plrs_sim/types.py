@@ -90,6 +90,7 @@ class EkfDebug:
     mag_offset_deg: float
     mag_offset_variance_deg2: float
     gate_rejects: int
+    mag_gate_rejects: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

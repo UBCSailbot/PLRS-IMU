@@ -76,6 +76,7 @@ class Debug:
     mag_offset_deg: float
     mag_offset_variance_deg2: float
     gate_rejects: int
+    mag_gate_rejects: int
 
 class TinyEkfFilter:
     def __init__(self, cfg: Config) -> None: ...
