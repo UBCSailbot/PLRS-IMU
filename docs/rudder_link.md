@@ -49,6 +49,12 @@ no byte swap.
 | `msg_id` | Name | Payload |
 |---|---|---|
 | `0x01` | Heading | float32 heading, compass degrees in `-180..180` (`attitude.md`) |
+| `0x02` | Attitude | float32 heading, roll, pitch (deg), float32 yaw rate (deg/s), then one `heading_valid` flag byte, all from one fused tick |
+| `0x03` | RawAttitude | float32 heel (deg), float32 yaw rate (deg/s), straight from the MTi-3 onboard orientation, bypassing the fusion EKF |
+
+`0x03` carries the same two quantities the rudder steers on as `0x02`, but taken
+from the sensor's own AHRS rather than our filter, so the rudder can switch
+sources while the EKF is being worked on. Both are sent every tick.
 
 A new sensor or command is a new `msg_id` with its own payload; the rudder
 ignores ids it does not recognise.

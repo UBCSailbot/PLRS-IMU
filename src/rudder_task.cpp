@@ -34,6 +34,13 @@ void task(void *params) {
                                                .yaw_rate_dps = out.yaw_rate_dps,
                                                .heading_valid = heading_valid})
                        .view());
+      // Same tick, the pre-filter MTi values, so the rudder can switch to raw
+      // heel and yaw rate while the EKF is being worked on.
+      p.uart.write(
+          sender
+              .next(rudder::RawAttitude {.heel_deg = out.raw_roll_deg,
+                                         .yaw_rate_dps = out.raw_yaw_rate_dps})
+              .view());
     }
   }
 }

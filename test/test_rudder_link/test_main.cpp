@@ -423,6 +423,48 @@ void test_attitude_end_to_end() {
 }
 
 // ---------------------------------------------------------------------------
+// RawAttitude message
+// ---------------------------------------------------------------------------
+
+/** @brief A payload that is not 8 bytes is rejected. */
+void test_raw_attitude_from_payload_wrong_size() {
+  const std::array<uint8_t, 4> four {};
+  TEST_ASSERT_FALSE(RawAttitude::from_payload(four).has_value());
+}
+
+/** @brief A RawAttitude frame carries heel then yaw rate as little-endian
+ * float32s. */
+void test_encode_raw_attitude_payload() {
+  const RawAttitude msg {.heel_deg = 12.5f, .yaw_rate_dps = -7.25f};
+  const auto body = decode_block(encode(3, msg).view());
+  TEST_ASSERT_EQUAL_HEX8(static_cast<uint8_t>(MsgId::RawAttitude), body[1]);
+  TEST_ASSERT_EQUAL_HEX8(3, body[2]);
+  TEST_ASSERT_EQUAL_FLOAT(
+      msg.heel_deg,
+      plrs::read_f32_little_endian({body.data() + HEADER_BYTES, 4}));
+  TEST_ASSERT_EQUAL_FLOAT(
+      msg.yaw_rate_dps,
+      plrs::read_f32_little_endian({body.data() + HEADER_BYTES + 4, 4}));
+}
+
+/** @brief encode -> Parser -> RawAttitude::from_payload recovers both fields.
+ */
+void test_raw_attitude_end_to_end() {
+  const RawAttitude msg {.heel_deg = -8.0f, .yaw_rate_dps = 1.5f};
+  const auto frame = encode(5, msg);
+  Parser p;
+  auto out = feed_all(p, frame.view());
+  TEST_ASSERT_EQUAL_size_t(1, out.size());
+  TEST_ASSERT_TRUE(out[0].has_value());
+  TEST_ASSERT_EQUAL_HEX8(static_cast<uint8_t>(MsgId::RawAttitude),
+                         static_cast<uint8_t>(out[0]->id));
+  const auto a = RawAttitude::from_payload(out[0]->payload);
+  TEST_ASSERT_TRUE(a.has_value());
+  TEST_ASSERT_EQUAL_FLOAT(msg.heel_deg, a->heel_deg);
+  TEST_ASSERT_EQUAL_FLOAT(msg.yaw_rate_dps, a->yaw_rate_dps);
+}
+
+// ---------------------------------------------------------------------------
 // Sender
 // ---------------------------------------------------------------------------
 
@@ -478,6 +520,9 @@ int main() {
   RUN_TEST(test_attitude_from_payload_wrong_size);
   RUN_TEST(test_encode_attitude_payload);
   RUN_TEST(test_attitude_end_to_end);
+  RUN_TEST(test_raw_attitude_from_payload_wrong_size);
+  RUN_TEST(test_encode_raw_attitude_payload);
+  RUN_TEST(test_raw_attitude_end_to_end);
   RUN_TEST(test_sender_increments_seq);
   RUN_TEST(test_sender_seq_wraps);
   return UNITY_END();

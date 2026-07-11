@@ -40,6 +40,7 @@ using Ms = std::chrono::milliseconds;
 enum class MsgId : uint8_t {
   Heading = 0x01,
   Attitude = 0x02,
+  RawAttitude = 0x03,
 };
 
 /*
@@ -280,6 +281,39 @@ struct Attitude {
         .pitch_deg = plrs::read_f32_little_endian(payload.subspan(8, 4)),
         .yaw_rate_dps = plrs::read_f32_little_endian(payload.subspan(12, 4)),
         .heading_valid = payload[16] != 0,
+    };
+  }
+};
+
+/**
+ * Raw attitude message: heel and yaw rate straight from the MTi-3's onboard
+ * orientation, bypassing our fusion EKF.
+ *
+ * heel_deg is roll from the sensor's own AHRS quaternion (after the mount
+ * rotation); yaw_rate_dps is the world-frame yaw rate off that quaternion and
+ * the raw gyro, with no filter or bias subtraction. It carries only the two
+ * fields the rudder steers on, so it can stand in for Attitude while the EKF is
+ * being worked on. Payload is two little-endian float32s.
+ */
+struct RawAttitude {
+  static constexpr MsgId ID = MsgId::RawAttitude;
+  static constexpr std::size_t PAYLOAD_SIZE = 2 * sizeof(float);
+  float heel_deg;
+  float yaw_rate_dps;
+
+  constexpr std::array<uint8_t, PAYLOAD_SIZE> to_payload() const {
+    const auto h = plrs::write_f32_little_endian(heel_deg);
+    const auto y = plrs::write_f32_little_endian(yaw_rate_dps);
+    return {h[0], h[1], h[2], h[3], y[0], y[1], y[2], y[3]};
+  }
+
+  static constexpr std::optional<RawAttitude> from_payload(ByteSpan payload) {
+    if (payload.size() != PAYLOAD_SIZE) {
+      return std::nullopt;
+    }
+    return RawAttitude {
+        .heel_deg = plrs::read_f32_little_endian(payload.subspan(0, 4)),
+        .yaw_rate_dps = plrs::read_f32_little_endian(payload.subspan(4, 4)),
     };
   }
 };

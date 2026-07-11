@@ -138,6 +138,19 @@ public:
    */
   void predict(ImuSample imu) {
     const EulerZyx attitude = measured_attitude(imu.orientation);
+
+    // Pre-filter values off the MTi orientation, for the raw rudder link. Roll
+    // is the measured boat-frame roll; the yaw rate uses the same heel-aware
+    // ZYX mapping as the fused path but reads the measured angles and skips the
+    // gyro-bias term, so it owes nothing to the EKF state. Compass sign (CW
+    // positive), matching yaw_rate_dps; see docs/attitude.md.
+    _raw_roll_deg = attitude.roll_deg;
+    _raw_yaw_rate_dps = -euler_rates_zyx(attitude.roll_deg * DEG_TO_RAD,
+                                         attitude.pitch_deg * DEG_TO_RAD,
+                                         imu.angular_velocity_rad_s)
+                             .yaw_dot *
+                        RAD_TO_DEG;
+
     if (!_has_predicted) {
       _last_predict_time = imu.timestamp;
       _ekf.x[IDX_ROLL] = attitude.roll_deg;
@@ -275,6 +288,8 @@ public:
             _has_predicted ? _ekf.P[IDX_PITCH * N_STATE + IDX_PITCH] : FLT_MAX,
         .timestamp = _last_predict_time,
         .yaw_rate_dps = _yaw_rate_dps,
+        .raw_roll_deg = _raw_roll_deg,
+        .raw_yaw_rate_dps = _raw_yaw_rate_dps,
     };
   }
 
@@ -310,6 +325,8 @@ private:
   float _Q[N_STATE * N_STATE] {};
   Ms _last_predict_time {0};
   float _yaw_rate_dps = 0.0f;
+  float _raw_roll_deg = 0.0f;
+  float _raw_yaw_rate_dps = 0.0f;
   uint32_t _gate_rejects = 0;
   bool _initialized = false;
   bool _has_predicted = false;
