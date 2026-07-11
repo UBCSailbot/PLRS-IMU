@@ -13,7 +13,7 @@ help:
 	@echo ""
 	@echo "Python sim targets (the native binding rebuilds on import as needed):"
 	@echo "  tui          interactive picker; or SCENARIO=<name> [VIEW=timeseries|mounting|simulate]"
-	@echo "  sim-images   regenerate docs/images screenshots (timeseries, mounting, pose, simulate)"
+	@echo "  sim-images   regenerate docs/images screenshots (timeseries, mounting, simulate)"
 	@echo "  sim-test     run sim pytest suite"
 	@echo "  sim-format   ruff format + check in sim/"
 
@@ -45,9 +45,8 @@ sim-images:
 	cd sim && MPLBACKEND=Agg uv run --extra dev python -m plrs_sim sim static \
 	    --view mounting --no-show --save ../docs/images/sim-mounting.png
 	cd sim && MPLBACKEND=Agg uv run --extra dev python -m plrs_sim sim wave_tack \
-	    --view pose --no-show --save ../docs/images/sim-pose.png
-	cd sim && MPLBACKEND=Agg uv run --extra dev python -m plrs_sim sim wave_tack \
 	    --view simulate --duration 50 --no-show --save ../docs/images/sim-simulate.png
+	pngquant --force --skip-if-larger --ext .png --strip docs/images/sim-*.png
 
 sim-test:
 	cd sim && uv run --extra dev pytest

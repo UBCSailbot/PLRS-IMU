@@ -26,6 +26,7 @@
           ninja
           nixfmt
           platformio
+          pngquant
           python3
           ruff
           uv

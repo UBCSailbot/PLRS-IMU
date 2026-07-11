@@ -127,55 +127,34 @@ Run `make` with no arguments to list all targets.
 ### Python sim
 
 A Python harness at `sim/` runs the C++ EKF offline for visualization and
-tuning. The same filter that ships on the RP2040 runs in the sim, so Q values
-transfer faithfully. Synthetic trajectories (yaw, heel, pitch), injectable IMU
-and GNSS noise, and three views are available.
+tuning; the same filter that ships on the RP2040 runs in the sim, so tuning
+values transfer faithfully.
 
-`make sim` drops into an arrow-key picker — choose a view, then a scenario:
+`make tui` drops into an arrow-key picker; choose a view, then a scenario.
 
-**Timeseries** — heading, roll, and pitch channels; truth, GNSS measurements,
-EKF estimate, and open-loop gyro integration overlaid; residual vs truth with
-±1σ band on the lower axes:
+**Timeseries**: truth, measurements, EKF estimate, and open-loop gyro
+integration per channel, residuals with a +/-1 sigma band below:
 
 ![Sinusoidal scenario with EKF tracking truth inside its +/-1 sigma band](docs/images/sim-sinusoidal.png)
 
-**Mounting** — calibration geometry: a level hull with the IMU triad rotated
-by the mount offset and the GNSS baseline arrow:
+**Mounting**: the calibration geometry from tuning.toml:
 
 ![Mounting view showing a tilted IMU triad and offset GNSS baseline](docs/images/sim-mounting.png)
 
-**Simulate** — animated 3D boat over a 50 s run; truth (blue), EKF estimate
-(orange), IMU raw attitude (green), rendered as a GIF. Final frame:
+**Simulate**: animated 3D boat (truth, EKF estimate, raw IMU), rendered as a
+GIF. A static **pose** filmstrip is available via `--view pose`:
 
 ![Final frame of the 3D boat animation showing truth, EKF estimate, and IMU raw hulls](docs/images/sim-simulate.png)
 
-A static **pose** filmstrip is also available via `--view pose` on the CLI:
-
-![Pose filmstrip of a tack in waves](docs/images/sim-pose.png)
-
 ```bash
-make sim                                        # interactive picker
-make sim SCENARIO=wave_tack VIEW=timeseries     # skip the picker
-make sim SCENARIO=wave_tack VIEW=simulate
+make tui                                        # interactive picker
+make tui SCENARIO=wave_tack VIEW=timeseries     # skip the picker
 make sim-test                                   # pytest suite
 make sim-format                                 # ruff format + check
 ```
 
-Direct CLI with noise, EKF, and calibration flags:
-
-```bash
-cd sim
-uv run python -m plrs_sim sim wave_tack --view simulate \
-    --duration 50 --seed 7 \
-    --gyro-bias 0.02 --gnss-std 2.0 --gnss-dropout 0.1 \
-    --q-heading 0.05 \
-    --mount-roll 8 --baseline-offset 20 \
-    --save /tmp/wave_tack.gif
-```
-
-A `0` for any `--gyro-*`, `--gnss-std`, or `--mti-attitude-std` flag disables
-that effect. Pass `--no-show` for headless runs. See
-`python -m plrs_sim sim --help` for the full flag list.
+Noise, EKF, and calibration flags are available on the direct CLI; see
+`cd sim && uv run python -m plrs_sim sim --help`.
 
 ### Git hooks
 
@@ -204,27 +183,9 @@ Kalman Filter.
 
 ## Tuning
 
-See [docs/tuning.md](docs/tuning.md) for theory, tradeoffs, and the
-record-and-replay workflow. Summary:
-
-The filter has four parameters in `TinyEkfFilter::Config`.
-
-`q_heading_deg2` and `q_bias_deg2_s2` are the load-bearing knobs. Derive
-starting values from the MTi-3 datasheet rather than guessing:
-
-- `q_heading` — gyro noise density (deg/s/√Hz) squared, scaled by dt
-- `q_bias` — in-run bias stability (deg/s, from the Allan deviation plot) squared
-
-`p0_heading_deg2` and `p0_bias_deg2_s2` only affect convergence from startup;
-set them large.
-
-The efficient tuning workflow: capture a session with the serial logger
-(milestone 1), replay it through the Python sim (milestone 2) with different
-configs, then flash once.
-
-To diagnose a live filter, log the innovation (`gnss_heading - filter_heading`).
-Zero-mean innovations indicate a well-tuned filter; persistently large
-innovations mean Q is too small.
+Filter tuning lives in [tuning.toml](tuning.toml), shared by the firmware and
+the sim. See [docs/tuning.md](docs/tuning.md) for theory, datasheet-derived
+starting values, and the record-and-replay workflow.
 
 ## Hardware
 
