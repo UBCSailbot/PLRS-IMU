@@ -20,25 +20,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .angles import seam_broken, wrap180
 from .boat3d import draw_boat, set_equal_3d
 from .types import Channel, Trace
 
 _MEASUREMENT_SCATTER_ALPHA = 0.4
-
-
-def _wrap180(deg: np.ndarray) -> np.ndarray:
-    """Map angles (or angle differences) into (-180, 180]."""
-    return (np.asarray(deg, dtype=float) + 180.0) % 360.0 - 180.0
-
-
-def _seam_broken(deg: np.ndarray) -> np.ndarray:
-    """Wrap to +-180 and NaN out the sample after each seam crossing so the
-    line plot does not draw a vertical connector across the +-180 jump."""
-    wrapped = _wrap180(deg)
-    out = wrapped.copy()
-    jumped = np.abs(np.diff(wrapped)) > 180.0
-    out[1:][jumped] = np.nan
-    return out
 
 
 def plot_trace(
@@ -298,7 +284,7 @@ def plot_animate(
 def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
     # For a circular channel, display every series in the same +-180 frame and
     # break the lines at the seam; otherwise plot the raw values.
-    line = _seam_broken if ch.wrap else (lambda x: x)
+    line = seam_broken if ch.wrap else (lambda x: x)
     ax_traj.plot(t_s, line(ch.truth), label="truth", linewidth=2.0, color="black")
     if ch.openloop is not None:
         ax_traj.plot(
@@ -319,7 +305,7 @@ def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
         meas_t_s = ch.measurement_t_ms / 1000.0
         ax_traj.scatter(
             meas_t_s,
-            _wrap180(ch.measurement) if ch.wrap else ch.measurement,
+            wrap180(ch.measurement) if ch.wrap else ch.measurement,
             label="measurement",
             s=10,
             color="tab:orange",
@@ -340,7 +326,7 @@ def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
 
     residual = ch.estimate - ch.truth
     if ch.wrap:
-        residual = _wrap180(residual)
+        residual = wrap180(residual)
 
     if ch.estimate_std is not None:
         ax_res.fill_between(
@@ -358,7 +344,7 @@ def _plot_channel(ax_traj, ax_res, t_s, t_ms, ch: Channel) -> None:
         meas_truth = np.interp(ch.measurement_t_ms, t_ms, ch.truth)
         meas_error = ch.measurement - meas_truth
         if ch.wrap:
-            meas_error = _wrap180(meas_error)
+            meas_error = wrap180(meas_error)
         ax_res.scatter(
             meas_t_s,
             meas_error,

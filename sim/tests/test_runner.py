@@ -18,6 +18,7 @@ from plrs_sim import (
     Static,
     load_tuning,
 )
+from plrs_sim.angles import wrap180
 from plrs_sim.attitude import euler_to_quaternion
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
@@ -49,7 +50,7 @@ def _src(
 
 def _wrapped_residual(ch) -> np.ndarray:
     """Estimate-minus-truth, the short way around the +-180 seam."""
-    return (ch.estimate - ch.truth + 180.0) % 360.0 - 180.0
+    return wrap180(ch.estimate - ch.truth)
 
 
 def test_trace_arrays_have_matching_length() -> None:

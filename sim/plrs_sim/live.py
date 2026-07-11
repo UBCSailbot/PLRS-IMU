@@ -26,6 +26,7 @@ from dataclasses import MISSING, dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, TextIO, get_args, get_origin, get_type_hints
 
+from .angles import wrap180
 from .attitude import quaternion_to_euler_zyx
 from .types import Quaternion, Vec3
 
@@ -226,14 +227,9 @@ _DEFAULT_HISTORY = 2000
 _RAD_TO_DEG = 180.0 / math.pi
 
 
-def wrap180(deg: float) -> float:
-    """Wrap an angle in degrees into (-180, 180], matching the firmware."""
-    return math.remainder(deg, 360.0)
-
-
 def heading_offset_deg(gnss_deg: float, imu_deg: float) -> float:
     """GNSS-minus-IMU heading residual, mapped into (-180, 180]."""
-    return wrap180(gnss_deg - imu_deg)
+    return float(wrap180(gnss_deg - imu_deg))
 
 
 @dataclass(slots=True)
@@ -309,8 +305,11 @@ class MonitorState:
                 dt_s = (rec.timestamp_ms - self._dr_prev_ms) / 1000.0
                 # Wrap to (-180, 180] like the firmware so the open-loop track
                 # crosses the seam together with the fused one, not past it.
-                self._dr_heading = wrap180(
-                    self._dr_heading - rec.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
+                self._dr_heading = float(
+                    wrap180(
+                        self._dr_heading
+                        - rec.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
+                    )
                 )
             self._dr_prev_ms = rec.timestamp_ms
             self.openloop.append(rec.timestamp_ms, self._dr_heading, roll, pitch)
