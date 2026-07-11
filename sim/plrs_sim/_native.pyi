@@ -70,11 +70,19 @@ class Config:
     mount: MountRotation
     def __init__(self) -> None: ...
 
+class Debug:
+    gyro_bias_dps: float
+    gyro_bias_variance_deg2_s2: float
+    mag_offset_deg: float
+    mag_offset_variance_deg2: float
+    gate_rejects: int
+
 class TinyEkfFilter:
     def __init__(self, cfg: Config) -> None: ...
     def predict(self, imu: ImuSample) -> None: ...
     def update(self, gnss: GnssSample) -> None: ...
     def output(self) -> FusionOutput: ...
+    def debug(self) -> Debug: ...
 
 class AttEuler:
     tow: int

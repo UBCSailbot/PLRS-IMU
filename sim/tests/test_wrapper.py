@@ -165,3 +165,13 @@ def test_bridge_wrapper_dropout_is_invalid() -> None:
         mount=GnssAttitudeMount(),
     )
     assert s.valid is False
+
+
+def test_debug_exposes_bias_and_offset_states() -> None:
+    f = TinyEkfFilter(CFG)
+    d = f.debug()
+    assert d.gyro_bias_dps == pytest.approx(0.0)
+    assert d.gyro_bias_variance_deg2_s2 == pytest.approx(CFG.p0_bias_deg2_s2)
+    assert d.mag_offset_variance_deg2 == pytest.approx(0.0)  # mag disabled
+    assert d.gate_rejects == 0
+    assert is_dataclass(d)

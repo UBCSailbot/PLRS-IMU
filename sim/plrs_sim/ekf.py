@@ -11,6 +11,7 @@ from . import _native
 from .attitude import euler_to_quaternion
 from .types import (
     EkfConfig,
+    EkfDebug,
     FusionOutput,
     GnssAttitudeMount,
     GnssSample,
@@ -149,3 +150,13 @@ class TinyEkfFilter:
 
     def output(self) -> FusionOutput:
         return _from_native_output(self._inner.output())
+
+    def debug(self) -> EkfDebug:
+        d = self._inner.debug()
+        return EkfDebug(
+            gyro_bias_dps=d.gyro_bias_dps,
+            gyro_bias_variance_deg2_s2=d.gyro_bias_variance_deg2_s2,
+            mag_offset_deg=d.mag_offset_deg,
+            mag_offset_variance_deg2=d.mag_offset_variance_deg2,
+            gate_rejects=d.gate_rejects,
+        )

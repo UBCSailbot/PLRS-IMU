@@ -117,11 +117,21 @@ NB_MODULE(_native, m) {
       .def_rw("mti_yaw", &TinyEkfFilter::Config::mti_yaw)
       .def_rw("mount", &TinyEkfFilter::Config::mount);
 
+  nb::class_<TinyEkfFilter::Debug>(m, "Debug")
+      .def_ro("gyro_bias_dps", &TinyEkfFilter::Debug::gyro_bias_dps)
+      .def_ro("gyro_bias_variance_deg2_s2",
+              &TinyEkfFilter::Debug::gyro_bias_variance_deg2_s2)
+      .def_ro("mag_offset_deg", &TinyEkfFilter::Debug::mag_offset_deg)
+      .def_ro("mag_offset_variance_deg2",
+              &TinyEkfFilter::Debug::mag_offset_variance_deg2)
+      .def_ro("gate_rejects", &TinyEkfFilter::Debug::gate_rejects);
+
   nb::class_<TinyEkfFilter>(m, "TinyEkfFilter")
       .def(nb::init<TinyEkfFilter::Config>(), nb::arg("cfg"))
       .def("predict", &TinyEkfFilter::predict, nb::arg("imu"))
       .def("update", &TinyEkfFilter::update, nb::arg("gnss"))
-      .def("output", &TinyEkfFilter::output);
+      .def("output", &TinyEkfFilter::output)
+      .def("debug", &TinyEkfFilter::debug);
 
   // GNSS dual-antenna attitude bridge. The sim builds these from truth,
   // perturbs them, and runs them through the real bridge so the path it

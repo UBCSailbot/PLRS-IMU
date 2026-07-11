@@ -78,6 +78,21 @@ class FusionOutput:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class EkfDebug:
+    """EKF-internal states behind FusionOutput; mirrors TinyEkfFilter::Debug.
+
+    A gyro bias far outside its prior with GNSS absent is the heading drift
+    signature (docs/internal/heading_drift.md).
+    """
+
+    gyro_bias_dps: float
+    gyro_bias_variance_deg2_s2: float
+    mag_offset_deg: float
+    mag_offset_variance_deg2: float
+    gate_rejects: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class MtiYawConfig:
     """MTi yaw (magnetometer) heading aiding; mirrors the C++ MtiYawConfig.
 
