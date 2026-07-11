@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from plrs_sim import Quaternion, Vec3
@@ -206,6 +208,73 @@ def test_headless_prints_summary_and_diagnostics(capsys) -> None:
 def test_summary_line_handles_empty_state() -> None:
     # No records seen yet: must not raise on the empty deques.
     assert "fused --" in MonitorState().summary_line()
+
+
+def test_wire_format_is_pinned() -> None:
+    # Exact wire bytes per record type: tag, field order, precision, and
+    # flag encoding. A diff here is a protocol change and must be made
+    # deliberately, together with the emitters in fusion_task.cpp.
+    fusion = FusionRecord(
+        timestamp_ms=1234,
+        heading_deg=12.5,
+        roll_deg=-3.25,
+        pitch_deg=1.0,
+        heading_sigma_deg=0.1,
+        roll_sigma_deg=0.2,
+        pitch_sigma_deg=0.3,
+    )
+    assert format_record(fusion) == "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300"
+    imu = ImuRecord(
+        timestamp_ms=5000,
+        orientation=Quaternion(w=1.0, x=0.0, y=0.0, z=0.0),
+        angular_velocity_rad_s=Vec3(x=0.1, y=-0.2, z=0.3),
+        accel_ms2=Vec3(x=0.0, y=0.0, z=9.81),
+    )
+    assert format_record(imu) == (
+        "I,5000,1.00000,0.00000,0.00000,0.00000,"
+        "0.10000,-0.20000,0.30000,0.0000,0.0000,9.8100"
+    )
+    mems = MemsRecord(
+        timestamp_ms=5000,
+        accel_ms2=Vec3(x=0.01, y=-0.02, z=9.81),
+        angular_velocity_rad_s=Vec3(x=0.1, y=-0.2, z=0.3),
+        magnetic_field_au=Vec3(x=0.4, y=-0.5, z=0.6),
+    )
+    assert format_record(mems) == (
+        "M,5000,0.0100,-0.0200,9.8100,0.10000,-0.20000,0.30000,0.40000,-0.50000,0.60000"
+    )
+    gnss = GnssRecord(
+        timestamp_ms=42,
+        heading_deg=90.0,
+        heading_sigma_deg=1.5,
+        valid=True,
+        mode=2,
+        error=0,
+    )
+    assert format_record(gnss) == "G,42,90.000,1.500,1,2,0"
+
+
+def test_overflowed_sigma_round_trips_as_ovf() -> None:
+    # Arduino Print renders out-of-range floats as "ovf"; the codec must
+    # emit and parse the same token.
+    rec = FusionRecord(
+        timestamp_ms=1,
+        heading_deg=0.0,
+        roll_deg=0.0,
+        pitch_deg=0.0,
+        heading_sigma_deg=math.inf,
+        roll_sigma_deg=0.2,
+        pitch_sigma_deg=0.3,
+    )
+    line = format_record(rec)
+    assert ",ovf," in line
+    assert parse_line(line) == rec
+
+
+def test_gnss_partial_optional_tail_is_rejected() -> None:
+    # mode/error are a format-version boundary: present together or not at
+    # all. Six tokens is a corrupt line, not an old format.
+    assert parse_line("G,42,90.000,1.500,1,2") is None
 
 
 def test_format_parse_round_trips() -> None:
