@@ -162,8 +162,8 @@ struct FusionOutput {
   float pitch_variance_deg2;
   Ms timestamp;
   float yaw_rate_dps;
-  // Pre-filter values straight off the MTi-3 onboard orientation, carried so the
-  // rudder can steer on the sensor's own AHRS while our EKF is worked on.
+  // Pre-filter values straight off the MTi-3 onboard orientation, carried so
+  // the rudder can steer on the sensor's own AHRS while our EKF is worked on.
   // raw_roll_deg is the measured boat-frame roll; raw_yaw_rate_dps is the
   // heel-aware heading rate from the same measured attitude, without gyro-bias
   // subtraction.
