@@ -63,9 +63,7 @@ class ImuNoise:
         if mag.snap_deg > 0.0 and dt_s > 0.0:
             self._mag_snap_err_deg *= math.exp(-dt_s / mag.snap_tau_s)
             if self._rng.random() < dt_s / mag.snap_interval_s:
-                self._mag_snap_err_deg += self._rng.uniform(
-                    -mag.snap_deg, mag.snap_deg
-                )
+                self._mag_snap_err_deg += self._rng.uniform(-mag.snap_deg, mag.snap_deg)
 
         _, _, yaw_deg = quaternion_to_euler_zyx(orientation)
         iron = mag.iron_deg * math.sin(math.radians(yaw_deg) + self._mag_iron_phase)

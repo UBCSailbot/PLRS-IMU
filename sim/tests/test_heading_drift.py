@@ -27,7 +27,9 @@ from plrs_sim.tuning import load_tuning
 
 # Aggressive but realistic indoor mag: a snap roughly every 30 s, up to
 # 40 deg, re-converging over 20 s, on top of a 20 deg iron lobe.
-_MAG = MagNoiseModel(iron_deg=20.0, snap_deg=40.0, snap_interval_s=30.0, snap_tau_s=20.0)
+_MAG = MagNoiseModel(
+    iron_deg=20.0, snap_deg=40.0, snap_interval_s=30.0, snap_tau_s=20.0
+)
 
 _CUT_MS = 30_000
 _END_S = 150.0
