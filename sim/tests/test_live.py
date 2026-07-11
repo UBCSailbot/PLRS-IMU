@@ -312,7 +312,7 @@ def test_live_draw_panels_render_headless() -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from plrs_sim.live import _ScrollPanel
+    from plrs_sim.views import _ScrollPanel
 
     state = monitor(_SAMPLE_LINES, show=False, summary_interval_ms=0)
     fig = plt.figure()
@@ -354,7 +354,7 @@ def test_align_panel_renders_headless() -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from plrs_sim.live import _draw_align_panel
+    from plrs_sim.views import _draw_align_panel
 
     state = monitor(_SAMPLE_LINES, show=False, summary_interval_ms=0)
     fig = plt.figure()
