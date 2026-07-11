@@ -35,16 +35,27 @@ _SAMPLE_LINES = [
 
 
 def test_parse_fusion_line() -> None:
+    # Pre-debug capture format: the trailing EKF-debug run is absent and
+    # keeps its defaults.
     rec = parse_line("F,1234,12.500,-3.250,1.000,0.100,0.200,0.300")
-    assert rec == FusionRecord(
-        timestamp_ms=1234,
-        heading_deg=12.5,
-        roll_deg=-3.25,
-        pitch_deg=1.0,
-        heading_sigma_deg=0.1,
-        roll_sigma_deg=0.2,
-        pitch_sigma_deg=0.3,
+    assert isinstance(rec, FusionRecord)
+    assert rec.heading_deg == 12.5
+    assert math.isnan(rec.gyro_bias_dps)
+    assert math.isnan(rec.mag_offset_deg)
+    assert rec.gate_rejects == 0
+
+
+def test_parse_fusion_line_with_debug_tail() -> None:
+    rec = parse_line(
+        "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,"
+        "2.2000,0.2236,-33.000,10.000,3"
     )
+    assert isinstance(rec, FusionRecord)
+    assert rec.gyro_bias_dps == pytest.approx(2.2)
+    assert rec.gyro_bias_sigma_dps == pytest.approx(0.2236)
+    assert rec.mag_offset_deg == pytest.approx(-33.0)
+    assert rec.mag_offset_sigma_deg == pytest.approx(10.0)
+    assert rec.gate_rejects == 3
 
 
 def test_parse_imu_line() -> None:
@@ -222,8 +233,16 @@ def test_wire_format_is_pinned() -> None:
         heading_sigma_deg=0.1,
         roll_sigma_deg=0.2,
         pitch_sigma_deg=0.3,
+        gyro_bias_dps=2.2,
+        gyro_bias_sigma_dps=0.2236,
+        mag_offset_deg=-33.0,
+        mag_offset_sigma_deg=10.0,
+        gate_rejects=3,
     )
-    assert format_record(fusion) == "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300"
+    assert format_record(fusion) == (
+        "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,"
+        "2.2000,0.2236,-33.000,10.000,3"
+    )
     imu = ImuRecord(
         timestamp_ms=5000,
         orientation=Quaternion(w=1.0, x=0.0, y=0.0, z=0.0),
@@ -265,10 +284,34 @@ def test_overflowed_sigma_round_trips_as_ovf() -> None:
         heading_sigma_deg=math.inf,
         roll_sigma_deg=0.2,
         pitch_sigma_deg=0.3,
+        gyro_bias_dps=0.0,
+        gyro_bias_sigma_dps=0.1,
+        mag_offset_deg=0.0,
+        mag_offset_sigma_deg=0.1,
     )
     line = format_record(rec)
     assert ",ovf," in line
     assert parse_line(line) == rec
+
+
+def test_nan_debug_tail_round_trips_as_nan() -> None:
+    # A NaN'd filter state renders as "nan" (Arduino Print) and must stay
+    # parseable; NaN breaks == so it is checked field-wise.
+    rec = FusionRecord(
+        timestamp_ms=1,
+        heading_deg=0.0,
+        roll_deg=0.0,
+        pitch_deg=0.0,
+        heading_sigma_deg=0.1,
+        roll_sigma_deg=0.2,
+        pitch_sigma_deg=0.3,
+    )
+    line = format_record(rec)
+    assert ",nan," in line
+    back = parse_line(line)
+    assert isinstance(back, FusionRecord)
+    assert math.isnan(back.gyro_bias_dps)
+    assert math.isnan(back.mag_offset_sigma_deg)
 
 
 def test_gnss_partial_optional_tail_is_rejected() -> None:
@@ -286,6 +329,11 @@ def test_format_parse_round_trips() -> None:
         heading_sigma_deg=0.1,
         roll_sigma_deg=0.2,
         pitch_sigma_deg=0.3,
+        gyro_bias_dps=0.01,
+        gyro_bias_sigma_dps=0.22,
+        mag_offset_deg=-33.0,
+        mag_offset_sigma_deg=10.0,
+        gate_rejects=1,
     )
     imu = ImuRecord(
         timestamp_ms=2000,

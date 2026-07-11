@@ -37,6 +37,9 @@ _Accel = Annotated[Vec3, 4]
 _Mag = Annotated[Vec3, 5]
 
 
+_Dps = Annotated[float, 4]
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FusionRecord:
     timestamp_ms: int
@@ -46,6 +49,14 @@ class FusionRecord:
     heading_sigma_deg: _Deg
     roll_sigma_deg: _Deg
     pitch_sigma_deg: _Deg
+    # EKF-internal states, for diagnosing heading drift (see
+    # docs/internal/heading_drift.md). Defaults keep pre-debug captures
+    # parsing; NaN marks "not in this capture" without inventing a value.
+    gyro_bias_dps: _Dps = math.nan
+    gyro_bias_sigma_dps: _Dps = math.nan
+    mag_offset_deg: _Deg = math.nan
+    mag_offset_sigma_deg: _Deg = math.nan
+    gate_rejects: int = 0
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -88,11 +99,18 @@ _NESTED_COMPONENTS = {Vec3: ("x", "y", "z"), Quaternion: ("w", "x", "y", "z")}
 
 
 def _parse_float(token: str) -> float:
-    # The firmware prints out-of-range floats as "ovf" (Arduino Print).
-    return math.inf if token == "ovf" else float(token)
+    # Arduino Print renders out-of-range floats as "ovf" and NaN as "nan";
+    # a NaN'd filter state must stay parseable, not drop the whole line.
+    if token == "ovf":
+        return math.inf
+    if token == "nan":
+        return math.nan
+    return float(token)
 
 
 def _format_float(v: float, prec: int) -> str:
+    if math.isnan(v):
+        return "nan"
     return "ovf" if not math.isfinite(v) else f"{v:.{prec}f}"
 
 

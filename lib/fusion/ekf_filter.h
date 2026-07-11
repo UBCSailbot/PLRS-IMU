@@ -293,6 +293,37 @@ public:
     };
   }
 
+  /**
+   * Internal state usually hidden behind FusionOutput, for telemetry. A
+   * healthy filter keeps the bias within its prior (see tuning.toml); a bias
+   * far outside it with GNSS absent is the drift signature described in
+   * docs/internal/heading_drift.md.
+   */
+  struct Debug {
+    float gyro_bias_dps;
+    float gyro_bias_variance_deg2_s2;
+    float mag_offset_deg;
+    float mag_offset_variance_deg2;
+    uint32_t gate_rejects;
+  };
+
+  /**
+   * @brief Read the bias/offset states and their variances.
+   *
+   * @return Current Debug snapshot.
+   */
+  Debug debug() const {
+    return Debug {
+        .gyro_bias_dps = _ekf.x[IDX_GYRO_BIAS],
+        .gyro_bias_variance_deg2_s2 =
+            _ekf.P[IDX_GYRO_BIAS * N_STATE + IDX_GYRO_BIAS],
+        .mag_offset_deg = _ekf.x[IDX_MAG_OFFSET],
+        .mag_offset_variance_deg2 =
+            _ekf.P[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET],
+        .gate_rejects = _gate_rejects,
+    };
+  }
+
 private:
   /**
    * @brief Boat-frame attitude from the raw MTi quaternion via the mount

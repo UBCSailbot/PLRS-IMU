@@ -46,11 +46,17 @@ static void print_line(char tag, Fields... fields) {
 /**
  * @brief Emit the fused estimate as an `F` telemetry line.
  *
- * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma` (deg).
+ * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,bias,
+ * bias_sigma,mag_offset,offset_sigma,gate_rejects` (deg, deg/s). The trailing
+ * debug fields expose the internal states behind the heading drift signature
+ * (docs/internal/heading_drift.md); the parser treats them as one optional
+ * format-version tail.
  *
  * @param out  Fused estimate to print.
+ * @param dbg  Internal state snapshot from the same filter tick.
  */
-static void print_fusion(const fusion::FusionOutput &out) {
+static void print_fusion(const fusion::FusionOutput &out,
+                         const fusion::TinyEkfFilter::Debug &dbg) {
   print_line('F',
              out.timestamp.count(),
              Real {out.heading_deg, 3},
@@ -58,7 +64,12 @@ static void print_fusion(const fusion::FusionOutput &out) {
              Real {out.pitch_deg, 3},
              Real {std::sqrt(out.heading_variance_deg2), 3},
              Real {std::sqrt(out.roll_variance_deg2), 3},
-             Real {std::sqrt(out.pitch_variance_deg2), 3});
+             Real {std::sqrt(out.pitch_variance_deg2), 3},
+             Real {dbg.gyro_bias_dps, 4},
+             Real {std::sqrt(dbg.gyro_bias_variance_deg2_s2), 4},
+             Real {dbg.mag_offset_deg, 3},
+             Real {std::sqrt(dbg.mag_offset_variance_deg2), 3},
+             dbg.gate_rejects);
 }
 
 /**
@@ -153,7 +164,7 @@ void task(void *params) {
       xQueueOverwrite(p.heading_mailbox, &out);
 
       if (xTaskGetTickCount() >= next_print) {
-        print_fusion(out);
+        print_fusion(out, filter.debug());
         print_imu(imu);
         print_mems(imu);
         next_print += pdMS_TO_TICKS(TELEMETRY_INTERVAL_MS);
