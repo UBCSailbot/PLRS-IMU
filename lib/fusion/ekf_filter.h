@@ -25,6 +25,7 @@
 #include "attitude.h"
 #include "fusion.h"
 #include <cfloat>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -81,6 +82,19 @@ public:
    */
   static constexpr float MTI_YAW_GATE_SIGMA = 3.0f;
   static constexpr uint32_t MTI_YAW_GATE_LIMIT = 3000;
+
+  /**
+   * Ceilings on the heading and mag-offset sigmas. The mag observes only
+   * heading + offset, so through an indefinite GNSS outage the individual
+   * variances grow without bound, strongly anticorrelated; past ~1e5 deg2
+   * the float32 gains degenerate into differences of near-equal entries and
+   * rounding noise steers heading (docs/internal/heading_drift.md). The
+   * ceilings are physical: 180 deg of heading sigma already means "anywhere
+   * on the circle", and a mag offset error cannot exceed the disturbance
+   * lobe. Growth past them carries no information, so it is clamped.
+   */
+  static constexpr float HEADING_SIGMA_CAP_DEG = 180.0f;
+  static constexpr float MAG_OFFSET_SIGMA_CAP_DEG = 60.0f;
 
   /**
    * MTi yaw (magnetometer-referenced) heading aiding. variance_deg2 is the
@@ -211,6 +225,9 @@ public:
     F[IDX_PITCH * N_STATE + IDX_PITCH] += jac.dpitch_dpitch * dt_s;
 
     ekf_predict(&_ekf, fx, F, _Q);
+    cap_variance(IDX_HEADING, HEADING_SIGMA_CAP_DEG * HEADING_SIGMA_CAP_DEG);
+    cap_variance(IDX_MAG_OFFSET,
+                 MAG_OFFSET_SIGMA_CAP_DEG * MAG_OFFSET_SIGMA_CAP_DEG);
     _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
 
     scalar_update(H_ROLL,
@@ -376,6 +393,25 @@ private:
     const float R[N_MEAS * N_MEAS] = {variance};
     ekf_update(&_ekf, zv, hxv, H, R);
     symmetrize_covariance();
+  }
+
+  /**
+   * @brief Clamp one state's variance to a ceiling.
+   *
+   * Scales the state's P row and column by sqrt(cap / P[i][i]), a congruence
+   * transform, so the matrix stays positive semi-definite and the
+   * correlation structure survives; only the magnitudes shrink.
+   */
+  void cap_variance(std::size_t i, float cap_deg2) {
+    const float var = _ekf.P[i * N_STATE + i];
+    if (var <= cap_deg2) {
+      return;
+    }
+    const float s = std::sqrt(cap_deg2 / var);
+    for (std::size_t j = 0; j < N_STATE; j++) {
+      _ekf.P[i * N_STATE + j] *= s;
+      _ekf.P[j * N_STATE + i] *= s;
+    }
   }
 
   /**

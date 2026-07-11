@@ -484,6 +484,49 @@ void test_mag_gate_forced_accept_after_limit() {
                    TinyEkfFilter::MTI_YAW_GATE_LIMIT);
 }
 
+/** @brief Through an indefinite degraded outage (mag snapped 90 deg, no
+ * GNSS) the offset cap engages and, with P_offset pinned, the mag updates
+ * keep heading variance bounded near the same scale: no P entry ever
+ * approaches float32 cancellation territory. */
+void test_variances_bounded_during_long_degraded_outage() {
+  TinyEkfFilter::Config cfg = make_mag_config();
+  cfg.q_heading_deg2 = 10.0f; // reach the bounds within a few thousand steps
+  cfg.mti_yaw->q_offset_deg2 = 10.0f;
+  TinyEkfFilter f(cfg);
+  f.update(make_gnss(TRUE_HEADING, 1.0f, Ms {1000}));
+  for (int i = 1; i <= 100; i++) {
+    f.predict(make_mag_imu(0.0f, Ms {1000 + 100 * i}));
+  }
+  for (int i = 1; i <= 5000; i++) {
+    ImuSample imu = make_mag_imu(0.0f, Ms {11100 + 100 * i});
+    imu.orientation =
+        axis_angle(0.0f, 0.0f, 1.0f, -(MAG_COMPASS + 90.0f) * DEG_TO_RAD);
+    f.predict(imu);
+  }
+  constexpr float cap_offset = TinyEkfFilter::MAG_OFFSET_SIGMA_CAP_DEG *
+                               TinyEkfFilter::MAG_OFFSET_SIGMA_CAP_DEG;
+  const float var_offset = f.debug().mag_offset_variance_deg2;
+  TEST_ASSERT_TRUE(var_offset <= cap_offset * 1.001f);
+  TEST_ASSERT_TRUE(var_offset > 0.5f * cap_offset); // the cap engaged
+  TEST_ASSERT_TRUE(f.output().heading_variance_deg2 < 3.0f * cap_offset);
+}
+
+/** @brief With no mag at all, nothing bounds heading variance through an
+ * outage except its own cap. */
+void test_heading_variance_capped_without_mag() {
+  TinyEkfFilter::Config cfg = kTestConfig;
+  cfg.q_heading_deg2 = 10.0f;
+  TinyEkfFilter f(cfg);
+  f.update(make_gnss(TRUE_HEADING, 1.0f, Ms {1000}));
+  for (int i = 1; i <= 5000; i++) {
+    f.predict(make_imu(0.0f, Ms {1000 + 100 * i}));
+  }
+  constexpr float cap_heading = TinyEkfFilter::HEADING_SIGMA_CAP_DEG *
+                                TinyEkfFilter::HEADING_SIGMA_CAP_DEG;
+  TEST_ASSERT_FLOAT_WITHIN(
+      0.01f * cap_heading, cap_heading, f.output().heading_variance_deg2);
+}
+
 /** @brief Heading stays wrapped to (-180, 180] after integrating past 180. */
 void test_predict_wraps_heading_past_180() {
   TinyEkfFilter f(kTestConfig);
@@ -564,6 +607,8 @@ int main(int, char **) {
   RUN_TEST(test_mag_gnss_seed_keeps_offset_consistent);
   RUN_TEST(test_mag_gate_rejects_snap_during_outage);
   RUN_TEST(test_mag_gate_forced_accept_after_limit);
+  RUN_TEST(test_variances_bounded_during_long_degraded_outage);
+  RUN_TEST(test_heading_variance_capped_without_mag);
   RUN_TEST(test_predict_wraps_heading_past_180);
 
   RUN_TEST(test_unit_quaternion_identity_components);
