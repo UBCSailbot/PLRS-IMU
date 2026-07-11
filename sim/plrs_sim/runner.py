@@ -58,8 +58,9 @@ def run(source: Iterable[Tick], cfg: EkfConfig) -> Trace:
                     openloop = tick.gnss.heading_deg
 
         if openloop is not None and prev_t_ms is not None:
+            # Compass heading integrates the negated ENU yaw rate.
             dt_s = (tick.timestamp_ms - prev_t_ms) / 1000.0
-            openloop += tick.imu.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
+            openloop -= tick.imu.angular_velocity_rad_s.z * _RAD_TO_DEG * dt_s
 
         out = ekf.output()
         t_ms.append(tick.timestamp_ms)

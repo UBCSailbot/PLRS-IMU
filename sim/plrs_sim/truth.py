@@ -4,8 +4,8 @@ Each profile variant has a closed-form sampler — no internal state to
 defend. Dispatch is a `match` statement; adding a variant is a type
 error in its sampler until handled.
 
-sample_yaw(profile, t) -> (heading_deg, gyro_z_rad_s) returns the truth
-heading and its derivative.
+sample_yaw(profile, t) -> (heading_deg, heading_dot_rad_s) returns the
+truth compass heading and its derivative.
 
 sample_attitude(profile, t) -> (orientation, body_omega_rad_s) returns
 the world<-body quaternion and the body-frame angular velocity
@@ -36,7 +36,7 @@ _BODY_X = Vec3(x=1.0, y=0.0, z=0.0)
 
 
 def sample_yaw(profile: YawProfile, t_ms: int) -> tuple[float, float]:
-    """Return (heading_deg, gyro_z_rad_s) at t."""
+    """Return (heading_deg, heading_dot_rad_s) at t."""
     t_s = t_ms / 1000.0
     match profile:
         case ConstantTurn(rate_deg_s=rate, heading0_deg=h0):

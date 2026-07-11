@@ -13,7 +13,9 @@ from plrs_sim import (
     EkfConfig,
     GnssNoiseModel,
     ImuNoiseModel,
+    MtiYawConfig,
     Scenario,
+    Sinusoidal,
     Static,
 )
 from plrs_sim.attitude import euler_to_quaternion
@@ -133,6 +135,35 @@ def test_estimate_converges_to_truth_without_noise() -> None:
     assert final_error < 0.5
 
 
+def test_tracks_through_realistic_noise_with_mag_aiding() -> None:
+    # The docs-image scenario: full noise model, gate and mag yaw active.
+    # Guards the sim/firmware convention agreement; a sign flip on either
+    # side turns this into a tens-of-degrees staircase, not a small miss.
+    cfg = EkfConfig(
+        q_heading_deg2=0.01,
+        q_bias_deg2_s2=0.000001,
+        p0_heading_deg2=1000.0,
+        p0_bias_deg2_s2=0.05,
+        mti_yaw=MtiYawConfig(
+            variance_deg2=4.0, q_offset_deg2=0.0001, p0_offset_deg2=100.0
+        ),
+    )
+    src = _src(
+        Sinusoidal(amplitude_deg=30.0, period_s=20.0),
+        imu_noise=ImuNoiseModel(
+            gyro_white_std_rad_s=0.01,
+            gyro_constant_bias_rad_s=0.005,
+            gyro_bias_walk_std_rad_s_sqrt_s=0.001,
+            mti_attitude_std_deg=1.0,
+        ),
+        gnss_noise=GnssNoiseModel(heading_std_deg=1.0),
+        duration_s=10.0,
+    )
+    ch = run(src, cfg).channels["heading"]
+    residual = (ch.estimate - ch.truth + 180.0) % 360.0 - 180.0
+    assert math.sqrt(np.mean(residual**2)) < 2.0
+
+
 def test_openloop_drifts_with_gyro_bias() -> None:
     bias = 0.05  # rad/s ~= 2.86 deg/s
     trace = run(
@@ -143,7 +174,8 @@ def test_openloop_drifts_with_gyro_bias() -> None:
         ),
         CFG,
     )
-    expected_drift = bias * (180.0 / math.pi) * 5.0
+    # A +bias on the ENU gyro dead-reckons compass heading negative.
+    expected_drift = -bias * (180.0 / math.pi) * 5.0
     assert abs(trace.channels["heading"].openloop[-1] - expected_drift) < 1.0
 
 

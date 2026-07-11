@@ -12,12 +12,19 @@ twice produces identical output.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import numpy as np
 
-from .attitude import conjugate, multiply, quaternion_to_euler_zyx, world_to_body
+from .attitude import (
+    conjugate,
+    from_axis_angle,
+    multiply,
+    quaternion_to_euler_zyx,
+    world_to_body,
+)
 from .ekf import gnss_sample_from_attitude
 from .noise import GnssNoise, ImuNoise
 from .truth import sample_attitude, sample_yaw
@@ -62,16 +69,24 @@ class SimulatedSource:
 
         next_gnss_ms = 0
         for t_ms in range(0, end_ms + 1, imu_dt_ms):
-            truth_h, yaw_omega = sample_yaw(self.scenario.yaw, t_ms)
-            orientation, attitude_body_omega = sample_attitude(
+            truth_h, heading_dot = sample_yaw(self.scenario.yaw, t_ms)
+            attitude_q, attitude_body_omega = sample_attitude(
                 self.scenario.attitude, t_ms
+            )
+
+            # The MTi reports in ENU, where yaw is CCW-positive: the
+            # orientation carries yaw = -heading and the world-Z yaw rate
+            # is the negated heading rate.
+            orientation = multiply(
+                from_axis_angle(Vec3(x=0.0, y=0.0, z=1.0), math.radians(-truth_h)),
+                attitude_q,
             )
 
             # Yaw is a world-frame angular velocity about world Z. The
             # gyro sees it in the body frame; rotate through the inverse
             # orientation. Under level attitude this collapses to body Z;
             # under heel, world Z splits into body Y and Z components.
-            yaw_body = world_to_body(orientation, Vec3(x=0.0, y=0.0, z=yaw_omega))
+            yaw_body = world_to_body(orientation, Vec3(x=0.0, y=0.0, z=-heading_dot))
 
             # The MTi sits in the IMU frame: report the boat attitude rotated
             # by the inverse mount. The gyro stays in boat axes, matching the

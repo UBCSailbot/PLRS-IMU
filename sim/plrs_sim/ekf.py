@@ -133,7 +133,8 @@ def _from_native_output(o: _native.FusionOutput) -> FusionOutput:
 
 
 class TinyEkfFilter:
-    """Two-state EKF over heading and gyro_z bias; see lib/fusion/ekf_filter.h."""
+    """Five-state EKF over heading, roll, pitch, gyro_z bias, and mag
+    offset; see lib/fusion/ekf_filter.h."""
 
     __slots__ = ("_inner",)
 

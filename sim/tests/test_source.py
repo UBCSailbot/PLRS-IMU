@@ -54,13 +54,21 @@ def test_truth_heading_tracks_trajectory() -> None:
 
 
 def test_no_noise_passes_clean_samples() -> None:
+    # A CW (compass-positive) turn is a negative ENU rotation about up.
     src = _bare(ConstantTurn(rate_deg_s=180.0 / math.pi), duration_s=0.1)
     for tick in src:
-        assert tick.imu.angular_velocity_rad_s.z == pytest.approx(1.0, rel=1e-4)
+        assert tick.imu.angular_velocity_rad_s.z == pytest.approx(-1.0, rel=1e-4)
         if tick.gnss is not None:
             assert tick.gnss.heading_deg == tick.truth_heading_deg
             assert tick.gnss.heading_variance_deg2 == 0.0
             assert tick.gnss.valid is True
+
+
+def test_mti_orientation_carries_enu_yaw() -> None:
+    src = _bare(ConstantTurn(rate_deg_s=10.0), duration_s=0.5)
+    for tick in src:
+        _, _, yaw = quaternion_to_euler_zyx(tick.imu.orientation)
+        assert yaw == pytest.approx(-tick.truth_heading_deg, abs=1e-6)
 
 
 def test_iteration_is_replayable() -> None:
