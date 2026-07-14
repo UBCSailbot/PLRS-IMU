@@ -10,12 +10,6 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      unity-src = pkgs.fetchFromGitHub {
-        owner = "ThrowTheSwitch";
-        repo = "Unity";
-        rev = "v2.6.1";
-        hash = "sha256-g0ubq7RxGQmL1R6vz9RIGJpVWYsgrZhsTWSrL1ySEug=";
-      };
     in
     {
       devShells.${system}.default = pkgs.mkShell {
@@ -54,7 +48,7 @@
           pkgs.freetype
           pkgs.dbus
           pkgs.libxkbcommon
-          pkgs.xorg.libX11
+          pkgs.libx11
           pkgs.libGL
           pkgs.wayland
           pkgs.xcb-util-cursor
