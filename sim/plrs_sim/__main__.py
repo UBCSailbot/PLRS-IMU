@@ -117,7 +117,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--gyro-bias",
         type=float,
         default=0.005,
-        help="gyro constant bias (rad/s); 0 disables",
+        help="gyro constant bias on the vertical (z) axis (rad/s); 0 disables",
+    )
+    sim.add_argument(
+        "--gyro-bias-x",
+        type=float,
+        default=0.0,
+        help="gyro constant bias on body X (rad/s); projects into heading at heel",
+    )
+    sim.add_argument(
+        "--gyro-bias-y",
+        type=float,
+        default=0.0,
+        help="gyro constant bias on body Y (rad/s); projects into heading at heel",
     )
     sim.add_argument(
         "--gyro-walk",
@@ -142,6 +154,21 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="GNSS dropout probability [0,1]",
+    )
+    sim.add_argument(
+        "--gnss-outage-s",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="start a sustained GNSS outage at this time; heading then rides on "
+        "the gyro bias and mag alone",
+    )
+    sim.add_argument(
+        "--gnss-outage-end-s",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="end the GNSS outage at this time (fixes resume); default never recovers",
     )
 
     # These override the matching value from tuning.toml when given.
@@ -215,9 +242,9 @@ def _zero_to_none(x: float) -> float | None:
     return x if x > 0.0 else None
 
 
-def _z_bias(x: float) -> Vec3 | None:
-    """The --gyro-bias flag is a vertical-gyro scalar; wrap it as a body vector."""
-    return Vec3(x=0.0, y=0.0, z=x) if x > 0.0 else None
+def _bias_vec(x: float, y: float, z: float) -> Vec3 | None:
+    """Assemble the body-frame gyro bias, or None when every axis is zero."""
+    return Vec3(x=x, y=y, z=z) if (x or y or z) else None
 
 
 def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
@@ -363,13 +390,17 @@ def _run_view(args: argparse.Namespace) -> None:
         scenario=SCENARIOS[args.scenario],
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=_zero_to_none(args.gyro_white),
-            gyro_constant_bias_rad_s=_z_bias(args.gyro_bias),
+            gyro_constant_bias_rad_s=_bias_vec(
+                args.gyro_bias_x, args.gyro_bias_y, args.gyro_bias
+            ),
             gyro_bias_walk_std_rad_s_sqrt_s=_zero_to_none(args.gyro_walk),
             mti_attitude_std_deg=_zero_to_none(args.mti_attitude_std),
         ),
         gnss_noise=GnssNoiseModel(
             heading_std_deg=_zero_to_none(args.gnss_std),
             dropout_prob=_zero_to_none(args.gnss_dropout),
+            outage_start_s=args.gnss_outage_s,
+            outage_end_s=args.gnss_outage_end_s,
         ),
         duration_s=args.duration,
         seed=args.seed,

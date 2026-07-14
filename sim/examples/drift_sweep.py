@@ -25,6 +25,7 @@ import argparse
 import itertools
 import math
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 import numpy as np
 
@@ -116,27 +117,29 @@ def _metrics(trace, outage_start_ms: int, seed: int) -> Result:
     )
 
 
+# Roll heel is the sailing regime; trim (pitch) toward vertical is the bench
+# regime, where sec(pitch) amplifies error into heading. trim85 is near the
+# Euler blind spot the drifty field capture actually sat in.
+_ATTITUDES: dict[str, AttitudeProfile] = {
+    "level": LevelAttitude(),
+    "heel45": ConstantHeel(angle_deg=45.0),
+    "heel77": ConstantHeel(angle_deg=77.0),
+    "trim45": ConstantTrim(angle_deg=45.0),
+    "trim70": ConstantTrim(angle_deg=70.0),
+    "trim85": ConstantTrim(angle_deg=85.0),
+}
+_BIASES: dict[str, Vec3] = {
+    "no-bias": Vec3(x=0.0, y=0.0, z=0.0),
+    "z-bias": Vec3(x=0.0, y=0.0, z=_BIAS_DPS),
+    "y-bias": Vec3(x=0.0, y=_BIAS_DPS, z=0.0),
+}
+_MAGS: dict[str, MagNoiseModel | None] = {"clean-mag": None, "indoor-mag": _INDOOR_MAG}
+
+
 def _grid() -> list[Case]:
-    # Roll heel is the sailing regime; trim (pitch) toward vertical is the bench
-    # regime, where sec(pitch) amplifies error into heading. trim85 is near the
-    # Euler blind spot the drifty field capture actually sat in.
-    attitudes = {
-        "level": LevelAttitude(),
-        "heel45": ConstantHeel(angle_deg=45.0),
-        "heel77": ConstantHeel(angle_deg=77.0),
-        "trim45": ConstantTrim(angle_deg=45.0),
-        "trim70": ConstantTrim(angle_deg=70.0),
-        "trim85": ConstantTrim(angle_deg=85.0),
-    }
-    biases = {
-        "no-bias": Vec3(x=0.0, y=0.0, z=0.0),
-        "z-bias": Vec3(x=0.0, y=0.0, z=_BIAS_DPS),
-        "y-bias": Vec3(x=0.0, y=_BIAS_DPS, z=0.0),
-    }
-    mags = {"clean-mag": None, "indoor-mag": _INDOOR_MAG}
     cases = []
     for (aname, att), (bname, bias), (mname, mag) in itertools.product(
-        attitudes.items(), biases.items(), mags.items()
+        _ATTITUDES.items(), _BIASES.items(), _MAGS.items()
     ):
         cases.append(
             Case(
@@ -174,6 +177,60 @@ def _worst_over_seeds(case: Case, seeds: int, duration_s: float, cfg) -> Result:
     return max(runs, key=lambda r: r.peak_err_deg)
 
 
+def _plot_summary(save, seeds: int, duration_s: float, cfg) -> None:
+    """Heatmap of peak outage heading error over attitude x bias, indoor mag.
+
+    The sailing rows (level, heel) stay cool whatever the bias: the 3-axis
+    filter observes and removes it through the outage. Only the near-vertical
+    bench trim rows go hot, where the ZYX kinematics are singular by design.
+    """
+    import matplotlib.pyplot as plt
+
+    biases = list(_BIASES)
+    attitudes = list(_ATTITUDES)
+    grid = np.array(
+        [
+            [
+                _worst_over_seeds(
+                    Case(
+                        name=f"{aname}/{bname}",
+                        attitude=_ATTITUDES[aname],
+                        bias_dps=_BIASES[bname],
+                        mag=_INDOOR_MAG,
+                        outage_start_s=30.0,
+                    ),
+                    seeds,
+                    duration_s,
+                    cfg,
+                ).peak_err_deg
+                for bname in biases
+            ]
+            for aname in attitudes
+        ]
+    )
+
+    fig, ax = plt.subplots(figsize=(6.0, 5.0))
+    im = ax.imshow(grid, cmap="inferno", aspect="auto")
+    ax.set_xticks(range(len(biases)), biases)
+    ax.set_yticks(range(len(attitudes)), attitudes)
+    ax.set_xlabel("gyro turn-on bias")
+    ax.set_ylabel("boat attitude")
+    ax.set_title("Peak heading error in a 30 s GNSS outage (indoor mag, deg)")
+    for i in range(len(attitudes)):
+        for j in range(len(biases)):
+            ax.text(
+                j,
+                i,
+                f"{grid[i, j]:.0f}",
+                ha="center",
+                va="center",
+                color="white" if grid[i, j] < grid.max() * 0.6 else "black",
+            )
+    fig.colorbar(im, ax=ax, label="peak error (deg)")
+    fig.tight_layout()
+    fig.savefig(save, dpi=110)
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="drift_sweep")
     p.add_argument("--duration", type=float, default=150.0, metavar="SECONDS")
@@ -191,6 +248,13 @@ def main(argv: list[str] | None = None) -> None:
         metavar="DEG2_S2",
         help="override gyro-bias process noise (deg/s)^2; datasheet 6 deg/h ~= 3e-8",
     )
+    p.add_argument(
+        "--save",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="render the attitude x bias heatmap to PATH instead of the table",
+    )
     args = p.parse_args(argv)
 
     cfg = load_tuning()
@@ -198,6 +262,9 @@ def main(argv: list[str] | None = None) -> None:
         cfg = _baseline_tuning(cfg)
     if args.q_bias is not None:
         cfg = replace(cfg, q_bias_deg2_s2=args.q_bias)
+    if args.save is not None:
+        _plot_summary(args.save, args.seeds, args.duration, cfg)
+        return
     ranked = sorted(
         ((c, _worst_over_seeds(c, args.seeds, args.duration, cfg)) for c in _grid()),
         key=lambda cr: cr[1].peak_err_deg,
