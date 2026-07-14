@@ -144,6 +144,45 @@ euler_rates_jacobian(float roll_rad, float pitch_rad, plrs::Vec3 omega_body) {
 }
 
 /**
+ * Partials of the ZYX Euler rates with respect to the body angular velocity:
+ * rows of the kinematic matrix E(roll, pitch) itself, since the rates are
+ * linear in omega. The wx column is trivial (droll_dwx = 1, the rest 0), so
+ * only the wy and wz columns are carried.
+ */
+struct EulerRatesOmegaJacobian {
+  float droll_dwy;
+  float droll_dwz;
+  float dpitch_dwy;
+  float dpitch_dwz;
+  float dyaw_dwy;
+  float dyaw_dwz;
+};
+
+/**
+ * @brief Analytic Jacobian of euler_rates_zyx in the body angular velocity.
+ *
+ * @param roll_rad   Roll angle (radians).
+ * @param pitch_rad  Pitch angle (radians).
+ *
+ * @return Partial derivatives of the Euler rates per rad/s of body rate.
+ */
+inline EulerRatesOmegaJacobian euler_rates_omega_jacobian(float roll_rad,
+                                                          float pitch_rad) {
+  const float sr = std::sin(roll_rad);
+  const float cr = std::cos(roll_rad);
+  const float sec_pitch = 1.0f / std::cos(pitch_rad);
+  const float tan_pitch = std::tan(pitch_rad);
+  return EulerRatesOmegaJacobian {
+      .droll_dwy = sr * tan_pitch,
+      .droll_dwz = cr * tan_pitch,
+      .dpitch_dwy = cr,
+      .dpitch_dwz = -sr,
+      .dyaw_dwy = sr * sec_pitch,
+      .dyaw_dwz = cr * sec_pitch,
+  };
+}
+
+/**
  * @brief Wrap an angle in degrees to the range (-180, 180].
  */
 inline float wrap180(float deg) { return std::remainder(deg, 360.0f); }

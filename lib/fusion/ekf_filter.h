@@ -1,12 +1,16 @@
 /**
- * Five-state EKF for heading + roll + pitch + gyro_z bias + mag offset.
+ * Seven-state EKF for heading + roll + pitch + 3-axis gyro bias + mag offset.
  *
  * Satisfies the FusionFilter concept. State: x[IDX_HEADING] = heading (deg),
- * x[IDX_ROLL] = roll (deg), x[IDX_PITCH] = pitch (deg), x[IDX_GYRO_BIAS] =
- * gyro_z bias (deg/s), x[IDX_MAG_OFFSET] = MTi-yaw-to-heading offset (deg).
- * Roll/pitch/yaw propagate from the body gyro through the ZYX Euler
- * kinematics; the MTi quaternion is a roll/pitch measurement and the GNSS fix
- * is the heading measurement, both applied as scalar updates.
+ * x[IDX_ROLL] = roll (deg), x[IDX_PITCH] = pitch (deg),
+ * x[IDX_GYRO_BIAS_X..Z] = body-frame gyro biases (deg/s), x[IDX_MAG_OFFSET]
+ * = MTi-yaw-to-heading offset (deg). The biases are subtracted from the body
+ * gyro before the ZYX Euler kinematics, so a bias keeps correcting the right
+ * axis whatever the attitude; the X and Y biases are observable through the
+ * 100 Hz MTi roll/pitch measurements alone, while the Z bias needs GNSS (or
+ * the mag) heading like before. The MTi quaternion is a roll/pitch
+ * measurement and the GNSS fix is the heading measurement, both applied as
+ * scalar updates.
  *
  * When Config::mti_yaw is set, the MTi yaw is a third measurement, of
  * heading + mag_offset. The offset state absorbs whatever separates the MTi's
@@ -30,7 +34,7 @@
 #include <cstdint>
 #include <optional>
 
-#define EKF_N 5
+#define EKF_N 7
 #define EKF_M 1
 #include <tinyekf.h>
 namespace fusion {
@@ -45,8 +49,10 @@ namespace fusion {
 constexpr std::size_t IDX_HEADING = 0;
 constexpr std::size_t IDX_ROLL = 1;
 constexpr std::size_t IDX_PITCH = 2;
-constexpr std::size_t IDX_GYRO_BIAS = 3;
-constexpr std::size_t IDX_MAG_OFFSET = 4;
+constexpr std::size_t IDX_GYRO_BIAS_X = 3;
+constexpr std::size_t IDX_GYRO_BIAS_Y = 4;
+constexpr std::size_t IDX_GYRO_BIAS_Z = 5;
+constexpr std::size_t IDX_MAG_OFFSET = 6;
 
 /**
  * Observation Jacobians for the scalar updates. The GNSS fix reads heading
@@ -54,10 +60,10 @@ constexpr std::size_t IDX_MAG_OFFSET = 4;
  * reads heading + mag_offset, which is what makes the offset observable only
  * when GNSS is also present.
  */
-constexpr float H_HEADING[N_STATE] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-constexpr float H_ROLL[N_STATE] = {0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
-constexpr float H_PITCH[N_STATE] = {0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
-constexpr float H_MAG_YAW[N_STATE] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+constexpr float H_HEADING[N_STATE] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+constexpr float H_ROLL[N_STATE] = {0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+constexpr float H_PITCH[N_STATE] = {0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+constexpr float H_MAG_YAW[N_STATE] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
 
 class TinyEkfFilter {
 public:
@@ -110,8 +116,8 @@ public:
 
   /**
    * Filter tuning parameters. See docs/tuning.md. mti_yaw disengages the mag
-   * measurement entirely when unset; the filter is then numerically identical
-   * to the four-state version.
+   * measurement entirely when unset; the mag-offset state then holds zero and
+   * the filter reduces to the six-state attitude + 3-axis bias version.
    */
   struct Config {
     float q_heading_deg2;
@@ -137,13 +143,19 @@ public:
     _Q[IDX_HEADING * N_STATE + IDX_HEADING] = cfg.q_heading_deg2;
     _Q[IDX_ROLL * N_STATE + IDX_ROLL] = cfg.q_roll_deg2;
     _Q[IDX_PITCH * N_STATE + IDX_PITCH] = cfg.q_pitch_deg2;
-    _Q[IDX_GYRO_BIAS * N_STATE + IDX_GYRO_BIAS] = cfg.q_bias_deg2_s2;
+    // Turn-on repeatability and in-run wander are per-axis specs, so the
+    // one bias prior and random walk cover all three axes.
+    for (std::size_t i = IDX_GYRO_BIAS_X; i <= IDX_GYRO_BIAS_Z; i++) {
+      _Q[i * N_STATE + i] = cfg.q_bias_deg2_s2;
+    }
     _Q[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET] =
         cfg.mti_yaw ? cfg.mti_yaw->q_offset_deg2 : 0.0f;
     const float pdiag[N_STATE] = {
         _cfg.p0_heading_deg2,
         _cfg.p0_roll_deg2,
         _cfg.p0_pitch_deg2,
+        _cfg.p0_bias_deg2_s2,
+        _cfg.p0_bias_deg2_s2,
         _cfg.p0_bias_deg2_s2,
         _cfg.mti_yaw ? _cfg.mti_yaw->p0_offset_deg2 : 0.0f,
     };
@@ -190,39 +202,57 @@ public:
 
     const float roll_rad = _ekf.x[IDX_ROLL] * DEG_TO_RAD;
     const float pitch_rad = _ekf.x[IDX_PITCH] * DEG_TO_RAD;
-    const EulerRates rates =
-        euler_rates_zyx(roll_rad, pitch_rad, imu.angular_velocity_rad_s);
-    _yaw_rate_dps = -rates.yaw_dot * RAD_TO_DEG - _ekf.x[IDX_GYRO_BIAS];
+    // Body-frame bias correction before the kinematic mapping, so each bias
+    // keeps correcting its own axis whatever the attitude.
+    const plrs::Vec3 omega {
+        imu.angular_velocity_rad_s.x - _ekf.x[IDX_GYRO_BIAS_X] * DEG_TO_RAD,
+        imu.angular_velocity_rad_s.y - _ekf.x[IDX_GYRO_BIAS_Y] * DEG_TO_RAD,
+        imu.angular_velocity_rad_s.z - _ekf.x[IDX_GYRO_BIAS_Z] * DEG_TO_RAD,
+    };
+    const EulerRates rates = euler_rates_zyx(roll_rad, pitch_rad, omega);
+    _yaw_rate_dps = -rates.yaw_dot * RAD_TO_DEG;
     const EulerRatesJacobian jac =
-        euler_rates_jacobian(roll_rad, pitch_rad, imu.angular_velocity_rad_s);
+        euler_rates_jacobian(roll_rad, pitch_rad, omega);
+    const EulerRatesOmegaJacobian jw =
+        euler_rates_omega_jacobian(roll_rad, pitch_rad);
 
     // ENU yaw is CCW-positive; compass heading is CW-positive. Negate the ENU
     // yaw rate so the heading state stays in compass convention. See
     // docs/attitude.md.
     const float fx[N_STATE] = {
-        _ekf.x[IDX_HEADING] +
-            (-rates.yaw_dot * RAD_TO_DEG - _ekf.x[IDX_GYRO_BIAS]) * dt_s,
+        _ekf.x[IDX_HEADING] + (-rates.yaw_dot * RAD_TO_DEG) * dt_s,
         _ekf.x[IDX_ROLL] + rates.roll_dot * RAD_TO_DEG * dt_s,
         _ekf.x[IDX_PITCH] + rates.pitch_dot * RAD_TO_DEG * dt_s,
-        _ekf.x[IDX_GYRO_BIAS],
+        _ekf.x[IDX_GYRO_BIAS_X],
+        _ekf.x[IDX_GYRO_BIAS_Y],
+        _ekf.x[IDX_GYRO_BIAS_Z],
         _ekf.x[IDX_MAG_OFFSET],
     };
 
     // F = d fx / d x: identity plus the kinematic couplings. Euler rates
-    // depend on roll/pitch but not heading or the mag offset; gyro bias
-    // couples only into heading. The per-radian Jacobian entries times dt
-    // land in degree space: the RAD_TO_DEG and DEG_TO_RAD conversions cancel.
+    // depend on roll/pitch but not heading or the mag offset. The per-radian
+    // Jacobian entries times dt land in degree space: the RAD_TO_DEG and
+    // DEG_TO_RAD conversions cancel, likewise for the per-(rad/s) omega
+    // entries against the deg/s bias states. A bias enters each rate through
+    // -omega, so the sign flips against the omega Jacobian except for
+    // heading, whose compass negation flips it back.
     float F[N_STATE * N_STATE] {};
     for (std::size_t i = 0; i < N_STATE; i++) {
       F[i * N_STATE + i] = 1.0f;
     }
     F[IDX_HEADING * N_STATE + IDX_ROLL] = -jac.dyaw_droll * dt_s;
     F[IDX_HEADING * N_STATE + IDX_PITCH] = -jac.dyaw_dpitch * dt_s;
-    F[IDX_HEADING * N_STATE + IDX_GYRO_BIAS] = -dt_s;
+    F[IDX_HEADING * N_STATE + IDX_GYRO_BIAS_Y] = jw.dyaw_dwy * dt_s;
+    F[IDX_HEADING * N_STATE + IDX_GYRO_BIAS_Z] = jw.dyaw_dwz * dt_s;
     F[IDX_ROLL * N_STATE + IDX_ROLL] += jac.droll_droll * dt_s;
     F[IDX_ROLL * N_STATE + IDX_PITCH] = jac.droll_dpitch * dt_s;
+    F[IDX_ROLL * N_STATE + IDX_GYRO_BIAS_X] = -dt_s;
+    F[IDX_ROLL * N_STATE + IDX_GYRO_BIAS_Y] = -jw.droll_dwy * dt_s;
+    F[IDX_ROLL * N_STATE + IDX_GYRO_BIAS_Z] = -jw.droll_dwz * dt_s;
     F[IDX_PITCH * N_STATE + IDX_ROLL] = jac.dpitch_droll * dt_s;
     F[IDX_PITCH * N_STATE + IDX_PITCH] += jac.dpitch_dpitch * dt_s;
+    F[IDX_PITCH * N_STATE + IDX_GYRO_BIAS_Y] = -jw.dpitch_dwy * dt_s;
+    F[IDX_PITCH * N_STATE + IDX_GYRO_BIAS_Z] = -jw.dpitch_dwz * dt_s;
 
     ekf_predict(&_ekf, fx, F, _Q);
     cap_variance(IDX_HEADING, HEADING_SIGMA_CAP_DEG * HEADING_SIGMA_CAP_DEG);
@@ -341,8 +371,14 @@ public:
    * turning: the heading-drift signature.
    */
   struct Debug {
+    // The Z (vertical-axis) bias keeps the plain name: it is the one on the
+    // telemetry wire and the one that matters near level trim.
     float gyro_bias_dps;
     float gyro_bias_variance_deg2_s2;
+    float gyro_bias_x_dps;
+    float gyro_bias_x_variance_deg2_s2;
+    float gyro_bias_y_dps;
+    float gyro_bias_y_variance_deg2_s2;
     float mag_offset_deg;
     float mag_offset_variance_deg2;
     uint32_t gate_rejects;
@@ -356,9 +392,15 @@ public:
    */
   Debug debug() const {
     return Debug {
-        .gyro_bias_dps = _ekf.x[IDX_GYRO_BIAS],
+        .gyro_bias_dps = _ekf.x[IDX_GYRO_BIAS_Z],
         .gyro_bias_variance_deg2_s2 =
-            _ekf.P[IDX_GYRO_BIAS * N_STATE + IDX_GYRO_BIAS],
+            _ekf.P[IDX_GYRO_BIAS_Z * N_STATE + IDX_GYRO_BIAS_Z],
+        .gyro_bias_x_dps = _ekf.x[IDX_GYRO_BIAS_X],
+        .gyro_bias_x_variance_deg2_s2 =
+            _ekf.P[IDX_GYRO_BIAS_X * N_STATE + IDX_GYRO_BIAS_X],
+        .gyro_bias_y_dps = _ekf.x[IDX_GYRO_BIAS_Y],
+        .gyro_bias_y_variance_deg2_s2 =
+            _ekf.P[IDX_GYRO_BIAS_Y * N_STATE + IDX_GYRO_BIAS_Y],
         .mag_offset_deg = _ekf.x[IDX_MAG_OFFSET],
         .mag_offset_variance_deg2 =
             _ekf.P[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET],

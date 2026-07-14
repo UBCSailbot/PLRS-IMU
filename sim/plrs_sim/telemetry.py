@@ -4,8 +4,8 @@ The firmware emits one tagged, comma-separated line per record over USB CDC
 (see fusion_task.cpp). This module mirrors that wire format:
 
     F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,
-      bias,bias_sigma,mag_offset,offset_sigma,gate_rejects,
-      mag_gate_rejects                                            fused estimate
+      bias,bias_sigma,bias_x,bias_x_sigma,bias_y,bias_y_sigma,
+      mag_offset,offset_sigma,gate_rejects,mag_gate_rejects       fused estimate
     I,ts_ms,qw,qx,qy,qz,gx,gy,gz,ax,ay,az                         raw IMU
     M,ts_ms,ax,ay,az,gx,gy,gz,mx,my,mz                            raw MEMS triad
     G,ts_ms,heading,hdg_sigma,valid,mode,error                    raw GNSS attitude
@@ -56,6 +56,10 @@ class FusionRecord:
     # inventing a value.
     gyro_bias_dps: _Dps = math.nan
     gyro_bias_sigma_dps: _Dps = math.nan
+    gyro_bias_x_dps: _Dps = math.nan
+    gyro_bias_x_sigma_dps: _Dps = math.nan
+    gyro_bias_y_dps: _Dps = math.nan
+    gyro_bias_y_sigma_dps: _Dps = math.nan
     mag_offset_deg: _Deg = math.nan
     mag_offset_sigma_deg: _Deg = math.nan
     gate_rejects: int = 0

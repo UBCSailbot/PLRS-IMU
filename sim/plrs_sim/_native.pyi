@@ -73,6 +73,10 @@ class Config:
 class Debug:
     gyro_bias_dps: float
     gyro_bias_variance_deg2_s2: float
+    gyro_bias_x_dps: float
+    gyro_bias_x_variance_deg2_s2: float
+    gyro_bias_y_dps: float
+    gyro_bias_y_variance_deg2_s2: float
     mag_offset_deg: float
     mag_offset_variance_deg2: float
     gate_rejects: int

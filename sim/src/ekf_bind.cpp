@@ -121,6 +121,12 @@ NB_MODULE(_native, m) {
       .def_ro("gyro_bias_dps", &TinyEkfFilter::Debug::gyro_bias_dps)
       .def_ro("gyro_bias_variance_deg2_s2",
               &TinyEkfFilter::Debug::gyro_bias_variance_deg2_s2)
+      .def_ro("gyro_bias_x_dps", &TinyEkfFilter::Debug::gyro_bias_x_dps)
+      .def_ro("gyro_bias_x_variance_deg2_s2",
+              &TinyEkfFilter::Debug::gyro_bias_x_variance_deg2_s2)
+      .def_ro("gyro_bias_y_dps", &TinyEkfFilter::Debug::gyro_bias_y_dps)
+      .def_ro("gyro_bias_y_variance_deg2_s2",
+              &TinyEkfFilter::Debug::gyro_bias_y_variance_deg2_s2)
       .def_ro("mag_offset_deg", &TinyEkfFilter::Debug::mag_offset_deg)
       .def_ro("mag_offset_variance_deg2",
               &TinyEkfFilter::Debug::mag_offset_variance_deg2)

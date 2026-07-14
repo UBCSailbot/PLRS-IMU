@@ -47,10 +47,13 @@ static void print_line(char tag, Fields... fields) {
  * @brief Emit the fused estimate as an `F` telemetry line.
  *
  * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,bias,
- * bias_sigma,mag_offset,offset_sigma,gate_rejects,mag_gate_rejects`
- * (deg, deg/s). The trailing debug fields expose the internal states behind
- * heading drift (bias wind-up, mag-offset wander, gate activity); the parser
- * treats them as one optional format-version tail.
+ * bias_sigma,bias_x,bias_x_sigma,bias_y,bias_y_sigma,mag_offset,
+ * offset_sigma,gate_rejects,mag_gate_rejects` (deg, deg/s). `bias` is the
+ * Z (vertical) gyro bias; `bias_x`/`bias_y` are its body-frame companions,
+ * the ones that read as heading drift only at heel. The trailing debug fields
+ * expose the internal states behind heading drift (bias wind-up, mag-offset
+ * wander, gate activity); the parser treats them as one optional
+ * format-version tail.
  *
  * @param out  Fused estimate to print.
  * @param dbg  Internal state snapshot from the same filter tick.
@@ -67,6 +70,10 @@ static void print_fusion(const fusion::FusionOutput &out,
              Real {std::sqrt(out.pitch_variance_deg2), 3},
              Real {dbg.gyro_bias_dps, 4},
              Real {std::sqrt(dbg.gyro_bias_variance_deg2_s2), 4},
+             Real {dbg.gyro_bias_x_dps, 4},
+             Real {std::sqrt(dbg.gyro_bias_x_variance_deg2_s2), 4},
+             Real {dbg.gyro_bias_y_dps, 4},
+             Real {std::sqrt(dbg.gyro_bias_y_variance_deg2_s2), 4},
              Real {dbg.mag_offset_deg, 3},
              Real {std::sqrt(dbg.mag_offset_variance_deg2), 3},
              dbg.gate_rejects,

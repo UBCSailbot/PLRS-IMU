@@ -134,8 +134,8 @@ def _from_native_output(o: _native.FusionOutput) -> FusionOutput:
 
 
 class TinyEkfFilter:
-    """Five-state EKF over heading, roll, pitch, gyro_z bias, and mag
-    offset; see lib/fusion/ekf_filter.h."""
+    """Seven-state EKF over heading, roll, pitch, the three body-axis gyro
+    biases, and the mag offset; see lib/fusion/ekf_filter.h."""
 
     __slots__ = ("_inner",)
 
@@ -156,6 +156,10 @@ class TinyEkfFilter:
         return EkfDebug(
             gyro_bias_dps=d.gyro_bias_dps,
             gyro_bias_variance_deg2_s2=d.gyro_bias_variance_deg2_s2,
+            gyro_bias_x_dps=d.gyro_bias_x_dps,
+            gyro_bias_x_variance_deg2_s2=d.gyro_bias_x_variance_deg2_s2,
+            gyro_bias_y_dps=d.gyro_bias_y_dps,
+            gyro_bias_y_variance_deg2_s2=d.gyro_bias_y_variance_deg2_s2,
             mag_offset_deg=d.mag_offset_deg,
             mag_offset_variance_deg2=d.mag_offset_variance_deg2,
             gate_rejects=d.gate_rejects,

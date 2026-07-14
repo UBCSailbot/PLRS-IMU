@@ -527,6 +527,36 @@ void test_heading_variance_capped_without_mag() {
       0.01f * cap_heading, cap_heading, f.output().heading_variance_deg2);
 }
 
+/** @brief A body-frame gyro-Y bias learned at level keeps correcting after
+ * the boat heels: heading holds through a heeled GNSS outage, where a
+ * compass-rate bias model would drift at ~sin(heel) * bias. */
+void test_body_frame_bias_survives_heel_change() {
+  TinyEkfFilter f(make_mag_config());
+  const float bias_y_dps = 0.3f;
+  const plrs::Vec3 biased_gyro {0.0f, bias_y_dps * DEG_TO_RAD, 0.0f};
+  const UnitQuaternion yaw_q =
+      axis_angle(0.0f, 0.0f, 1.0f, -MAG_COMPASS * DEG_TO_RAD);
+
+  // Level convergence with GNSS: pitch residuals teach the Y bias.
+  for (int i = 0; i <= 200; i++) {
+    const Ms t {1000 + 100 * i};
+    f.predict(make_imu_with(biased_gyro, yaw_q, t));
+    if (i % 10 == 0) {
+      f.update(make_gnss(TRUE_HEADING, 1.0f, t));
+    }
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, bias_y_dps, f.debug().gyro_bias_y_dps);
+
+  // Heel 75 deg and drop GNSS for 30 s; the same body-frame bias now maps
+  // almost fully into the heading rate, but the learned state cancels it.
+  const UnitQuaternion heeled = UnitQuaternion::multiply(
+      yaw_q, axis_angle(1.0f, 0.0f, 0.0f, 75.0f * DEG_TO_RAD));
+  for (int i = 1; i <= 300; i++) {
+    f.predict(make_imu_with(biased_gyro, heeled, Ms {21100 + 100 * i}));
+  }
+  TEST_ASSERT_FLOAT_WITHIN(2.0f, TRUE_HEADING, f.output().heading_deg);
+}
+
 /** @brief Heading stays wrapped to (-180, 180] after integrating past 180. */
 void test_predict_wraps_heading_past_180() {
   TinyEkfFilter f(kTestConfig);
@@ -609,6 +639,7 @@ int main(int, char **) {
   RUN_TEST(test_mag_gate_forced_accept_after_limit);
   RUN_TEST(test_variances_bounded_during_long_degraded_outage);
   RUN_TEST(test_heading_variance_capped_without_mag);
+  RUN_TEST(test_body_frame_bias_survives_heel_change);
   RUN_TEST(test_predict_wraps_heading_past_180);
 
   RUN_TEST(test_unit_quaternion_identity_components);

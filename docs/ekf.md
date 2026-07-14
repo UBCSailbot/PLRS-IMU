@@ -5,12 +5,12 @@ estimate of the boat's heading, roll, and pitch. It's a Kalman filter: each step
 it predicts where the boat is pointing from the gyro, then nudges that prediction
 toward the sensor readings, all while tracking how much it trusts each.
 
-It carries four numbers:
+It carries seven numbers:
 
-    [heading, roll, pitch, gyro_z_bias]
+    [heading, roll, pitch, gyro_bias_x, gyro_bias_y, gyro_bias_z, mag_offset]
 
-the three angles in degrees, plus a slow-drift term for the vertical gyro in
-deg/s.
+the three angles in degrees, a slow-drift term for each of the three gyro axes
+in deg/s, and a mag-offset term in degrees (see below).
 
 ## How it runs
 
@@ -22,14 +22,17 @@ changing, and advances the three angles by that much.
 Getting that conversion right is what keeps heading correct when the boat heels.
 A level gyro spinning about its vertical axis reads pure heading change; a heeled
 gyro mixes that turn into roll and pitch, and the conversion untangles it. The
-drift term soaks up the gyro's slow bias so it doesn't quietly accumulate into
-heading.
+drift terms soak up the gyro's slow per-axis bias so it doesn't quietly
+accumulate into the angles. The bias is subtracted in the body frame, before the
+conversion, so each axis keeps correcting itself whatever the boat's attitude.
 
-Two measurements pull the estimate back toward reality:
+Three measurements pull the estimate back toward reality:
 
 - the **MTi quaternion** corrects roll and pitch (it arrives with every IMU
   sample),
-- a **GNSS fix** corrects heading.
+- a **GNSS fix** corrects heading,
+- the **MTi magnetic yaw** nudges heading between fixes, but through the offset
+  term (below) so it can never own absolute heading.
 
 Each correction touches one number at a time, which keeps the math cheap.
 Headings are compared the short way around the compass, so a fix at -179 deg
@@ -56,9 +59,20 @@ That's why the MTi is treated as a measurement and not gospel: if magnetic
 interference throws off its orientation, the filter has already smoothed it
 before it can drag heading around.
 
-**One drift term, not three.** It captures the gyro drift that matters for
-heading. Roll and pitch don't need their own, because the MTi corrects them every
-sample.
+**A drift term per gyro axis.** The vertical (Z) bias is the one that reads as
+heading drift near level trim, but at heel a body-frame X or Y bias projects into
+heading rate too, so an unmodelled one leaks out as a slow heading ramp whenever
+the boat is heeled over. The X and Y biases cost almost nothing to observe: the
+100 Hz roll/pitch measurements pin them directly, without waiting on GNSS. Only
+the Z bias depends on a heading measurement to be seen.
+
+**A mag-offset term, so the magnetometer can help without taking over.** The
+MTi's magnetic yaw is not true heading: declination, boat iron, and the
+ENU-to-compass frame constant all sit between them, and indoors that gap wanders.
+The offset term absorbs that difference, so the mag stiffens heading between GNSS
+fixes and keeps the Z bias observable through an outage, yet can never drag
+absolute heading away from GNSS. `docs/tuning.md` covers how loosely it's tuned
+and why.
 
 ## Tuning
 

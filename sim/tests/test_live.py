@@ -47,11 +47,16 @@ def test_parse_fusion_line() -> None:
 
 def test_parse_fusion_line_with_debug_tail() -> None:
     rec = parse_line(
-        "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,2.2000,0.2236,-33.000,10.000,3,7"
+        "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,2.2000,0.2236,"
+        "0.1000,0.0500,0.3000,0.0600,-33.000,10.000,3,7"
     )
     assert isinstance(rec, FusionRecord)
     assert rec.gyro_bias_dps == pytest.approx(2.2)
     assert rec.gyro_bias_sigma_dps == pytest.approx(0.2236)
+    assert rec.gyro_bias_x_dps == pytest.approx(0.1)
+    assert rec.gyro_bias_x_sigma_dps == pytest.approx(0.05)
+    assert rec.gyro_bias_y_dps == pytest.approx(0.3)
+    assert rec.gyro_bias_y_sigma_dps == pytest.approx(0.06)
     assert rec.mag_offset_deg == pytest.approx(-33.0)
     assert rec.mag_offset_sigma_deg == pytest.approx(10.0)
     assert rec.gate_rejects == 3
@@ -235,13 +240,18 @@ def test_wire_format_is_pinned() -> None:
         pitch_sigma_deg=0.3,
         gyro_bias_dps=2.2,
         gyro_bias_sigma_dps=0.2236,
+        gyro_bias_x_dps=0.1,
+        gyro_bias_x_sigma_dps=0.05,
+        gyro_bias_y_dps=0.3,
+        gyro_bias_y_sigma_dps=0.06,
         mag_offset_deg=-33.0,
         mag_offset_sigma_deg=10.0,
         gate_rejects=3,
         mag_gate_rejects=7,
     )
     assert format_record(fusion) == (
-        "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,2.2000,0.2236,-33.000,10.000,3,7"
+        "F,1234,12.500,-3.250,1.000,0.100,0.200,0.300,2.2000,0.2236,"
+        "0.1000,0.0500,0.3000,0.0600,-33.000,10.000,3,7"
     )
     imu = ImuRecord(
         timestamp_ms=5000,
@@ -286,6 +296,10 @@ def test_overflowed_sigma_round_trips_as_ovf() -> None:
         pitch_sigma_deg=0.3,
         gyro_bias_dps=0.0,
         gyro_bias_sigma_dps=0.1,
+        gyro_bias_x_dps=0.0,
+        gyro_bias_x_sigma_dps=0.1,
+        gyro_bias_y_dps=0.0,
+        gyro_bias_y_sigma_dps=0.1,
         mag_offset_deg=0.0,
         mag_offset_sigma_deg=0.1,
     )
@@ -331,6 +345,10 @@ def test_format_parse_round_trips() -> None:
         pitch_sigma_deg=0.3,
         gyro_bias_dps=0.01,
         gyro_bias_sigma_dps=0.22,
+        gyro_bias_x_dps=0.1,
+        gyro_bias_x_sigma_dps=0.05,
+        gyro_bias_y_dps=0.3,
+        gyro_bias_y_sigma_dps=0.06,
         mag_offset_deg=-33.0,
         mag_offset_sigma_deg=10.0,
         gate_rejects=1,
