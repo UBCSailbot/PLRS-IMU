@@ -59,6 +59,7 @@ def export_telemetry(
         next_emit_ms += telemetry_interval_ms
 
         out = ekf.output()
+        dbg = ekf.debug()
         yield format_record(
             FusionRecord(
                 timestamp_ms=out.timestamp_ms,
@@ -68,6 +69,16 @@ def export_telemetry(
                 heading_sigma_deg=_sigma(out.heading_variance_deg2),
                 roll_sigma_deg=_sigma(out.roll_variance_deg2),
                 pitch_sigma_deg=_sigma(out.pitch_variance_deg2),
+                gyro_bias_dps=dbg.gyro_bias_dps,
+                gyro_bias_sigma_dps=_sigma(dbg.gyro_bias_variance_deg2_s2),
+                gyro_bias_x_dps=dbg.gyro_bias_x_dps,
+                gyro_bias_x_sigma_dps=_sigma(dbg.gyro_bias_x_variance_deg2_s2),
+                gyro_bias_y_dps=dbg.gyro_bias_y_dps,
+                gyro_bias_y_sigma_dps=_sigma(dbg.gyro_bias_y_variance_deg2_s2),
+                mag_offset_deg=dbg.mag_offset_deg,
+                mag_offset_sigma_deg=_sigma(dbg.mag_offset_variance_deg2),
+                gate_rejects=dbg.gate_rejects,
+                mag_gate_rejects=dbg.mag_gate_rejects,
             )
         )
         yield format_record(
