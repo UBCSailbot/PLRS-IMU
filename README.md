@@ -132,19 +132,32 @@ values transfer faithfully.
 
 `make tui` drops into an arrow-key picker; choose a view, then a scenario.
 
-**Timeseries**: truth, measurements, EKF estimate, and open-loop gyro
-integration per channel, residuals with a +/-1 sigma band below:
+The timeseries view plots truth, measurements, the EKF estimate, and the
+open-loop gyro integration per channel, with residuals and a +/-1 sigma band
+below. Three runs show the fusion holding heading where raw integration cannot.
 
-![Sinusoidal scenario with EKF tracking truth inside its +/-1 sigma band](docs/images/sim-sinusoidal.png)
+**Held through a GNSS outage**: fixes drop from 25 to 50 s; the open-loop gyro
+integration peels away while the EKF, having learned the gyro bias, stays near
+truth and re-anchors the instant fixes resume:
 
-**Mounting**: the calibration geometry from tuning.toml:
+![Static heading through a GNSS outage: the EKF holds near truth and re-anchors while open-loop drifts](docs/images/sim-outage-hold.png)
 
-![Mounting view showing a tilted IMU triad and offset GNSS baseline](docs/images/sim-mounting.png)
+**...and at heel**: the same outage at 20 deg heel with a body-Y gyro bias, the
+lever behind heel-dependent heading drift. The 3-axis bias state observes and
+removes it, where the old vertical-only filter would ramp:
 
-**Simulate**: animated 3D boat (truth, EKF estimate, raw IMU), rendered as a
-GIF. A static **pose** filmstrip is available via `--view pose`:
+![Heeled tack through a GNSS outage with a body-Y gyro bias: heading held and recovered](docs/images/sim-heel-outage.png)
 
-![Final frame of the 3D boat animation showing truth, EKF estimate, and IMU raw hulls](docs/images/sim-simulate.png)
+**Across the envelope**: peak heading error over a 30 s outage for every boat
+attitude and turn-on bias (indoor mag). The sailing rows stay within a few
+degrees; only near-vertical bench trim, where the ZYX heading kinematics are
+singular, goes hot (`uv run python examples/drift_sweep.py`):
+
+![Heatmap of peak outage heading error across boat attitude and gyro bias](docs/images/sim-drift-sweep.png)
+
+The **mounting** view renders the calibration geometry from tuning.toml, and
+**simulate**/**pose** show the 3D boat (truth, EKF estimate, raw IMU) as a GIF
+or a static filmstrip.
 
 ```bash
 make tui                                        # interactive picker
