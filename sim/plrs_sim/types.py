@@ -207,6 +207,21 @@ class ConstantHeel:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ConstantTrim:
+    """The boat sits at a fixed pitch (trim) angle for the whole run.
+
+    Positive angle is bow-up (right-hand rotation about body Y). The pitch
+    counterpart to ConstantHeel; it exists to exercise the heading
+    kinematics near the 90 deg Euler blind spot, where sec(pitch) amplifies
+    every gyro and attitude error into heading rate. Not a sailing attitude
+    (a boat never trims near vertical), but the regime bench handling lives
+    in. No roll, no time variation; body-frame attitude velocity is zero.
+    """
+
+    angle_deg: float
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class WaveMotion:
     """Roll and pitch oscillate sinusoidally, as in a seaway.
 
@@ -223,7 +238,7 @@ class WaveMotion:
 
 
 HeadingProfile = ConstantTurn | Sinusoidal | StepTurns | Static
-AttitudeProfile = LevelAttitude | ConstantHeel | WaveMotion
+AttitudeProfile = LevelAttitude | ConstantHeel | ConstantTrim | WaveMotion
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

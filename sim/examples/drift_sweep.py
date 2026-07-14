@@ -1,11 +1,12 @@
 """Drift sweep: hunt the field's deg/s heading ramps in the sim.
 
-Runs a grid of bench/sailing conditions (heel, gyro turn-on bias, indoor mag,
-a sustained GNSS outage) through the real C++ EKF and ranks them by how far
-fused heading walks once GNSS drops. It reproduces the monotonic post-movement
-ramp seen at the rudder module, and doubles as a check that the fix holds:
-after the 7-state (3-axis bias) filter a heeled Y-bias should no longer ramp
-heading, so a hot row here is a lead, not noise.
+Runs a grid of bench/sailing conditions (boat attitude, gyro turn-on bias,
+indoor mag, a sustained GNSS outage) through the real C++ EKF and ranks them by
+how far fused heading walks once GNSS drops. The attitude axis spans roll heel
+(the sailing regime) and pitch trim toward vertical (the bench regime): near
+90 deg pitch the ZYX-Euler heading kinematics go singular and sec(pitch)
+amplifies every error, which is where the drifty field captures actually sat.
+In the sailing envelope the drift stays bounded; a hot row there is a lead.
 
     uv run python examples/drift_sweep.py
     uv run python examples/drift_sweep.py --seeds 4 --duration 200 --top 12
@@ -29,6 +30,7 @@ import numpy as np
 
 from plrs_sim import (
     ConstantHeel,
+    ConstantTrim,
     GnssNoiseModel,
     ImuNoiseModel,
     LevelAttitude,
@@ -42,6 +44,7 @@ from plrs_sim.noise import MTI3_GYRO_WHITE_STD_RAD_S
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 from plrs_sim.tuning import load_tuning
+from plrs_sim.types import AttitudeProfile
 
 _DEG_TO_RAD = math.pi / 180.0
 
@@ -61,7 +64,7 @@ class Case:
     """One sweep condition; the grid is the product of the axes below."""
 
     name: str
-    heel_deg: float
+    attitude: AttitudeProfile
     bias_dps: Vec3  # body-frame gyro turn-on bias, deg/s
     mag: MagNoiseModel | None
     outage_start_s: float
@@ -76,16 +79,13 @@ class Result:
 
 
 def _source(case: Case, seed: int, duration_s: float) -> SimulatedSource:
-    attitude = (
-        ConstantHeel(angle_deg=case.heel_deg) if case.heel_deg else LevelAttitude()
-    )
     bias_rad = Vec3(
         x=case.bias_dps.x * _DEG_TO_RAD,
         y=case.bias_dps.y * _DEG_TO_RAD,
         z=case.bias_dps.z * _DEG_TO_RAD,
     )
     return SimulatedSource(
-        scenario=Scenario(heading=Static(heading_deg=0.0), attitude=attitude),
+        scenario=Scenario(heading=Static(heading_deg=0.0), attitude=case.attitude),
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=MTI3_GYRO_WHITE_STD_RAD_S,
             gyro_constant_bias_rad_s=bias_rad,
@@ -117,22 +117,31 @@ def _metrics(trace, outage_start_ms: int, seed: int) -> Result:
 
 
 def _grid() -> list[Case]:
-    heels = (0.0, 20.0, 45.0, 77.0)
+    # Roll heel is the sailing regime; trim (pitch) toward vertical is the bench
+    # regime, where sec(pitch) amplifies error into heading. trim85 is near the
+    # Euler blind spot the drifty field capture actually sat in.
+    attitudes = {
+        "level": LevelAttitude(),
+        "heel45": ConstantHeel(angle_deg=45.0),
+        "heel77": ConstantHeel(angle_deg=77.0),
+        "trim45": ConstantTrim(angle_deg=45.0),
+        "trim70": ConstantTrim(angle_deg=70.0),
+        "trim85": ConstantTrim(angle_deg=85.0),
+    }
     biases = {
         "no-bias": Vec3(x=0.0, y=0.0, z=0.0),
         "z-bias": Vec3(x=0.0, y=0.0, z=_BIAS_DPS),
         "y-bias": Vec3(x=0.0, y=_BIAS_DPS, z=0.0),
-        "xy-bias": Vec3(x=_BIAS_DPS, y=_BIAS_DPS, z=0.0),
     }
     mags = {"clean-mag": None, "indoor-mag": _INDOOR_MAG}
     cases = []
-    for heel, (bname, bias), (mname, mag) in itertools.product(
-        heels, biases.items(), mags.items()
+    for (aname, att), (bname, bias), (mname, mag) in itertools.product(
+        attitudes.items(), biases.items(), mags.items()
     ):
         cases.append(
             Case(
-                name=f"heel{heel:g}/{bname}/{mname}",
-                heel_deg=heel,
+                name=f"{aname}/{bname}/{mname}",
+                attitude=att,
                 bias_dps=bias,
                 mag=mag,
                 outage_start_s=30.0,
@@ -175,11 +184,20 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="revert the drift-fix tuning knobs, to reproduce the field drift",
     )
+    p.add_argument(
+        "--q-bias",
+        type=float,
+        default=None,
+        metavar="DEG2_S2",
+        help="override gyro-bias process noise (deg/s)^2; datasheet 6 deg/h ~= 3e-8",
+    )
     args = p.parse_args(argv)
 
     cfg = load_tuning()
     if args.baseline:
         cfg = _baseline_tuning(cfg)
+    if args.q_bias is not None:
+        cfg = replace(cfg, q_bias_deg2_s2=args.q_bias)
     ranked = sorted(
         ((c, _worst_over_seeds(c, args.seeds, args.duration, cfg)) for c in _grid()),
         key=lambda cr: cr[1].peak_err_deg,

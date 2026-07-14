@@ -12,6 +12,7 @@ import math
 import pytest
 
 from plrs_sim import (
+    ConstantTrim,
     ConstantTurn,
     LevelAttitude,
     Quaternion,
@@ -20,7 +21,7 @@ from plrs_sim import (
     StepTurns,
     WaveMotion,
 )
-from plrs_sim.attitude import conjugate, multiply
+from plrs_sim.attitude import conjugate, multiply, quaternion_to_euler_zyx
 from plrs_sim.truth import DEG_TO_RAD, sample_attitude, sample_heading
 
 
@@ -114,6 +115,18 @@ def test_level_attitude_is_identity_at_all_times() -> None:
     q2, omega2 = sample_attitude(LevelAttitude(), 999999)
     assert q2 == Quaternion.identity()
     assert omega2.x == 0.0 and omega2.y == 0.0 and omega2.z == 0.0
+
+
+def test_constant_trim_is_fixed_pitch_with_zero_rate() -> None:
+    # ConstantTrim holds a fixed pitch (rotation about body Y) with no roll,
+    # no yaw, and zero attitude-motion body rate, at any time.
+    for angle in (30.0, 60.0, -45.0):
+        q, omega = sample_attitude(ConstantTrim(angle_deg=angle), 7777)
+        roll, pitch, yaw = quaternion_to_euler_zyx(q)
+        assert pitch == pytest.approx(angle, abs=1e-6)
+        assert roll == pytest.approx(0.0, abs=1e-6)
+        assert yaw == pytest.approx(0.0, abs=1e-6)
+        assert omega.x == 0.0 and omega.y == 0.0 and omega.z == 0.0
 
 
 def test_wave_motion_amplitudes_and_phase() -> None:

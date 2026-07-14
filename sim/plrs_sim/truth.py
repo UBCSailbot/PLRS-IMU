@@ -20,6 +20,7 @@ from .attitude import euler_to_quaternion, from_axis_angle
 from .types import (
     AttitudeProfile,
     ConstantHeel,
+    ConstantTrim,
     ConstantTurn,
     HeadingProfile,
     LevelAttitude,
@@ -33,6 +34,7 @@ from .types import (
 
 DEG_TO_RAD = math.pi / 180.0
 _BODY_X = Vec3(x=1.0, y=0.0, z=0.0)
+_BODY_Y = Vec3(x=0.0, y=1.0, z=0.0)
 
 
 def sample_heading(profile: HeadingProfile, t_ms: int) -> tuple[float, float]:
@@ -64,6 +66,11 @@ def sample_attitude(profile: AttitudeProfile, t_ms: int) -> tuple[Quaternion, Ve
         case ConstantHeel(angle_deg=angle):
             return (
                 from_axis_angle(_BODY_X, angle * DEG_TO_RAD),
+                Vec3(x=0.0, y=0.0, z=0.0),
+            )
+        case ConstantTrim(angle_deg=angle):
+            return (
+                from_axis_angle(_BODY_Y, angle * DEG_TO_RAD),
                 Vec3(x=0.0, y=0.0, z=0.0),
             )
         case WaveMotion(
