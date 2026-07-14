@@ -259,14 +259,18 @@ class MagNoiseModel:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ImuNoiseModel:
-    """Additive gyro_z effects. None disables that effect.
+    """Gyro and mag corruption. None disables that effect.
 
-    gyro_bias_walk_std_rad_s_sqrt_s is the diffusion coefficient: the
-    per-step delta is drawn from N(0, sigma * sqrt(dt)).
+    gyro_constant_bias_rad_s is a fixed body-frame turn-on bias on all three
+    gyro axes: at heel a body X or Y bias projects into the heading rate, so
+    it is the lever behind heel-dependent heading drift. The white noise and
+    the bias random walk model the in-run behaviour of the vertical (z) gyro.
+    gyro_bias_walk_std_rad_s_sqrt_s is the diffusion coefficient: the per-step
+    delta is drawn from N(0, sigma * sqrt(dt)).
     """
 
     gyro_white_std_rad_s: float | None = None
-    gyro_constant_bias_rad_s: float | None = None
+    gyro_constant_bias_rad_s: Vec3 | None = None
     gyro_bias_walk_std_rad_s_sqrt_s: float | None = None
     # Std of a small random rotation added to the MTi orientation each
     # sample, in degrees. None leaves the quaternion noise-free.
@@ -278,6 +282,12 @@ class ImuNoiseModel:
 class GnssNoiseModel:
     heading_std_deg: float | None = None
     dropout_prob: float | None = None
+    # A sustained outage: no fix is emitted while t >= outage_start_s (and,
+    # if set, t < outage_end_s; None never recovers). This is the regime the
+    # field drift lives in -- heading has no absolute anchor, so bias and mag
+    # error walk it freely. Distinct from dropout_prob's per-sample coin flip.
+    outage_start_s: float | None = None
+    outage_end_s: float | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

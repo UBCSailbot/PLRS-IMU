@@ -32,11 +32,11 @@ def _imu(rate_z: float = 0.5) -> ImuSample:
     )
 
 
-def _gnss(heading: float = 45.0) -> GnssSample:
+def _gnss(heading: float = 45.0, timestamp_ms: int = 0) -> GnssSample:
     return GnssSample(
         heading_deg=heading,
         heading_variance_deg2=0.0,
-        timestamp_ms=0,
+        timestamp_ms=timestamp_ms,
         valid=True,
     )
 
@@ -49,10 +49,31 @@ def test_imu_no_model_returns_input() -> None:
 
 
 def test_imu_constant_bias_added_each_call() -> None:
-    n = ImuNoise(ImuNoiseModel(gyro_constant_bias_rad_s=0.1), np.random.default_rng(0))
+    n = ImuNoise(
+        ImuNoiseModel(gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=0.1)),
+        np.random.default_rng(0),
+    )
     for _ in range(5):
         out = n.corrupt(_imu(0.5), dt_s=0.01)
         assert out.angular_velocity_rad_s.z == pytest.approx(0.6)
+
+
+def test_imu_constant_bias_is_three_axis() -> None:
+    # A body-frame turn-on bias corrupts all three gyro axes, not just z; this
+    # is what lets a heeled X/Y bias project into heading (see ImuNoiseModel).
+    n = ImuNoise(
+        ImuNoiseModel(gyro_constant_bias_rad_s=Vec3(x=0.02, y=-0.03, z=0.1)),
+        np.random.default_rng(0),
+    )
+    clean = ImuSample(
+        angular_velocity_rad_s=Vec3(x=0.5, y=0.5, z=0.5),
+        accel_ms2=Vec3(x=0.0, y=0.0, z=GRAVITY_MS2),
+        timestamp_ms=0,
+    )
+    out = n.corrupt(clean, dt_s=0.01)
+    assert out.angular_velocity_rad_s.x == pytest.approx(0.52)
+    assert out.angular_velocity_rad_s.y == pytest.approx(0.47)
+    assert out.angular_velocity_rad_s.z == pytest.approx(0.6)
 
 
 def test_imu_white_noise_mean_and_std() -> None:
@@ -109,7 +130,7 @@ def test_imu_attitude_noise_perturbs_roll_and_pitch() -> None:
 def test_imu_same_seed_same_output() -> None:
     cfg = ImuNoiseModel(
         gyro_white_std_rad_s=0.01,
-        gyro_constant_bias_rad_s=0.005,
+        gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=0.005),
         gyro_bias_walk_std_rad_s_sqrt_s=0.001,
         mti_attitude_std_deg=1.0,
     )
@@ -152,6 +173,27 @@ def test_gnss_dropout_rate_matches_config() -> None:
     drops = sum(n.corrupt(_gnss(0.0)) is None for _ in range(10_000))
     observed = drops / 10_000
     assert abs(observed - p) < 0.02
+
+
+def test_gnss_outage_window_drops_fixes_in_range() -> None:
+    # A sustained outage nulls every fix while start <= t < end, and passes
+    # fixes on either side through untouched.
+    n = GnssNoise(
+        GnssNoiseModel(outage_start_s=10.0, outage_end_s=40.0),
+        np.random.default_rng(0),
+    )
+    assert n.corrupt(_gnss(timestamp_ms=9_000)) is not None
+    assert n.corrupt(_gnss(timestamp_ms=10_000)) is None
+    assert n.corrupt(_gnss(timestamp_ms=39_000)) is None
+    assert n.corrupt(_gnss(timestamp_ms=40_000)) is not None
+
+
+def test_gnss_outage_without_end_never_recovers() -> None:
+    # outage_end_s=None models a dropout that stays out for the rest of the run.
+    n = GnssNoise(GnssNoiseModel(outage_start_s=30.0), np.random.default_rng(0))
+    assert n.corrupt(_gnss(timestamp_ms=29_000)) is not None
+    assert n.corrupt(_gnss(timestamp_ms=30_000)) is None
+    assert n.corrupt(_gnss(timestamp_ms=600_000)) is None
 
 
 def test_gnss_same_seed_same_output() -> None:

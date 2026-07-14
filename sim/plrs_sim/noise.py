@@ -34,14 +34,16 @@ class ImuNoise:
     def __init__(self, model: ImuNoiseModel, rng: np.random.Generator) -> None:
         self._model = model
         self._rng = rng
-        self._bias = model.gyro_constant_bias_rad_s or 0.0
+        self._const = model.gyro_constant_bias_rad_s or Vec3(x=0.0, y=0.0, z=0.0)
+        # In-run wander accumulates on the vertical gyro only (see the model).
+        self._walk_z = 0.0
         self._mag_snap_err_deg = 0.0
         self._mag_iron_phase = rng.uniform(0.0, 2.0 * math.pi)
 
     def corrupt(self, clean: ImuSample, dt_s: float) -> ImuSample:
         walk_std = self._model.gyro_bias_walk_std_rad_s_sqrt_s
         if walk_std is not None and dt_s > 0.0:
-            self._bias += self._rng.normal(0.0, walk_std * math.sqrt(dt_s))
+            self._walk_z += self._rng.normal(0.0, walk_std * math.sqrt(dt_s))
 
         white_std = self._model.gyro_white_std_rad_s
         noise = self._rng.normal(0.0, white_std) if white_std is not None else 0.0
@@ -50,7 +52,9 @@ class ImuNoise:
         return replace(
             clean,
             angular_velocity_rad_s=Vec3(
-                x=gyro.x, y=gyro.y, z=gyro.z + self._bias + noise
+                x=gyro.x + self._const.x,
+                y=gyro.y + self._const.y,
+                z=gyro.z + self._const.z + self._walk_z + noise,
             ),
             orientation=self._perturb(self._mag_disturb(clean.orientation, dt_s)),
         )
@@ -92,8 +96,8 @@ class ImuNoise:
 
     @property
     def bias_rad_s(self) -> float:
-        """Current accumulated gyro_z bias (constant + random walk so far)."""
-        return self._bias
+        """Current accumulated gyro_z bias (constant z + random walk so far)."""
+        return self._const.z + self._walk_z
 
 
 class GnssNoise:
@@ -102,6 +106,13 @@ class GnssNoise:
         self._rng = rng
 
     def corrupt(self, clean: GnssSample) -> GnssSample | None:
+        start = self._model.outage_start_s
+        if start is not None:
+            t_s = clean.timestamp_ms / 1000.0
+            end = self._model.outage_end_s
+            if t_s >= start and (end is None or t_s < end):
+                return None
+
         dropout = self._model.dropout_prob
         if dropout is not None and self._rng.random() < dropout:
             return None

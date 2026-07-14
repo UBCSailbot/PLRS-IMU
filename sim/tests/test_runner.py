@@ -16,6 +16,7 @@ from plrs_sim import (
     Scenario,
     Sinusoidal,
     Static,
+    Vec3,
     load_tuning,
 )
 from plrs_sim.angles import wrap180
@@ -150,7 +151,7 @@ def test_tracks_through_realistic_noise_with_mag_aiding() -> None:
         Sinusoidal(amplitude_deg=30.0, period_s=20.0),
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=0.01,
-            gyro_constant_bias_rad_s=0.005,
+            gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=0.005),
             gyro_bias_walk_std_rad_s_sqrt_s=0.001,
             mti_attitude_std_deg=1.0,
         ),
@@ -174,7 +175,9 @@ def test_openloop_drifts_with_gyro_bias() -> None:
     trace = run(
         _src(
             Static(heading_deg=0.0),
-            imu_noise=ImuNoiseModel(gyro_constant_bias_rad_s=bias),
+            imu_noise=ImuNoiseModel(
+                gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=bias)
+            ),
             duration_s=5.0,
         ),
         CFG,
@@ -189,7 +192,9 @@ def test_ekf_cancels_bias_better_than_openloop() -> None:
     trace = run(
         _src(
             Static(heading_deg=0.0),
-            imu_noise=ImuNoiseModel(gyro_constant_bias_rad_s=bias),
+            imu_noise=ImuNoiseModel(
+                gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=bias)
+            ),
             gnss_noise=GnssNoiseModel(heading_std_deg=0.5),
             duration_s=10.0,
             seed=3,

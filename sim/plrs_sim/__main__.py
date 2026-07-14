@@ -29,6 +29,7 @@ from .types import (
     Sinusoidal,
     Static,
     StepTurns,
+    Vec3,
     WaveMotion,
 )
 
@@ -213,6 +214,11 @@ def _zero_to_none(x: float) -> float | None:
     return x if x > 0.0 else None
 
 
+def _z_bias(x: float) -> Vec3 | None:
+    """The --gyro-bias flag is a vertical-gyro scalar; wrap it as a body vector."""
+    return Vec3(x=0.0, y=0.0, z=x) if x > 0.0 else None
+
+
 def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
     """Prompt for view then (if needed) scenario; returns parsed args or None."""
     import questionary
@@ -306,7 +312,7 @@ def _cmd_monitor(args: argparse.Namespace) -> None:
             scenario=SCENARIOS[args.synthetic],
             imu_noise=ImuNoiseModel(
                 gyro_white_std_rad_s=0.01,
-                gyro_constant_bias_rad_s=0.005,
+                gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=0.005),
                 gyro_bias_walk_std_rad_s_sqrt_s=0.001,
                 mti_attitude_std_deg=1.0,
             ),
@@ -356,7 +362,7 @@ def _run_view(args: argparse.Namespace) -> None:
         scenario=SCENARIOS[args.scenario],
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=_zero_to_none(args.gyro_white),
-            gyro_constant_bias_rad_s=_zero_to_none(args.gyro_bias),
+            gyro_constant_bias_rad_s=_z_bias(args.gyro_bias),
             gyro_bias_walk_std_rad_s_sqrt_s=_zero_to_none(args.gyro_walk),
             mti_attitude_std_deg=_zero_to_none(args.mti_attitude_std),
         ),

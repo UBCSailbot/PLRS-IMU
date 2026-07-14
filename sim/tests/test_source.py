@@ -15,6 +15,7 @@ from plrs_sim import (
     ImuNoiseModel,
     Scenario,
     Static,
+    Vec3,
 )
 from plrs_sim.attitude import euler_to_quaternion, multiply, quaternion_to_euler_zyx
 from plrs_sim.source import SimulatedSource
@@ -76,7 +77,7 @@ def test_iteration_is_replayable() -> None:
         scenario=Scenario(heading=ConstantTurn(rate_deg_s=5.0)),
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=0.01,
-            gyro_constant_bias_rad_s=0.005,
+            gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=0.005),
             gyro_bias_walk_std_rad_s_sqrt_s=0.001,
         ),
         gnss_noise=GnssNoiseModel(heading_std_deg=1.0, dropout_prob=0.1),
