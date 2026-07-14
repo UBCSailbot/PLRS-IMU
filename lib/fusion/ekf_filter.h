@@ -28,6 +28,7 @@
 
 #include "attitude.h"
 #include "fusion.h"
+#include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <cstddef>
@@ -101,6 +102,18 @@ public:
    */
   static constexpr float HEADING_SIGMA_CAP_DEG = 180.0f;
   static constexpr float MAG_OFFSET_SIGMA_CAP_DEG = 60.0f;
+
+  /**
+   * Pitch magnitude past which the ZYX heading kinematics are clamped. Near
+   * 90 deg, sec(pitch) -> infinity and heading is undefined; feeding the raw
+   * pitch to the rate maps would drive the covariance to NaN and poison the
+   * filter for good. Clamping the pitch that feeds the kinematics (not the
+   * pitch state itself, which the MTi still measures) bounds the gain, keeps
+   * the state finite, and lets heading re-anchor from the mag and GNSS once
+   * the boat drops back below it. A boat never trims here; bench handling and
+   * knockdowns do, and rudder_task reports heading invalid while they last.
+   */
+  static constexpr float PITCH_KINEMATICS_LIMIT_DEG = 80.0f;
 
   /**
    * MTi yaw (magnetometer-referenced) heading aiding. variance_deg2 is the
@@ -181,11 +194,12 @@ public:
     // gyro-bias term, so it owes nothing to the EKF state. Compass sign (CW
     // positive), matching yaw_rate_dps; see docs/attitude.md.
     _raw_roll_deg = attitude.roll_deg;
-    _raw_yaw_rate_dps = -euler_rates_zyx(attitude.roll_deg * DEG_TO_RAD,
-                                         attitude.pitch_deg * DEG_TO_RAD,
-                                         imu.angular_velocity_rad_s)
-                             .yaw_dot *
-                        RAD_TO_DEG;
+    _raw_yaw_rate_dps =
+        -euler_rates_zyx(attitude.roll_deg * DEG_TO_RAD,
+                         clamp_pitch_deg(attitude.pitch_deg) * DEG_TO_RAD,
+                         imu.angular_velocity_rad_s)
+             .yaw_dot *
+        RAD_TO_DEG;
 
     if (!_has_predicted) {
       _last_predict_time = imu.timestamp;
@@ -201,7 +215,8 @@ public:
     _last_predict_time = imu.timestamp;
 
     const float roll_rad = _ekf.x[IDX_ROLL] * DEG_TO_RAD;
-    const float pitch_rad = _ekf.x[IDX_PITCH] * DEG_TO_RAD;
+    // Clamp the pitch feeding the singular kinematics, not the pitch state.
+    const float pitch_rad = clamp_pitch_deg(_ekf.x[IDX_PITCH]) * DEG_TO_RAD;
     // Body-frame bias correction before the kinematic mapping, so each bias
     // keeps correcting its own axis whatever the attitude.
     const plrs::Vec3 omega {
@@ -435,6 +450,15 @@ private:
     const float R[N_MEAS * N_MEAS] = {variance};
     ekf_update(&_ekf, zv, hxv, H, R);
     symmetrize_covariance();
+  }
+
+  /**
+   * @brief Clamp a pitch (deg) into the range the heading kinematics stay
+   * finite over. See PITCH_KINEMATICS_LIMIT_DEG.
+   */
+  static float clamp_pitch_deg(float pitch_deg) {
+    return std::clamp(
+        pitch_deg, -PITCH_KINEMATICS_LIMIT_DEG, PITCH_KINEMATICS_LIMIT_DEG);
   }
 
   /**

@@ -4,9 +4,10 @@ Static truth heading + a body-frame gyro turn-on bias + a sustained GNSS
 outage. In the sailing envelope (roll heel, moderate trim) the 3-axis bias
 state learns the bias before the outage and holds it, so heading does not
 ramp. Near 90 deg of pitch the ZYX-Euler heading kinematics go singular
-(sec(pitch) -> inf, NaN by ~89 deg) and heading is unreliable -- the regime
-the drifty bench captures sat in (pitch to 112 deg), and a known limitation
-captured here so a quaternion heading state would flip the xfail.
+(sec(pitch) -> inf) and heading stops being an accurate bearing -- the regime
+the drifty bench captures sat in (pitch to 112 deg). There the pitch clamp
+keeps the filter finite so it recovers, and rudder_task flags heading invalid;
+both are pinned below.
 
 See examples/drift_sweep.py for the interactive version of this grid.
 """
@@ -107,16 +108,12 @@ def test_yaxis_bias_at_heel_stays_bounded() -> None:
     assert peak < 12.0, f"{peak:.1f} deg"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="ZYX-Euler gimbal lock near 90 deg pitch; heading unreliable past "
-    "~85 deg (NaN by ~89). A boat never trims here, but bench handling and "
-    "knockdown can. Fix: a quaternion/rotation-vector heading state.",
-)
-def test_heading_survives_near_vertical_pitch() -> None:
-    # Documents the boundary: at 88 deg trim the sec(pitch) term blows heading
-    # up far past the sailing-envelope bounds. Flips to xpass once the state
-    # parameterization no longer goes singular near vertical.
-    peak, drift = _outage_drift(ConstantTrim(angle_deg=88.0))
-    assert drift < 0.12
-    assert peak < 12.0
+@pytest.mark.parametrize("pitch", [85.0, 88.0, 89.0])
+def test_heading_stays_finite_through_the_singularity(pitch) -> None:
+    # Near vertical, heading is not an accurate bearing (rudder_task flags it
+    # invalid), but the pitch clamp must keep it FINITE -- without it the
+    # covariance goes NaN by ~89 deg and never recovers. A NaN here would be a
+    # regression: heading must stay a number so it re-anchors on the way down.
+    peak, drift = _outage_drift(ConstantTrim(angle_deg=pitch))
+    assert math.isfinite(peak), f"pitch {pitch}: peak is {peak}"
+    assert math.isfinite(drift), f"pitch {pitch}: drift is {drift}"

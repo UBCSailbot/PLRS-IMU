@@ -47,8 +47,13 @@ Until the first IMU sample arrives, roll and pitch report infinite uncertainty
 quaternion inside the filter, but that needs extra bookkeeping TinyEKF (the
 library we use) doesn't provide. Heading, roll, and pitch as plain angles fit it
 directly and reuse the math in `attitude.h`. The one catch with plain angles is a
-blind spot at 90 deg of pitch, which is harmless here since a boat never trims
-near vertical.
+blind spot at 90 deg of pitch: heading is undefined pointing straight up, and the
+kinematics that map the gyro into heading rate blow up there. A boat never trims
+near vertical, so this never bites while sailing, but bench handling and a
+knockdown do reach it. Two guards keep it safe: the pitch feeding the kinematics
+is clamped (so the filter stays finite and re-anchors on the way back down
+instead of latching to NaN), and heading is reported invalid past that pitch, so
+the rudder ignores it rather than steering on a meaningless bearing.
 
 **The MTi corrects attitude, not heading.** Its orientation arrives about 100
 times a second. If it also corrected heading it would drown out the slower but

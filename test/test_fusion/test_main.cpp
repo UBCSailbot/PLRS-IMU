@@ -591,6 +591,74 @@ void test_body_frame_bias_survives_moderate_trim() {
   TEST_ASSERT_FLOAT_WITHIN(2.0f, TRUE_HEADING, f.output().heading_deg);
 }
 
+/**
+ * @brief The pitch clamp keeps the filter finite through a near-vertical
+ * excursion, so heading re-anchors once the boat drops back to level. Without
+ * PITCH_KINEMATICS_LIMIT_DEG the covariance would go NaN near 90 deg and never
+ * recover; this is the graceful-recovery guarantee.
+ */
+void test_heading_recovers_after_near_vertical_excursion() {
+  TinyEkfFilter f(make_mag_config());
+  const plrs::Vec3 gyro {0.0f, 0.0f, 0.0f};
+  const UnitQuaternion yaw_q =
+      axis_angle(0.0f, 0.0f, 1.0f, -MAG_COMPASS * DEG_TO_RAD);
+
+  // Converge level with GNSS.
+  for (int i = 0; i <= 200; i++) {
+    const Ms t {1000 + 100 * i};
+    f.predict(make_imu_with(gyro, yaw_q, t));
+    if (i % 5 == 0) {
+      f.update(make_gnss(TRUE_HEADING, 1.0f, t));
+    }
+  }
+
+  // Tip to 88 deg pitch with GNSS out for 20 s; the state must stay finite.
+  const UnitQuaternion vertical = UnitQuaternion::multiply(
+      yaw_q, axis_angle(0.0f, 1.0f, 0.0f, 88.0f * DEG_TO_RAD));
+  for (int i = 1; i <= 200; i++) {
+    f.predict(make_imu_with(gyro, vertical, Ms {21100 + 100 * i}));
+  }
+  TEST_ASSERT_TRUE(std::isfinite(f.output().heading_deg));
+
+  // Drop back to level with GNSS; heading must re-anchor to truth.
+  for (int i = 1; i <= 200; i++) {
+    const Ms t {41200 + 100 * i};
+    f.predict(make_imu_with(gyro, yaw_q, t));
+    if (i % 5 == 0) {
+      f.update(make_gnss(TRUE_HEADING, 1.0f, t));
+    }
+  }
+  TEST_ASSERT_TRUE(std::isfinite(f.output().heading_deg));
+  TEST_ASSERT_FLOAT_WITHIN(2.0f, TRUE_HEADING, f.output().heading_deg);
+}
+
+/** @brief heading_trustworthy gates on finiteness, variance, and pitch. */
+void test_heading_trustworthy_gates_variance_pitch_and_finiteness() {
+  const float max_var = 25.0f;
+  const float max_pitch = 80.0f;
+  fusion::FusionOutput ok {};
+  ok.heading_deg = 90.0f;
+  ok.heading_variance_deg2 = 4.0f;
+  ok.pitch_deg = 30.0f;
+  TEST_ASSERT_TRUE(fusion::heading_trustworthy(ok, max_var, max_pitch));
+
+  fusion::FusionOutput noisy = ok;
+  noisy.heading_variance_deg2 = 30.0f;
+  TEST_ASSERT_FALSE(fusion::heading_trustworthy(noisy, max_var, max_pitch));
+
+  fusion::FusionOutput steep = ok;
+  steep.pitch_deg = 85.0f;
+  TEST_ASSERT_FALSE(fusion::heading_trustworthy(steep, max_var, max_pitch));
+
+  fusion::FusionOutput steep_neg = ok;
+  steep_neg.pitch_deg = -85.0f;
+  TEST_ASSERT_FALSE(fusion::heading_trustworthy(steep_neg, max_var, max_pitch));
+
+  fusion::FusionOutput nan = ok;
+  nan.heading_deg = NAN;
+  TEST_ASSERT_FALSE(fusion::heading_trustworthy(nan, max_var, max_pitch));
+}
+
 /** @brief Heading stays wrapped to (-180, 180] after integrating past 180. */
 void test_predict_wraps_heading_past_180() {
   TinyEkfFilter f(kTestConfig);
@@ -675,6 +743,8 @@ int main(int, char **) {
   RUN_TEST(test_heading_variance_capped_without_mag);
   RUN_TEST(test_body_frame_bias_survives_heel_change);
   RUN_TEST(test_body_frame_bias_survives_moderate_trim);
+  RUN_TEST(test_heading_recovers_after_near_vertical_excursion);
+  RUN_TEST(test_heading_trustworthy_gates_variance_pitch_and_finiteness);
   RUN_TEST(test_predict_wraps_heading_past_180);
 
   RUN_TEST(test_unit_quaternion_identity_components);

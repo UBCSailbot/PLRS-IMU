@@ -172,6 +172,25 @@ struct FusionOutput {
 };
 
 /**
+ * @brief Whether a fused heading is trustworthy enough to steer on.
+ *
+ * Three ways it is not: a non-finite value (should never happen, but a hard
+ * backstop against a NaN reaching the rudder), a variance past max_variance
+ * (GNSS-unanchored and free-drifting), or a pitch past max_pitch of level,
+ * where the ZYX heading kinematics are singular and "heading" is not a
+ * well-defined compass bearing (see ekf_filter.h PITCH_KINEMATICS_LIMIT_DEG).
+ * Thresholds are the caller's policy; the rudder link carries the result as
+ * FusionOutput's heading_valid flag.
+ */
+inline bool heading_trustworthy(const FusionOutput &out,
+                                float max_variance_deg2,
+                                float max_pitch_deg) {
+  return std::isfinite(out.heading_deg) &&
+         out.heading_variance_deg2 <= max_variance_deg2 &&
+         std::fabs(out.pitch_deg) <= max_pitch_deg;
+}
+
+/**
  * @brief Compile-time interface every filter implementation must satisfy.
  *
  * @tparam F Filter type. predict() is called at IMU rate (~100 Hz) and

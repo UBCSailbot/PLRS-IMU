@@ -15,6 +15,12 @@ namespace rudder_task {
 // cleanly separates anchored from free-drifting. Tune to taste.
 static constexpr float HEADING_VALID_MAX_VARIANCE_DEG2 = 25.0f; // 5 deg sigma
 
+// ...and while pitch stays out of the near-vertical regime where the ZYX
+// heading is singular (matches the filter's PITCH_KINEMATICS_LIMIT_DEG). A
+// boat never trims here; bench handling and knockdowns do, and heading is not
+// a meaningful bearing while they last.
+static constexpr float HEADING_VALID_MAX_PITCH_DEG = 80.0f;
+
 void task(void *params) {
   auto &p = *static_cast<TaskParams *>(params);
   rudder::Sender sender;
@@ -25,8 +31,8 @@ void task(void *params) {
 
     fusion::FusionOutput out;
     if (xQueuePeek(p.heading_mailbox, &out, 0) == pdTRUE) {
-      const bool heading_valid =
-          out.heading_variance_deg2 <= HEADING_VALID_MAX_VARIANCE_DEG2;
+      const bool heading_valid = fusion::heading_trustworthy(
+          out, HEADING_VALID_MAX_VARIANCE_DEG2, HEADING_VALID_MAX_PITCH_DEG);
       p.uart.write(sender
                        .next(rudder::Attitude {.heading_deg = out.heading_deg,
                                                .roll_deg = out.roll_deg,
