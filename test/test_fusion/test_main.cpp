@@ -561,8 +561,9 @@ void test_body_frame_bias_survives_heel_change() {
  * @brief A learned vertical-gyro bias cancels at moderate pitch trim, where
  * sec(pitch) amplifies it into the heading rate. The pitch companion to the
  * heel test; past ~85 deg the ZYX-Euler kinematics go singular and this no
- * longer holds (the field bench regime), captured as an xfail in
- * tests/test_attitude_drift.py.
+ * longer holds (the field bench regime), where the clamp keeps heading finite
+ * rather than accurate -- see test_heading_recovers_after_near_vertical_excursion
+ * and tests/test_attitude_drift.py.
  */
 void test_body_frame_bias_survives_moderate_trim() {
   TinyEkfFilter f(make_mag_config());
