@@ -108,12 +108,19 @@ def test_yaxis_bias_at_heel_stays_bounded() -> None:
     assert peak < 12.0, f"{peak:.1f} deg"
 
 
-@pytest.mark.parametrize("pitch", [85.0, 88.0, 89.0])
+# 85/88/89 clamp (>80) but sec(pitch) is still finite there, so they alone would
+# pass even with the clamp removed. 90 and 95 hit the true singularity, where an
+# unclamped sec(pitch) is inf/negative and NaN-poisons the covariance -- those
+# cases are what make this assertion actually depend on PITCH_KINEMATICS_LIMIT_DEG.
+@pytest.mark.parametrize("pitch", [85.0, 88.0, 89.0, 90.0, 95.0])
 def test_heading_stays_finite_through_the_singularity(pitch) -> None:
     # Near vertical, heading is not an accurate bearing (rudder_task flags it
     # invalid), but the pitch clamp must keep it FINITE -- without it the
-    # covariance goes NaN by ~89 deg and never recovers. A NaN here would be a
+    # covariance goes NaN at 90 deg and never recovers. A NaN here would be a
     # regression: heading must stay a number so it re-anchors on the way down.
+    # Recovery-to-level after the excursion is pinned on the C++ side, in
+    # test_heading_recovers_after_near_vertical_excursion (the sim's attitude
+    # profiles are each a single fixed pose, so they cannot sweep back to level).
     peak, drift = _outage_drift(ConstantTrim(angle_deg=pitch))
     assert math.isfinite(peak), f"pitch {pitch}: peak is {peak}"
     assert math.isfinite(drift), f"pitch {pitch}: drift is {drift}"
