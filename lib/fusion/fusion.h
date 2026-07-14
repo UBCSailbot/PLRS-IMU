@@ -29,6 +29,17 @@ constexpr float DEG_TO_RAD = std::numbers::pi_v<float> / 180.0f;
 #endif
 
 /**
+ * Pitch magnitude (deg) past which the ZYX heading kinematics are singular.
+ * Near 90 deg, sec(pitch) -> infinity and heading is not a well-defined
+ * compass bearing. The filter clamps the pitch feeding its rate maps here to
+ * keep the covariance finite (see ekf_filter.h), and the rudder reports
+ * heading invalid past it (see heading_trustworthy). A boat never trims this
+ * far; bench handling and knockdowns do. The two consumers key off this one
+ * value so they cannot drift apart.
+ */
+constexpr float PITCH_KINEMATICS_LIMIT_DEG = 80.0f;
+
+/**
  * Quaternion known to be unit-norm by construction.
  *
  * Built only via `identity()`, `from_raw()`, `multiply()`, or
@@ -178,9 +189,9 @@ struct FusionOutput {
  * backstop against a NaN reaching the rudder), a variance past max_variance
  * (GNSS-unanchored and free-drifting), or a pitch past max_pitch of level,
  * where the ZYX heading kinematics are singular and "heading" is not a
- * well-defined compass bearing (see ekf_filter.h PITCH_KINEMATICS_LIMIT_DEG).
+ * well-defined compass bearing (see PITCH_KINEMATICS_LIMIT_DEG).
  * Thresholds are the caller's policy; the rudder link carries the result as
- * FusionOutput's heading_valid flag.
+ * the Attitude message's heading_valid flag.
  */
 inline bool heading_trustworthy(const FusionOutput &out,
                                 float max_variance_deg2,

@@ -468,20 +468,28 @@ void test_mag_gate_forced_accept_after_limit() {
   });
 
   const float before = f.output().heading_deg;
-  const uint32_t steps = TinyEkfFilter::MTI_YAW_GATE_LIMIT + 100;
-  for (uint32_t i = 1; i <= steps; i++) {
+  auto step_snapped_mag = [&](uint32_t i) {
     ImuSample imu = make_mag_imu(0.0f, Ms {11100 + 100 * i});
     imu.orientation =
         axis_angle(0.0f, 0.0f, 1.0f, -(MAG_COMPASS + 40.0f) * DEG_TO_RAD);
     f.predict(imu);
+  };
+
+  // Right after convergence the heading variance is small, so the 40-deg snap
+  // fails the gate: it is rejected and heading stays pinned. This proves the
+  // gate holds the snap off, not that heading merely failed to drift.
+  for (uint32_t i = 1; i <= 5; i++) {
+    step_snapped_mag(i);
   }
-  // By forced-accept time the unaided heading variance has grown enough
-  // that the accepted update hands the mag most of the authority: correct,
-  // since after 30 s with no other reference the mag is the best guess.
-  const float moved = std::abs(wrap180(f.output().heading_deg - before));
-  TEST_ASSERT_TRUE(moved > 5.0f);
-  TEST_ASSERT_TRUE(f.debug().mag_gate_rejects <
-                   TinyEkfFilter::MTI_YAW_GATE_LIMIT);
+  TEST_ASSERT_TRUE(std::abs(wrap180(f.output().heading_deg - before)) < 1.0f);
+  TEST_ASSERT_EQUAL_UINT32(5, f.debug().mag_gate_rejects);
+
+  // Held through a long snap, the mag eventually takes most of the authority:
+  // correct, since after 30 s with no other reference it is the best guess.
+  for (uint32_t i = 6; i <= TinyEkfFilter::MTI_YAW_GATE_LIMIT + 100; i++) {
+    step_snapped_mag(i);
+  }
+  TEST_ASSERT_TRUE(std::abs(wrap180(f.output().heading_deg - before)) > 5.0f);
 }
 
 /** @brief Through an indefinite degraded outage (mag snapped 90 deg, no
@@ -562,8 +570,8 @@ void test_body_frame_bias_survives_heel_change() {
  * sec(pitch) amplifies it into the heading rate. The pitch companion to the
  * heel test; past ~85 deg the ZYX-Euler kinematics go singular and this no
  * longer holds (the field bench regime), where the clamp keeps heading finite
- * rather than accurate -- see test_heading_recovers_after_near_vertical_excursion
- * and tests/test_attitude_drift.py.
+ * rather than accurate -- see the recovery test below and
+ * tests/test_attitude_drift.py.
  */
 void test_body_frame_bias_survives_moderate_trim() {
   TinyEkfFilter f(make_mag_config());

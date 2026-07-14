@@ -104,18 +104,6 @@ public:
   static constexpr float MAG_OFFSET_SIGMA_CAP_DEG = 60.0f;
 
   /**
-   * Pitch magnitude past which the ZYX heading kinematics are clamped. Near
-   * 90 deg, sec(pitch) -> infinity and heading is undefined; feeding the raw
-   * pitch to the rate maps would drive the covariance to NaN and poison the
-   * filter for good. Clamping the pitch that feeds the kinematics (not the
-   * pitch state itself, which the MTi still measures) bounds the gain, keeps
-   * the state finite, and lets heading re-anchor from the mag and GNSS once
-   * the boat drops back below it. A boat never trims here; bench handling and
-   * knockdowns do, and rudder_task reports heading invalid while they last.
-   */
-  static constexpr float PITCH_KINEMATICS_LIMIT_DEG = 80.0f;
-
-  /**
    * MTi yaw (magnetometer-referenced) heading aiding. variance_deg2 is the
    * per-sample measurement noise; q_offset_deg2 and p0_offset_deg2 shape the
    * mag-offset state (how fast the mag's yaw error may move, and how much the
@@ -283,6 +271,10 @@ public:
                   _ekf.x[IDX_PITCH],
                   attitude.pitch_deg,
                   _cfg.mti_pitch_variance_deg2);
+    // The roll/pitch updates can nudge heading through the P cross terms; wrap
+    // so output() never reports heading just outside (-180, 180], including on
+    // the gated mag early-return below.
+    _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
 
     if (_cfg.mti_yaw) {
       // ENU yaw negated into compass sign (see docs/attitude.md); the offset
@@ -351,6 +343,10 @@ public:
     _gate_rejects = 0;
     scalar_update(H_HEADING, hx, hx + innovation, gnss.heading_variance_deg2);
     _ekf.x[IDX_HEADING] = wrap180(_ekf.x[IDX_HEADING]);
+    // A fresh GNSS anchor makes any accumulated mag disagreement stale, so
+    // reset the mag patience counter: the forced-accept exists for a filter
+    // adrift without GNSS, not while GNSS is actively steering heading.
+    _mag_gate_rejects = 0;
   }
 
   /**
