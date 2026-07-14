@@ -67,7 +67,8 @@ def _outage_drift(attitude, *, bias=_Z_BIAS, mag=None, seed=0):
     resid = wrap180(ch.estimate[win] - ch.truth[win])
     est = np.degrees(np.unwrap(np.radians(ch.estimate[win])))
     dt = float(tr.t_ms[win][-1] - tr.t_ms[win][0]) / 1000.0
-    return float(np.max(np.abs(resid))), abs(est[-1] - est[0]) / dt
+    drift = abs(est[-1] - est[0]) / dt if dt > 0.0 else 0.0
+    return float(np.max(np.abs(resid))), drift
 
 
 @pytest.mark.parametrize(
