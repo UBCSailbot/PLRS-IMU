@@ -24,8 +24,11 @@ echo "[pre-push] python sim tests..."
 echo "[pre-push] sim images..."
 make sim-images
 if ! git diff --exit-code HEAD -- docs/images/ > /dev/null 2>&1; then
-  echo "[pre-push] docs/images/ changed -- commit the updated screenshots before pushing."
+  echo "[pre-push] docs/images/ changed -- committing the regenerated screenshots."
   git diff --stat HEAD -- docs/images/
+  git add docs/images/
+  git commit -m "Update sim screenshots"
+  echo "[pre-push] screenshots committed; re-run 'git push' to include them."
   exit 1
 fi
 
