@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Generate the merged compile_commands.json that clangd reads.
 #
-# Sourced from flake.nix shellHook so it runs every time the devshell is
-# entered. Lives as a standalone file because the bash heredoc for .clangd
-# doesn't survive nix string quoting + nixfmt cleanly inside flake.nix.
+# Called from .envrc with a find-newer guard; only runs when a source file or
+# platformio.ini is newer than the existing database.
 #
 # `pio compiledb` overwrites the project-root compile_commands.json on each
 # run, so we capture each env's output before invoking the next. The pico
@@ -19,10 +18,14 @@ pico=".pio/compile_commands.pico.json"
 rm -f "$native" "$pico" compile_commands.json
 
 # Pre-install lib_deps so their include paths appear in the compile
-# databases. pio run -t compiledb also installs them, but doing it here
-# makes failures visible independently of the compiledb step.
-pio pkg install -e native 2>/dev/null || true
-pio pkg install -e pico 2>/dev/null || true
+# databases. Skip if libdeps are present and platformio.ini hasn't changed;
+# pio run -t compiledb will re-install if the skip was wrong.
+if [[ ! -d .pio/libdeps/native ]] || [[ platformio.ini -nt .pio/libdeps/native ]]; then
+  pio pkg install -e native 2>/dev/null || true
+fi
+if [[ ! -d .pio/libdeps/pico ]] || [[ platformio.ini -nt .pio/libdeps/pico ]]; then
+  pio pkg install -e pico 2>/dev/null || true
+fi
 
 pio run -e native -t compiledb 2>/dev/null || true
 [ -f compile_commands.json ] && mv compile_commands.json "$native"
