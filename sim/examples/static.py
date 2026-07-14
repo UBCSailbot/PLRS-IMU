@@ -6,16 +6,23 @@ drifts at the bias rate while the EKF stays pinned by GNSS.
 
 from __future__ import annotations
 
-from plrs_sim import EkfConfig, GnssNoiseModel, ImuNoiseModel, Static
-from plrs_sim.plot import plot_heading
+from plrs_sim import (
+    EkfConfig,
+    GnssNoiseModel,
+    ImuNoiseModel,
+    Scenario,
+    Static,
+    Vec3,
+)
+from plrs_sim.plot import plot_trace
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 
 src = SimulatedSource(
-    trajectory=Static(heading_deg=30.0),
+    scenario=Scenario(heading=Static(heading_deg=30.0)),
     imu_noise=ImuNoiseModel(
         gyro_white_std_rad_s=0.01,
-        gyro_constant_bias_rad_s=0.015,
+        gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=0.015),
         gyro_bias_walk_std_rad_s_sqrt_s=0.001,
     ),
     gnss_noise=GnssNoiseModel(heading_std_deg=1.0),
@@ -28,4 +35,4 @@ cfg = EkfConfig(
     p0_heading_deg2=1000.0,
     p0_bias_deg2_s2=1.0,
 )
-plot_heading(run(src, cfg), title="Static heading 30 deg, drifting gyro")
+plot_trace(run(src, cfg), title="Static heading 30 deg, drifting gyro")
