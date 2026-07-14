@@ -42,26 +42,38 @@ class ImuNoise:
         self._model = model
         self._rng = rng
         self._const = model.gyro_constant_bias_rad_s or Vec3(x=0.0, y=0.0, z=0.0)
-        # In-run wander accumulates on the vertical gyro only (see the model).
-        self._walk_z = 0.0
+        # In-run bias wander accumulates independently on each gyro axis.
+        self._walk = Vec3(x=0.0, y=0.0, z=0.0)
         self._mag_snap_err_deg = 0.0
         self._mag_iron_phase = rng.uniform(0.0, 2.0 * math.pi)
 
     def corrupt(self, clean: ImuSample, dt_s: float) -> ImuSample:
         walk_std = self._model.gyro_bias_walk_std_rad_s_sqrt_s
         if walk_std is not None and dt_s > 0.0:
-            self._walk_z += self._rng.normal(0.0, walk_std * math.sqrt(dt_s))
+            step = walk_std * math.sqrt(dt_s)
+            self._walk = Vec3(
+                x=self._walk.x + self._rng.normal(0.0, step),
+                y=self._walk.y + self._rng.normal(0.0, step),
+                z=self._walk.z + self._rng.normal(0.0, step),
+            )
 
         white_std = self._model.gyro_white_std_rad_s
-        noise = self._rng.normal(0.0, white_std) if white_std is not None else 0.0
+        if white_std is not None:
+            white = Vec3(
+                x=self._rng.normal(0.0, white_std),
+                y=self._rng.normal(0.0, white_std),
+                z=self._rng.normal(0.0, white_std),
+            )
+        else:
+            white = Vec3(x=0.0, y=0.0, z=0.0)
 
         gyro = clean.angular_velocity_rad_s
         return replace(
             clean,
             angular_velocity_rad_s=Vec3(
-                x=gyro.x + self._const.x,
-                y=gyro.y + self._const.y,
-                z=gyro.z + self._const.z + self._walk_z + noise,
+                x=gyro.x + self._const.x + self._walk.x + white.x,
+                y=gyro.y + self._const.y + self._walk.y + white.y,
+                z=gyro.z + self._const.z + self._walk.z + white.z,
             ),
             orientation=self._perturb(self._mag_disturb(clean.orientation, dt_s)),
         )
@@ -102,9 +114,13 @@ class ImuNoise:
         return float(self._rng.normal(0.0, std_rad))
 
     @property
-    def bias_rad_s(self) -> float:
-        """Current accumulated gyro_z bias (constant z + random walk so far)."""
-        return self._const.z + self._walk_z
+    def bias_rad_s(self) -> Vec3:
+        """Current accumulated gyro bias per axis (constant + random walk)."""
+        return Vec3(
+            x=self._const.x + self._walk.x,
+            y=self._const.y + self._walk.y,
+            z=self._const.z + self._walk.z,
+        )
 
 
 class GnssNoise:

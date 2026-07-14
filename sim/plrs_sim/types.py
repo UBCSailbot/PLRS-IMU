@@ -279,9 +279,9 @@ class ImuNoiseModel:
     gyro_constant_bias_rad_s is a fixed body-frame turn-on bias on all three
     gyro axes: at heel a body X or Y bias projects into the heading rate, so
     it is the lever behind heel-dependent heading drift. The white noise and
-    the bias random walk model the in-run behaviour of the vertical (z) gyro.
-    gyro_bias_walk_std_rad_s_sqrt_s is the diffusion coefficient: the per-step
-    delta is drawn from N(0, sigma * sqrt(dt)).
+    the bias random walk apply independently to all three axes, matching the
+    MTi-3's per-axis noise spec. gyro_bias_walk_std_rad_s_sqrt_s is the
+    diffusion coefficient: the per-step delta is drawn from N(0, sigma * sqrt(dt)).
     """
 
     gyro_white_std_rad_s: float | None = None

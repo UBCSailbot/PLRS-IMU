@@ -99,7 +99,7 @@ def test_imu_bias_random_walk_grows_with_time() -> None:
         n = ImuNoise(cfg, np.random.default_rng(trial_seed))
         for _ in range(1000):
             n.corrupt(_imu(0.0), dt_s=0.01)
-        finals.append(n.bias_rad_s)
+        finals.append(n.bias_rad_s.z)
 
     expected_std = walk * math.sqrt(0.01 * 1000)
     observed_std = float(np.std(finals))
