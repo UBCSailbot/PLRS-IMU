@@ -9,9 +9,9 @@
 heading_deg2 = 0.01           # heading
 roll_deg2 = 0.01              # roll
 pitch_deg2 = 0.01             # pitch
-# The MTi-3's in-run bias wanders ~10 deg/h; anything much looser lets a run
-# of marginal fixes retrain the bias into a heading ramp for the next outage.
-# One value covers all three body-axis biases (the spec is per-axis).
+# The MTi-3's in-run bias stability is 6 deg/h (datasheet); anything much
+# looser lets a run of marginal fixes retrain the bias into a heading ramp for
+# the next outage. One value covers all three body-axis biases (spec is per-axis).
 gyro_bias_deg2_s2 = 0.000001  # slow gyro drift, per body axis, (deg/s)^2
 
 # Startup uncertainty. Large is fine for the angles: it washes out within a

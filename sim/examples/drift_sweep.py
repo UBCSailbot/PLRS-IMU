@@ -38,6 +38,7 @@ from plrs_sim import (
     Vec3,
 )
 from plrs_sim.angles import wrap180
+from plrs_sim.noise import MTI3_GYRO_WHITE_STD_RAD_S
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
 from plrs_sim.tuning import load_tuning
@@ -86,7 +87,7 @@ def _source(case: Case, seed: int, duration_s: float) -> SimulatedSource:
     return SimulatedSource(
         scenario=Scenario(heading=Static(heading_deg=0.0), attitude=attitude),
         imu_noise=ImuNoiseModel(
-            gyro_white_std_rad_s=0.01,
+            gyro_white_std_rad_s=MTI3_GYRO_WHITE_STD_RAD_S,
             gyro_constant_bias_rad_s=bias_rad,
             mti_attitude_std_deg=0.5,
             mag=case.mag,

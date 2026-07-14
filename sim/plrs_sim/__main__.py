@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .attitude import euler_to_quaternion
 from .boat3d import plot_mounting
+from .noise import MTI3_GYRO_WHITE_STD_RAD_S
 from .plot import plot_animate, plot_pose, plot_trace
 from .runner import run
 from .source import SimulatedSource
@@ -109,8 +110,8 @@ def _build_parser() -> argparse.ArgumentParser:
     sim.add_argument(
         "--gyro-white",
         type=float,
-        default=0.01,
-        help="gyro white-noise std (rad/s); 0 disables",
+        default=MTI3_GYRO_WHITE_STD_RAD_S,
+        help="gyro white-noise std (rad/s); 0 disables (default: MTi-3 datasheet)",
     )
     sim.add_argument(
         "--gyro-bias",
@@ -311,7 +312,7 @@ def _cmd_monitor(args: argparse.Namespace) -> None:
         source = SimulatedSource(
             scenario=SCENARIOS[args.synthetic],
             imu_noise=ImuNoiseModel(
-                gyro_white_std_rad_s=0.01,
+                gyro_white_std_rad_s=MTI3_GYRO_WHITE_STD_RAD_S,
                 gyro_constant_bias_rad_s=Vec3(x=0.0, y=0.0, z=0.005),
                 gyro_bias_walk_std_rad_s_sqrt_s=0.001,
                 mti_attitude_std_deg=1.0,

@@ -29,6 +29,13 @@ from .types import (
 
 _WORLD_Z = Vec3(x=0.0, y=0.0, z=1.0)
 
+# MTi-3 gyro white noise, from the datasheet noise density 0.003 deg/s/sqrt(Hz)
+# discretized to the 100 Hz IMU rate as a per-sample std, sigma = density /
+# sqrt(dt). The synthetic gyro should carry the sensor's real noise floor, not
+# a hand-picked one; ~5.2e-4 rad/s.
+_IMU_DT_S = 0.01
+MTI3_GYRO_WHITE_STD_RAD_S = math.radians(0.003) / math.sqrt(_IMU_DT_S)
+
 
 class ImuNoise:
     def __init__(self, model: ImuNoiseModel, rng: np.random.Generator) -> None:
