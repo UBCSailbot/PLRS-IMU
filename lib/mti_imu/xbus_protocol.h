@@ -75,20 +75,6 @@ constexpr uint8_t twosComplement(const uint8_t num) {
   return static_cast<uint8_t>(0x100 - num);
 }
 
-constexpr uint16_t read_u16_big_endian(ByteSpan b) {
-  return static_cast<uint16_t>((b[0] << 8) | b[1]);
-}
-
-constexpr std::array<uint8_t, 2> write_u16_big_endian(uint16_t v) {
-  return {static_cast<uint8_t>(v >> 8), static_cast<uint8_t>(v & 0xFF)};
-}
-
-constexpr float read_f32_big_endian(ByteSpan b) {
-  uint32_t u = (uint32_t(b[0] << 24) | (uint32_t(b[1]) << 16) |
-                uint32_t(b[2]) << 8 | uint32_t(b[3]));
-  return std::bit_cast<float>(u);
-}
-
 /*
  * Messages and Validation.
  */
@@ -122,7 +108,7 @@ struct Packet {
    * @param bid  Bus ID of the target device. Defaults to BID_MASTER.
    *
    * @return A packet with all extra fields filled in, or an error string if
-   *         the payload exceeds MAX_PAYLOAD.
+   * the payload exceeds MAX_PAYLOAD.
    */
   static constexpr std::expected<Packet, const char *>
   command(MID mid, ByteSpan payload, uint8_t bid = BID_MASTER) {
@@ -151,7 +137,7 @@ struct Packet {
  * @param *data: Message pointer.
  *
  * @return The sum of all message bytes excluding the preamble.
- *         If the lower byte value of the result is zero, the result is valid.
+ * If the lower byte value of the result is zero, the result is valid.
  */
 constexpr uint8_t
 checksum(uint8_t bid, uint8_t mid, std::span<const uint8_t> data) {
@@ -209,8 +195,9 @@ constexpr std::array<uint8_t, N * OUTPUT_ITEM_BYTES>
 build_output_config(const std::array<OutputItem, N> &items) {
   std::array<uint8_t, N * OUTPUT_ITEM_BYTES> out {};
   for (std::size_t i = 0; i < N; i++) {
-    const auto id = write_u16_big_endian(static_cast<uint16_t>(items[i].id));
-    const auto rate = write_u16_big_endian(items[i].rate_hz);
+    const auto id =
+        plrs::write_u16_big_endian(static_cast<uint16_t>(items[i].id));
+    const auto rate = plrs::write_u16_big_endian(items[i].rate_hz);
     const std::size_t base = i * OUTPUT_ITEM_BYTES;
     out[base + 0] = id[0];
     out[base + 1] = id[1];
@@ -397,7 +384,7 @@ constexpr std::size_t QUATERNION_BYTES = 4 * sizeof(float);
  * @param packet  The MTData2 packet to search.
  *
  * @return The quaternion, or nullopt if no Quaternion sub-packet is present
- *   or its payload is not exactly 16 bytes (4 x float32).
+ * or its payload is not exactly 16 bytes (4 x float32).
  */
 inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet);
 
@@ -426,7 +413,7 @@ inline std::optional<plrs::Quaternion> read_quaternion(const Packet &packet) {
     return std::nullopt;
   }
   auto take = [&](std::size_t idx) {
-    return read_f32_big_endian(
+    return plrs::read_f32_big_endian(
         sub->bytes.subspan(idx * sizeof(float), sizeof(float)));
   };
   return plrs::Quaternion {
