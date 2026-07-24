@@ -111,6 +111,10 @@ class MtiYawConfig:
     variance_deg2: float
     q_offset_deg2: float
     p0_offset_deg2: float
+    # Offset random walk once GNSS has been absent past the outage grace; None
+    # keeps q_offset_deg2 through the outage (the fail-safe default). A trusted
+    # mag sets it small to hold heading through the outage. See docs/tuning.md.
+    q_offset_outage_deg2: float | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
