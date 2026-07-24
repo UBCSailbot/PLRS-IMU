@@ -98,6 +98,18 @@ def test_cli_analyze_prints_iron_summary(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert "soft iron (2/rev)" in out
     assert "12/12 sectors" in out
+    assert "VERDICT" in out  # the analyzer interprets itself, not just numbers
+
+
+def test_select_analyze_without_captures_is_graceful(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    # A newcomer with no captures gets a clear message, not a crash.
+    from plrs_sim.__main__ import _build_parser, _select_analyze
+
+    monkeypatch.chdir(tmp_path)
+    assert _select_analyze(_build_parser()) is None
+    assert "No captures" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("view", ["mounting", "pose"])

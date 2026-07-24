@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from plrs_sim.attitude import from_axis_angle
-from plrs_sim.magcal import analyze_capture, fit_heading_harmonics
+from plrs_sim.magcal import HarmonicFit, analyze_capture, fit_heading_harmonics
 from plrs_sim.telemetry import GnssRecord, ImuRecord, format_record
 from plrs_sim.types import Vec3
 
@@ -80,3 +80,39 @@ def test_low_coverage_is_flagged() -> None:
 def test_empty_capture_raises() -> None:
     with pytest.raises(ValueError):
         analyze_capture(["# just a boot message", "garbage"])
+
+
+def _fit(**overrides) -> HarmonicFit:
+    base = dict(
+        n_samples=120,
+        bins_covered=12,
+        constant_deg=5.0,
+        hard_iron_amp_deg=0.5,
+        soft_iron_amp_deg=0.5,
+        residual_rms_deg=0.5,
+        uncorrected_rms_deg=0.5,
+    )
+    base.update(overrides)
+    return HarmonicFit(**base)
+
+
+def test_verdict_low_coverage() -> None:
+    v = _fit(bins_covered=4).verdict()
+    assert "not enough heading coverage" in v.lower()
+
+
+def test_verdict_clean_mag_recommends_pin() -> None:
+    v = _fit(uncorrected_rms_deg=1.0).verdict()
+    assert "SAFE" in v and "q_offset_outage_deg2" in v
+
+
+def test_verdict_correctable_iron() -> None:
+    v = _fit(
+        soft_iron_amp_deg=8.0, uncorrected_rms_deg=6.0, residual_rms_deg=1.0
+    ).verdict()
+    assert "correctable" in v.lower() and "soft iron" in v.lower()
+
+
+def test_verdict_wander_leaves_pin_off() -> None:
+    v = _fit(uncorrected_rms_deg=8.0, residual_rms_deg=5.0).verdict()
+    assert "OFF" in v and "fail" in v.lower()

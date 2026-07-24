@@ -39,6 +39,12 @@ from .telemetry import GnssRecord, ImuRecord, parse_line
 # flagged unreliable rather than trusted.
 _COVERAGE_BINS = 12
 
+# Verdict thresholds (deg rms). Judgment calls, deliberately conservative: below
+# _CLEAN the mag can be trusted as-is; a low _RESIDUAL with high iron means the
+# error is a steady (correctable) iron pattern rather than random wander.
+_CLEAN_RMS_DEG = 2.0
+_CORRECTABLE_RESIDUAL_DEG = 2.0
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class HarmonicFit:
@@ -76,6 +82,41 @@ class HarmonicFit:
             f"  soft iron (2/rev):                {soft} deg\n"
             f"  residual after 0/1/2:  {resid} deg rms (uncorrectable floor)\n"
             f"  offset removed only:   {unc} deg rms (iron left in)"
+        )
+
+    def verdict(self) -> str:
+        """Plain-language reading of the fit and what to do about the pin."""
+        if not self.coverage_ok:
+            return (
+                "VERDICT: not enough heading coverage to trust this yet. Cover "
+                "more of the compass (trailer circles, or let the boat swing at a "
+                "mooring) and re-run."
+            )
+        dominant = (
+            "soft iron (2/rev)"
+            if self.soft_iron_amp_deg >= self.hard_iron_amp_deg
+            else "hard iron (1/rev)"
+        )
+        if self.uncorrected_rms_deg < _CLEAN_RMS_DEG:
+            return (
+                f"VERDICT: mag looks clean as used ({self.uncorrected_rms_deg:.1f} "
+                "deg rms of heading-dependent error). The outage pin "
+                "(q_offset_outage_deg2 in tuning.toml) is likely SAFE to enable "
+                "for heading hold through long GPS gaps. Confirm time-stability "
+                "with a long stationary log before trusting it."
+            )
+        if self.residual_rms_deg < _CORRECTABLE_RESIDUAL_DEG:
+            return (
+                f"VERDICT: {dominant} dominates ({self.hard_iron_amp_deg:.1f} deg "
+                f"1/rev, {self.soft_iron_amp_deg:.1f} deg 2/rev) but the pattern is "
+                f"steady (residual {self.residual_rms_deg:.1f} deg), so it is "
+                "correctable. Calibrate it out (MTi field map, or our own "
+                "correction), then the pin is viable. Until then, leave it OFF."
+            )
+        return (
+            f"VERDICT: mag error is large and not a clean iron pattern (residual "
+            f"{self.residual_rms_deg:.1f} deg rms of unmodeled wander). Leave the "
+            "outage pin OFF so heading fails safe during a GPS gap."
         )
 
 
