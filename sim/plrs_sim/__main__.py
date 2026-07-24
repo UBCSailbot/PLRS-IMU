@@ -235,6 +235,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="sensor-alignment view: live IMU axes vs GNSS heading on a level hull",
     )
 
+    ana = sub.add_parser(
+        "analyze",
+        help="characterize a capture's magnetometer against GNSS (hard/soft iron)",
+    )
+    ana.add_argument("capture", type=Path, help="telemetry capture file (I/M/G lines)")
+
     return p
 
 
@@ -319,8 +325,17 @@ def main(argv: list[str] | None = None) -> None:
 def _dispatch(args: argparse.Namespace) -> None:
     if args.cmd == "monitor":
         _cmd_monitor(args)
+    elif args.cmd == "analyze":
+        _cmd_analyze(args)
     else:
         _run_view(args)
+
+
+def _cmd_analyze(args: argparse.Namespace) -> None:
+    from .magcal import analyze_capture
+
+    with args.capture.open() as f:
+        print(analyze_capture(f).summary())
 
 
 def _cmd_monitor(args: argparse.Namespace) -> None:

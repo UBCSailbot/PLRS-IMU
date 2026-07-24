@@ -62,7 +62,7 @@ class HarmonicFit:
     def summary(self) -> str:
         cov = (
             f"{self.bins_covered}/{_COVERAGE_BINS} sectors"
-            f"{'' if self.coverage_ok else ' (LOW: sail more headings)'}"
+            f"{'' if self.coverage_ok else ' (LOW: cover more headings)'}"
         )
         const = f"{self.constant_deg:+.2f}"
         hard = f"{self.hard_iron_amp_deg:.2f}"
