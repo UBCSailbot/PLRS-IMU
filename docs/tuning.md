@@ -15,6 +15,7 @@ field of `TinyEkfFilter::Config`:
 | `mti_yaw.variance_deg2` | Trust in the MTi's mag yaw each sample (deg^2) |
 | `mti_yaw.q_offset_deg2` | Mag-offset random walk per step (deg^2); how fast the mag's yaw error may move |
 | `mti_yaw.p0_offset_deg2` | Initial mag-offset uncertainty; trust in mag yaw as absolute heading before the first GNSS fix |
+| `mti_yaw.q_offset_outage_deg2` | Optional; mag-offset random walk once GNSS is gone past the grace. Unset keeps `q_offset_deg2`. Small pins the offset so a clean mag holds heading through an outage |
 
 Q controls how much the filter trusts the gyro integration relative to the
 measurements. P0 only affects convergence from startup and can be set large.
@@ -51,6 +52,38 @@ loose (1.0): the offset then absorbs mag wander within seconds while the
 gyro bias through an outage. An MTi yaw snap larger than the innovation gate
 is rejected outright rather than absorbed (see `MTI_YAW_GATE_SIGMA` in
 `ekf_filter.h`).
+
+## Usable coast time vs mag trust
+
+A loose `q_offset_deg2` keeps mag wander out of heading, but it has a cost: the
+offset floats fast enough that even a perfect mag cannot pin heading through a
+GNSS outage. Heading coasts on the gyro, its reported uncertainty grows within
+seconds, and the rudder flags it invalid (`heading_trustworthy`). That is the
+fail-safe: no absolute heading reference is trusted, so nothing steers on a
+guess. The mag still re-bounds the error over a long outage, but only after
+heading is already flagged invalid, so it does not extend the *usable* coast.
+
+`q_offset_outage_deg2` reclaims that coast time when the mag earns it. Once GNSS
+has been gone longer than `MAG_OUTAGE_GRACE`, the offset random walk switches to
+this value; pinning it small freezes the offset at its last GNSS-anchored value,
+so the mag now observes heading directly and holds it. A clean mag then keeps
+heading accurate and confident through a multi-minute outage instead of losing
+it in seconds.
+
+The catch is that this only holds if the mag's absolute-heading error really is
+static over the outage (declination plus a fixed hard-iron). If the mag wanders,
+a pinned offset routes that wander into heading *and* keeps the estimate
+confident, so the rudder steers on a heading that is quietly wrong. That is
+worse than the fail-safe. So the knob is exactly parameterized by how good the
+boat's mag is:
+
+- **Clean, characterized mag**: set it small (e.g. `1e-4`) for a long, accurate
+  hold through GNSS gaps.
+- **Unknown or dirty mag**: leave it unset; heading fails safe after seconds.
+
+Characterize the mag before enabling: log MTi mag-yaw against GNSS heading over a
+straight run and measure the residual after the offset converges. A residual
+that holds steady is a clean mag; one that wanders with heading or time is not.
 
 ## Deriving Q from the MTi-3 datasheet
 

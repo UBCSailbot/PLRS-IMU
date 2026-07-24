@@ -77,7 +77,8 @@ ENU-to-compass frame constant all sit between them, and indoors that gap wanders
 The offset term absorbs that difference, so the mag stiffens heading between GNSS
 fixes and keeps the Z bias observable through an outage, yet can never drag
 absolute heading away from GNSS. `docs/tuning.md` covers how loosely it's tuned
-and why.
+and why, and the optional outage pin that lets a clean mag hold heading through
+a long GNSS gap instead of coasting on the gyro.
 
 ## Tuning
 
