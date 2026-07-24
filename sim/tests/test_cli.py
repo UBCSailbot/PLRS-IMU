@@ -60,6 +60,58 @@ def test_cli_missing_scenario_errors() -> None:
         main(["sim"])
 
 
+def test_cli_analyze_prints_iron_summary(tmp_path: Path, capsys) -> None:
+    import math
+
+    from plrs_sim.attitude import from_axis_angle
+    from plrs_sim.telemetry import GnssRecord, ImuRecord, format_record
+    from plrs_sim.types import Vec3
+
+    z = Vec3(x=0.0, y=0.0, z=1.0)
+    lines = []
+    for i, heading in enumerate(range(0, 360, 5)):
+        yaw = -(heading + 5.0 * math.cos(2 * math.radians(heading)))  # soft iron
+        lines.append(
+            format_record(
+                ImuRecord(
+                    timestamp_ms=i * 100,
+                    orientation=from_axis_angle(z, math.radians(yaw)),
+                    angular_velocity_rad_s=Vec3(x=0.0, y=0.0, z=0.0),
+                    accel_ms2=Vec3(x=0.0, y=0.0, z=9.81),
+                )
+            )
+        )
+        lines.append(
+            format_record(
+                GnssRecord(
+                    timestamp_ms=i * 100,
+                    heading_deg=float(heading),
+                    heading_sigma_deg=0.3,
+                    valid=True,
+                )
+            )
+        )
+    capture = tmp_path / "swing.log"
+    capture.write_text("\n".join(lines) + "\n")
+
+    main(["analyze", str(capture)])
+    out = capsys.readouterr().out
+    assert "soft iron (2/rev)" in out
+    assert "12/12 sectors" in out
+    assert "VERDICT" in out  # the analyzer interprets itself, not just numbers
+
+
+def test_select_analyze_without_captures_is_graceful(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    # A newcomer with no captures gets a clear message, not a crash.
+    from plrs_sim.__main__ import _build_parser, _select_analyze
+
+    monkeypatch.chdir(tmp_path)
+    assert _select_analyze(_build_parser()) is None
+    assert "No captures" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("view", ["mounting", "pose"])
 def test_cli_alternate_views(tmp_path: Path, view: str) -> None:
     out = tmp_path / f"{view}.png"

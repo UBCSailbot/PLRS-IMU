@@ -36,14 +36,20 @@ from .types import (
 
 VIEWS = ("timeseries", "mounting", "simulate", "pose")
 
-# Human-readable labels for the interactive picker, in display order.
-# "pose" (filmstrip) is CLI-only; it does not appear here. "Monitor" is the
-# live hardware view, not a sim view, and is dispatched separately.
-_VIEW_LABELS = {
-    "Config (tuning.toml)": "mounting",
-    "Timeseries": "timeseries",
-    "Simulate": "simulate",
-    "Monitor (hardware)": "monitor",
+# Top-level menu for the no-argument interactive mode: plain-language actions a
+# newcomer can pick without knowing the flags, mapped to what they dispatch to.
+_ACTIONS = {
+    "Run a simulation (see the filter on a made-up boat)": "sim",
+    "Watch or replay hardware telemetry": "monitor",
+    "Analyze a magnetometer capture (hard/soft iron)": "analyze",
+    "Show the sensor mounting from tuning.toml": "mounting",
+}
+
+# Sim views offered in the interactive flow, in plain language.
+_SIM_VIEWS = {
+    "Timeseries plot (heading / roll / pitch vs truth)": "timeseries",
+    "3D animation of the boat": "simulate",
+    "Pose filmstrip": "pose",
 }
 
 SCENARIOS: dict[str, Scenario] = {
@@ -90,7 +96,15 @@ SCENARIOS: dict[str, Scenario] = {
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="python -m plrs_sim")
+    p = argparse.ArgumentParser(
+        prog="python -m plrs_sim",
+        description=(
+            "Polaris IMU sim and tools. Run with no arguments for a guided menu, "
+            "or use a subcommand: 'sim' plots the filter on a made-up boat, "
+            "'monitor' watches or replays hardware telemetry, and 'analyze' "
+            "characterizes a magnetometer capture (hard/soft iron)."
+        ),
+    )
     # Optional: a bare invocation drops into the interactive selector.
     sub = p.add_subparsers(dest="cmd", required=False)
 
@@ -235,6 +249,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="sensor-alignment view: live IMU axes vs GNSS heading on a level hull",
     )
 
+    ana = sub.add_parser(
+        "analyze",
+        help="characterize a capture's magnetometer against GNSS (hard/soft iron)",
+    )
+    ana.add_argument("capture", type=Path, help="telemetry capture file (I/M/G lines)")
+
     return p
 
 
@@ -248,26 +268,58 @@ def _bias_vec(x: float, y: float, z: float) -> Vec3 | None:
 
 
 def _select_interactively(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
-    """Prompt for view then (if needed) scenario; returns parsed args or None."""
+    """Guided top-level menu; returns parsed args for the chosen action, or None.
+
+    Written for someone who has never seen the flags: pick an action in plain
+    language, then answer a couple of follow-ups. Every branch ends in the same
+    `parser.parse_args(...)` the CLI uses, so the interactive and flag paths
+    stay identical.
+    """
     import questionary
 
-    view_label = questionary.select("View", choices=[*_VIEW_LABELS, "quit"]).ask()
-    if view_label is None or view_label == "quit":
+    action_label = questionary.select(
+        "What do you want to do?", choices=[*_ACTIONS, "quit"]
+    ).ask()
+    if action_label is None or action_label == "quit":
         return None
-    view = _VIEW_LABELS[view_label]
+    action = _ACTIONS[action_label]
 
-    if view == "mounting":
+    if action == "mounting":
         # Config geometry is pure tuning.toml; _run_view never reads the scenario.
         return parser.parse_args(["sim", "static", "--view", "mounting"])
-
-    if view == "monitor":
+    if action == "monitor":
         return _select_monitor(parser)
+    if action == "analyze":
+        return _select_analyze(parser)
 
-    scenario = questionary.select("Scenario", choices=sorted(SCENARIOS)).ask()
+    scenario = questionary.select("Which scenario?", choices=sorted(SCENARIOS)).ask()
     if scenario is None:
         return None
+    view_label = questionary.select("How to show it?", choices=[*_SIM_VIEWS]).ask()
+    if view_label is None:
+        return None
+    view = _SIM_VIEWS[view_label]
     duration = ["--duration", "50"] if view == "simulate" else []
     return parser.parse_args(["sim", scenario, "--view", view, *duration])
+
+
+def _select_analyze(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
+    """Pick a capture to characterize; lists captures/ so no path is needed."""
+    import questionary
+
+    captures = sorted(Path("captures").glob("*.log"))
+    if not captures:
+        print(
+            "No captures/*.log to analyze yet. Record one first "
+            "(monitor, with --record), then come back."
+        )
+        return None
+    choice = questionary.select(
+        "Which capture?", choices=[str(p) for p in captures]
+    ).ask()
+    if choice is None:
+        return None
+    return parser.parse_args(["analyze", choice])
 
 
 def _select_monitor(parser: argparse.ArgumentParser) -> argparse.Namespace | None:
@@ -319,8 +371,20 @@ def main(argv: list[str] | None = None) -> None:
 def _dispatch(args: argparse.Namespace) -> None:
     if args.cmd == "monitor":
         _cmd_monitor(args)
+    elif args.cmd == "analyze":
+        _cmd_analyze(args)
     else:
         _run_view(args)
+
+
+def _cmd_analyze(args: argparse.Namespace) -> None:
+    from .magcal import analyze_capture
+
+    with args.capture.open() as f:
+        fit = analyze_capture(f)
+    print(fit.summary())
+    print()
+    print(fit.verdict())
 
 
 def _cmd_monitor(args: argparse.Namespace) -> None:

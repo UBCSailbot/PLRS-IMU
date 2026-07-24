@@ -46,6 +46,7 @@ class ImuNoise:
         self._walk = Vec3(x=0.0, y=0.0, z=0.0)
         self._mag_snap_err_deg = 0.0
         self._mag_iron_phase = rng.uniform(0.0, 2.0 * math.pi)
+        self._mag_soft_phase = rng.uniform(0.0, 2.0 * math.pi)
 
     def corrupt(self, clean: ImuSample, dt_s: float) -> ImuSample:
         walk_std = self._model.gyro_bias_walk_std_rad_s_sqrt_s
@@ -89,8 +90,11 @@ class ImuNoise:
                 self._mag_snap_err_deg += self._rng.uniform(-mag.snap_deg, mag.snap_deg)
 
         _, _, yaw_deg = quaternion_to_euler_zyx(orientation)
-        iron = mag.iron_deg * math.sin(math.radians(yaw_deg) + self._mag_iron_phase)
-        err_rad = math.radians(iron + self._mag_snap_err_deg)
+        yaw_rad = math.radians(yaw_deg)
+        # Hard iron is a 1/rev lobe; soft iron a 2/rev one (see MagNoiseModel).
+        iron = mag.iron_deg * math.sin(yaw_rad + self._mag_iron_phase)
+        soft = mag.soft_iron_deg * math.sin(2.0 * yaw_rad + self._mag_soft_phase)
+        err_rad = math.radians(iron + soft + self._mag_snap_err_deg)
         if err_rad == 0.0:
             return orientation
         # A yaw-only error rotates about world Z, leaving roll/pitch intact.

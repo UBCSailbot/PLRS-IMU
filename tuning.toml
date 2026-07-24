@@ -46,10 +46,21 @@ pitch_deg2 = 1.0
 # out. At 1.0 the offset absorbs mag wander within seconds while the 100 Hz
 # measurement keeps it bounded, so the mag still pins heading against gyro
 # bias (sweep: outage drift range 69 -> 3.5 deg, 30 s bias hold 1.9 -> 1.5).
+#
+# q_offset_outage_deg2 (optional) is the offset random walk once GNSS has been
+# gone longer than the outage grace. Unset, the loose q_offset_deg2 stands and
+# heading coasts on the gyro: confidence decays within seconds and the rudder
+# flags it invalid (the fail-safe). Set it small (e.g. 1e-4) to pin the offset
+# for the outage, turning the mag into a genuine heading hold so the boat can
+# steer through a long GNSS gap. Only sound with a clean mag whose absolute
+# heading error is static over the outage; a wandering mag then steers heading
+# confidently wrong. Characterize the boat's mag before enabling. See
+# docs/tuning.md.
 [mti_yaw]
 variance_deg2 = 4.0
 q_offset_deg2 = 1.0
 p0_offset_deg2 = 100.0
+# q_offset_outage_deg2 = 1e-4
 
 # GNSS dual-antenna calibration. baseline_offset_deg is the antenna baseline
 # heading measured clockwise from boat-forward; the bridge subtracts it so the

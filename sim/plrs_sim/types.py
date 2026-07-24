@@ -111,6 +111,10 @@ class MtiYawConfig:
     variance_deg2: float
     q_offset_deg2: float
     p0_offset_deg2: float
+    # Offset random walk once GNSS has been absent past the outage grace; None
+    # keeps q_offset_deg2 through the outage (the fail-safe default). A trusted
+    # mag sets it small to hold heading through the outage. See docs/tuning.md.
+    q_offset_outage_deg2: float | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -260,13 +264,17 @@ class MagNoiseModel:
 
     Only the reported orientation's yaw is corrupted; the gyro keeps the
     truth, reproducing the mag-vs-gyro inconsistency that indoor iron and
-    the MTi's own re-convergence create. iron_deg is the amplitude of an
-    orientation-dependent error (a hard-iron lobe); snap events step the
-    yaw error by up to snap_deg at mean interval snap_interval_s and decay
-    with time constant snap_tau_s, like the MTi snapping and re-settling.
+    the MTi's own re-convergence create. iron_deg is the amplitude of a
+    hard-iron lobe (a constant field offset), which appears once per heading
+    revolution (1/rev); soft_iron_deg is a soft-iron lobe (permeable metal
+    stretching the field into an ellipse), which appears twice per revolution
+    (2/rev). snap events step the yaw error by up to snap_deg at mean interval
+    snap_interval_s and decay with time constant snap_tau_s, like the MTi
+    snapping and re-settling.
     """
 
     iron_deg: float = 0.0
+    soft_iron_deg: float = 0.0
     snap_deg: float = 0.0
     snap_interval_s: float = 120.0
     snap_tau_s: float = 20.0
