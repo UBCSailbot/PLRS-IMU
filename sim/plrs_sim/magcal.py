@@ -125,17 +125,27 @@ def fit_heading_harmonics(
 ) -> HarmonicFit:
     """Least-squares fit of heading error to a 0/1/2-per-rev harmonic model.
 
-    Assumes errors small enough not to wrap the +-180 seam (true for a mag past
-    the MTi's own fusion); residuals are wrapped for safety.
+    The error is centered on its circular mean before the linear fit, so a large
+    constant offset (declination + frame) sitting near the +-180 seam does not
+    split the samples across the wrap and corrupt the least-squares solution.
+    The mean folds back into the constant term; the harmonic amplitudes are
+    invariant to a constant shift. Residuals are wrapped for safety.
     """
     h = np.radians(np.asarray(heading_deg, dtype=float))
     e = np.asarray(error_deg, dtype=float)
+    # Circular mean of the error, subtracted so the fit sees a seam-free signal.
+    e_rad = np.radians(e)
+    mean_deg = math.degrees(
+        math.atan2(float(np.mean(np.sin(e_rad))), float(np.mean(np.cos(e_rad))))
+    )
+    e_centered = wrap180(e - mean_deg)
     design = np.column_stack(
         [np.ones_like(h), np.cos(h), np.sin(h), np.cos(2 * h), np.sin(2 * h)]
     )
-    coeffs, *_ = np.linalg.lstsq(design, e, rcond=None)
+    coeffs, *_ = np.linalg.lstsq(design, e_centered, rcond=None)
     c0, a1, b1, a2, b2 = coeffs
-    resid = wrap180(e - design @ coeffs)
+    resid = wrap180(e_centered - design @ coeffs)
+    constant = wrap180(c0 + mean_deg)
 
     sectors = np.unique(
         (np.mod(np.degrees(h), 360.0) // (360.0 / _COVERAGE_BINS)).astype(int)
@@ -143,11 +153,11 @@ def fit_heading_harmonics(
     return HarmonicFit(
         n_samples=int(e.size),
         bins_covered=int(sectors.size),
-        constant_deg=float(c0),
+        constant_deg=float(constant),
         hard_iron_amp_deg=float(math.hypot(a1, b1)),
         soft_iron_amp_deg=float(math.hypot(a2, b2)),
         residual_rms_deg=float(np.sqrt(np.mean(resid**2))),
-        uncorrected_rms_deg=float(np.sqrt(np.mean(wrap180(e - c0) ** 2))),
+        uncorrected_rms_deg=float(np.sqrt(np.mean(wrap180(e - constant) ** 2))),
     )
 
 

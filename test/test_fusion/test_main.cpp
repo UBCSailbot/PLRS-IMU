@@ -582,6 +582,47 @@ void test_outage_offset_pin_waits_for_grace() {
                            f_pin.output().heading_variance_deg2);
 }
 
+/** @brief The grace boundary is strict (>): at exactly MAG_OUTAGE_GRACE since
+ * the last fix the pin is still disengaged, so the pinned filter matches the
+ * loose one; one step past, the pin engages and the mag-offset variance
+ * diverges. */
+void test_outage_offset_pin_grace_boundary_is_strict() {
+  TinyEkfFilter::Config loose = make_mag_config();
+  loose.mti_yaw->q_offset_deg2 = 1.0f;
+  TinyEkfFilter::Config pinned = loose;
+  pinned.mti_yaw->q_offset_outage_deg2 = 1.0e-4f;
+
+  TinyEkfFilter f_loose(loose);
+  TinyEkfFilter f_pin(pinned);
+  auto fix = [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  };
+  run_converged(f_loose, fix);
+  run_converged(f_pin,
+                fix); // last fix at t = 11000, so _last_gnss_time = 11000
+
+  const int last_fix_ms = 11000;
+  const int grace_ms =
+      static_cast<int>(TinyEkfFilter::MAG_OUTAGE_GRACE.count());
+  // Predict up to exactly grace (t - last == grace): the strict > keeps the pin
+  // off, so the two filters use the same offset Q and stay together.
+  for (int t = last_fix_ms + 100; t <= last_fix_ms + grace_ms; t += 100) {
+    f_loose.predict(make_mag_imu(0.0f, Ms {t}));
+    f_pin.predict(make_mag_imu(0.0f, Ms {t}));
+  }
+  TEST_ASSERT_FLOAT_WITHIN(1.0e-3f,
+                           f_loose.debug().mag_offset_variance_deg2,
+                           f_pin.debug().mag_offset_variance_deg2);
+
+  // One step past grace: the pin engages, so the pinned offset variance grows
+  // more slowly than the loose one and the two separate.
+  const Ms past {last_fix_ms + grace_ms + 100};
+  f_loose.predict(make_mag_imu(0.0f, past));
+  f_pin.predict(make_mag_imu(0.0f, past));
+  TEST_ASSERT_TRUE(f_pin.debug().mag_offset_variance_deg2 <
+                   f_loose.debug().mag_offset_variance_deg2);
+}
+
 /** @brief With no mag at all, nothing bounds heading variance through an
  * outage except its own cap. */
 void test_heading_variance_capped_without_mag() {
@@ -814,6 +855,7 @@ int main(int, char **) {
   RUN_TEST(test_variances_bounded_during_long_degraded_outage);
   RUN_TEST(test_outage_offset_pin_extends_confident_hold);
   RUN_TEST(test_outage_offset_pin_waits_for_grace);
+  RUN_TEST(test_outage_offset_pin_grace_boundary_is_strict);
   RUN_TEST(test_heading_variance_capped_without_mag);
   RUN_TEST(test_body_frame_bias_survives_heel_change);
   RUN_TEST(test_body_frame_bias_survives_moderate_trim);

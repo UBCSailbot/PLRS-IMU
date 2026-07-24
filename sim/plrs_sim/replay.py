@@ -16,8 +16,11 @@ Two things the capture does not carry:
   log the `I` line at the predict rate; see the raw-log follow-up.
 
 Pairing: each `I` line drives one `Tick` (it carries the orientation the filter
-needs). A `G` line seen since the previous `Tick` rides along as that `Tick`'s
-GNSS, so the runner's predict-then-update order matches the firmware. The `M`
+needs). The most recent `G` line since the previous `Tick` rides along as that
+`Tick`'s GNSS, so the runner's predict-then-update order matches the firmware.
+If two `G` lines fall between the same pair of `I` lines only the last is kept
+(the firmware would update on each), but with the IMU faster than GNSS in any
+real capture there is always an `I` between fixes, so none are dropped. The `M`
 (raw mag) and `F` (firmware fused output) lines are ignored here; the mag
 belongs to the offline mag analyzer and `F` to a firmware-vs-replay check.
 """

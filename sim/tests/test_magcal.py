@@ -7,6 +7,7 @@ import math
 import numpy as np
 import pytest
 
+from plrs_sim.angles import wrap180
 from plrs_sim.attitude import from_axis_angle
 from plrs_sim.magcal import HarmonicFit, analyze_capture, fit_heading_harmonics
 from plrs_sim.telemetry import GnssRecord, ImuRecord, format_record
@@ -29,6 +30,20 @@ def test_fit_separates_hard_and_soft_iron() -> None:
     assert fit.residual_rms_deg < 0.05
     assert fit.bins_covered == 12
     assert fit.coverage_ok
+
+
+def test_fit_survives_constant_near_180_seam() -> None:
+    # A large constant offset (declination + frame) parked on the +-180 seam
+    # would split raw least-squares across the wrap; the circular-mean centering
+    # must still recover the constant and the iron amplitudes.
+    heading = np.arange(0.0, 360.0, 1.0)
+    h = np.radians(heading)
+    error = wrap180(179.0 + 5.0 * np.cos(h) + 3.0 * np.sin(2 * h))
+    fit = fit_heading_harmonics(heading, error)
+    assert abs(wrap180(fit.constant_deg - 179.0)) < 0.2
+    assert fit.hard_iron_amp_deg == pytest.approx(5.0, abs=0.1)
+    assert fit.soft_iron_amp_deg == pytest.approx(3.0, abs=0.1)
+    assert fit.residual_rms_deg < 0.1
 
 
 def _capture_over_circle(iron_deg, headings) -> list[str]:
