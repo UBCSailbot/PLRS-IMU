@@ -519,6 +519,110 @@ void test_variances_bounded_during_long_degraded_outage() {
   TEST_ASSERT_TRUE(f.output().heading_variance_deg2 < 3.0f * cap_offset);
 }
 
+/** @brief With the shipped loose offset (absorbs mag wander while anchored),
+ * heading confidence decays through a GNSS outage: nothing pins the offset, so
+ * the mag cannot hold heading and the variance climbs past the steer-on bound.
+ * Setting q_offset_outage_deg2 pins the offset once GNSS is gone, so a clean
+ * mag holds heading AND keeps it confident enough to steer on. This is the
+ * usable-coast lever; it is safe only when the mag is genuinely clean. */
+void test_outage_offset_pin_extends_confident_hold() {
+  constexpr float kSteerOnVariance = 25.0f; // rudder_task heading-valid bound
+  TinyEkfFilter::Config loose = make_mag_config();
+  loose.mti_yaw->q_offset_deg2 = 1.0f; // shipped tuning: loose while anchored
+  TinyEkfFilter::Config pinned = loose;
+  pinned.mti_yaw->q_offset_outage_deg2 = 1.0e-4f;
+
+  TinyEkfFilter f_loose(loose);
+  TinyEkfFilter f_pin(pinned);
+  auto fix = [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  };
+  run_converged(f_loose, fix);
+  run_converged(f_pin, fix);
+
+  // 60 s clean-mag outage: the mag keeps reading MAG_COMPASS truthfully.
+  for (int i = 1; i <= 600; i++) {
+    const Ms t {11100 + 100 * i};
+    f_loose.predict(make_mag_imu(0.0f, t));
+    f_pin.predict(make_mag_imu(0.0f, t));
+  }
+
+  // The pinned filter holds heading near truth and stays confident.
+  TEST_ASSERT_FLOAT_WITHIN(3.0f, TRUE_HEADING, f_pin.output().heading_deg);
+  TEST_ASSERT_TRUE(f_pin.output().heading_variance_deg2 < kSteerOnVariance);
+  // The default (loose, unpinned) offset lets confidence decay past the bound.
+  TEST_ASSERT_TRUE(f_loose.output().heading_variance_deg2 > kSteerOnVariance);
+}
+
+/** @brief Within the outage grace the offset still uses the anchored random
+ * walk, so a brief GNSS gap does not switch behaviour. */
+void test_outage_offset_pin_waits_for_grace() {
+  TinyEkfFilter::Config loose = make_mag_config();
+  loose.mti_yaw->q_offset_deg2 = 1.0f;
+  TinyEkfFilter::Config pinned = loose;
+  pinned.mti_yaw->q_offset_outage_deg2 = 1.0e-4f;
+
+  TinyEkfFilter f_loose(loose);
+  TinyEkfFilter f_pin(pinned);
+  auto fix = [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  };
+  run_converged(f_loose, fix);
+  run_converged(f_pin, fix);
+
+  // A gap shorter than MAG_OUTAGE_GRACE: the pin must not have engaged yet, so
+  // the two filters still track together.
+  for (int i = 1; i <= 20; i++) { // 2 s < 3 s grace
+    const Ms t {11100 + 100 * i};
+    f_loose.predict(make_mag_imu(0.0f, t));
+    f_pin.predict(make_mag_imu(0.0f, t));
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.5f,
+                           f_loose.output().heading_variance_deg2,
+                           f_pin.output().heading_variance_deg2);
+}
+
+/** @brief The grace boundary is strict (>): at exactly MAG_OUTAGE_GRACE since
+ * the last fix the pin is still disengaged, so the pinned filter matches the
+ * loose one; one step past, the pin engages and the mag-offset variance
+ * diverges. */
+void test_outage_offset_pin_grace_boundary_is_strict() {
+  TinyEkfFilter::Config loose = make_mag_config();
+  loose.mti_yaw->q_offset_deg2 = 1.0f;
+  TinyEkfFilter::Config pinned = loose;
+  pinned.mti_yaw->q_offset_outage_deg2 = 1.0e-4f;
+
+  TinyEkfFilter f_loose(loose);
+  TinyEkfFilter f_pin(pinned);
+  auto fix = [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  };
+  run_converged(f_loose, fix);
+  run_converged(f_pin,
+                fix); // last fix at t = 11000, so _last_gnss_time = 11000
+
+  const int last_fix_ms = 11000;
+  const int grace_ms =
+      static_cast<int>(TinyEkfFilter::MAG_OUTAGE_GRACE.count());
+  // Predict up to exactly grace (t - last == grace): the strict > keeps the pin
+  // off, so the two filters use the same offset Q and stay together.
+  for (int t = last_fix_ms + 100; t <= last_fix_ms + grace_ms; t += 100) {
+    f_loose.predict(make_mag_imu(0.0f, Ms {t}));
+    f_pin.predict(make_mag_imu(0.0f, Ms {t}));
+  }
+  TEST_ASSERT_FLOAT_WITHIN(1.0e-3f,
+                           f_loose.debug().mag_offset_variance_deg2,
+                           f_pin.debug().mag_offset_variance_deg2);
+
+  // One step past grace: the pin engages, so the pinned offset variance grows
+  // more slowly than the loose one and the two separate.
+  const Ms past {last_fix_ms + grace_ms + 100};
+  f_loose.predict(make_mag_imu(0.0f, past));
+  f_pin.predict(make_mag_imu(0.0f, past));
+  TEST_ASSERT_TRUE(f_pin.debug().mag_offset_variance_deg2 <
+                   f_loose.debug().mag_offset_variance_deg2);
+}
+
 /** @brief With no mag at all, nothing bounds heading variance through an
  * outage except its own cap. */
 void test_heading_variance_capped_without_mag() {
@@ -749,6 +853,9 @@ int main(int, char **) {
   RUN_TEST(test_mag_gate_rejects_snap_during_outage);
   RUN_TEST(test_mag_gate_forced_accept_after_limit);
   RUN_TEST(test_variances_bounded_during_long_degraded_outage);
+  RUN_TEST(test_outage_offset_pin_extends_confident_hold);
+  RUN_TEST(test_outage_offset_pin_waits_for_grace);
+  RUN_TEST(test_outage_offset_pin_grace_boundary_is_strict);
   RUN_TEST(test_heading_variance_capped_without_mag);
   RUN_TEST(test_body_frame_bias_survives_heel_change);
   RUN_TEST(test_body_frame_bias_survives_moderate_trim);

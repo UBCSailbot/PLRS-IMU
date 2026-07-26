@@ -73,6 +73,7 @@ def _to_native_config(c: EkfConfig) -> _native.Config:
         yaw.variance_deg2 = c.mti_yaw.variance_deg2
         yaw.q_offset_deg2 = c.mti_yaw.q_offset_deg2
         yaw.p0_offset_deg2 = c.mti_yaw.p0_offset_deg2
+        yaw.q_offset_outage_deg2 = c.mti_yaw.q_offset_outage_deg2
         n.mti_yaw = yaw
     mount = _native.MountRotation()
     mount.boat_to_imu = _to_native_unit_quaternion(

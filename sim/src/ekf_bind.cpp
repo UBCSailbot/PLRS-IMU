@@ -98,7 +98,9 @@ NB_MODULE(_native, m) {
       .def(nb::init<>())
       .def_rw("variance_deg2", &TinyEkfFilter::MtiYawConfig::variance_deg2)
       .def_rw("q_offset_deg2", &TinyEkfFilter::MtiYawConfig::q_offset_deg2)
-      .def_rw("p0_offset_deg2", &TinyEkfFilter::MtiYawConfig::p0_offset_deg2);
+      .def_rw("p0_offset_deg2", &TinyEkfFilter::MtiYawConfig::p0_offset_deg2)
+      .def_rw("q_offset_outage_deg2",
+              &TinyEkfFilter::MtiYawConfig::q_offset_outage_deg2);
 
   nb::class_<TinyEkfFilter::Config>(m, "Config")
       .def(nb::init<>())

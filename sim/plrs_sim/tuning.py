@@ -33,6 +33,7 @@ def load_tuning(path: Path = DEFAULT_PATH) -> EkfConfig:
                 variance_deg2=yaw["variance_deg2"],
                 q_offset_deg2=yaw["q_offset_deg2"],
                 p0_offset_deg2=yaw["p0_offset_deg2"],
+                q_offset_outage_deg2=yaw.get("q_offset_outage_deg2"),
             )
             if yaw is not None
             else None

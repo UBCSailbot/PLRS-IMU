@@ -16,7 +16,16 @@ static_assert(
     "FUSION_TASK_STACK_SIZE too small for fusion::TinyEkfFilter");
 
 static constexpr uint32_t IMU_QUEUE_TIMEOUT_MS = 20;
+
+// Telemetry throttle. The default 10 Hz keeps the live monitor readable; a
+// PLRS_RAW_LOG build (env:pico_rawlog) drops it so every predict tick is
+// emitted, giving a full-rate capture. Faithful offline replay and tuning need
+// the IMU at the predict rate, not decimated (see docs/magnetometer.md).
+#ifdef PLRS_RAW_LOG
+static constexpr uint32_t TELEMETRY_INTERVAL_MS = 0;
+#else
 static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;
+#endif
 
 /**
  * A float telemetry field with its wire precision (decimal digits). The

@@ -104,15 +104,36 @@ public:
   static constexpr float MAG_OFFSET_SIGMA_CAP_DEG = 60.0f;
 
   /**
+   * How long GNSS must be absent before the mag offset switches from its
+   * anchored random walk (q_offset_deg2) to the outage one
+   * (q_offset_outage_deg2). Longer than the fix interval so a single missed
+   * fix or a brief dropout does not trip it; a real outage does. Only matters
+   * when MtiYawConfig::q_offset_outage_deg2 is set.
+   */
+  static constexpr Ms MAG_OUTAGE_GRACE {3000};
+
+  /**
    * MTi yaw (magnetometer-referenced) heading aiding. variance_deg2 is the
    * per-sample measurement noise; q_offset_deg2 and p0_offset_deg2 shape the
    * mag-offset state (how fast the mag's yaw error may move, and how much the
    * mag yaw is trusted as absolute heading before the first GNSS fix).
+   *
+   * q_offset_outage_deg2 is the offset random walk once GNSS has been absent
+   * longer than MAG_OUTAGE_GRACE. nullopt keeps q_offset_deg2 through the
+   * outage: the fail-safe default, where the offset floats freely and heading
+   * quickly loses confidence (coasts on the gyro, flagged invalid within
+   * seconds). A trusted magnetometer sets it small to pin the offset for the
+   * outage, turning the mag from a heading+offset stabilizer into a genuine
+   * heading hold so the boat can steer to heading through a long GNSS gap. Only
+   * sound when the mag's absolute-heading error is genuinely static over the
+   * outage (declination + a fixed hard-iron), not wandering: characterize the
+   * boat's mag before enabling. See docs/tuning.md.
    */
   struct MtiYawConfig {
     float variance_deg2;
     float q_offset_deg2;
     float p0_offset_deg2;
+    std::optional<float> q_offset_outage_deg2 {};
   };
 
   /**
@@ -257,6 +278,20 @@ public:
     F[IDX_PITCH * N_STATE + IDX_GYRO_BIAS_Y] = -jw.dpitch_dwy * dt_s;
     F[IDX_PITCH * N_STATE + IDX_GYRO_BIAS_Z] = -jw.dpitch_dwz * dt_s;
 
+    // Once GNSS has been gone past the grace, an optional outage random walk
+    // takes over the mag offset. Pinning it (small value) lets a trusted mag
+    // hold heading through the outage instead of the offset floating and
+    // heading coasting on the gyro. Absent the option, q_offset_deg2 stands and
+    // behaviour is unchanged. See MtiYawConfig::q_offset_outage_deg2.
+    if (_cfg.mti_yaw && _cfg.mti_yaw->q_offset_outage_deg2 && _initialized &&
+        imu.timestamp - _last_gnss_time > MAG_OUTAGE_GRACE) {
+      _Q[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET] =
+          *_cfg.mti_yaw->q_offset_outage_deg2;
+    } else if (_cfg.mti_yaw) {
+      _Q[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET] =
+          _cfg.mti_yaw->q_offset_deg2;
+    }
+
     ekf_predict(&_ekf, fx, F, _Q);
     cap_variance(IDX_HEADING, HEADING_SIGMA_CAP_DEG * HEADING_SIGMA_CAP_DEG);
     cap_variance(IDX_MAG_OFFSET,
@@ -321,6 +356,9 @@ public:
     if (!gnss.valid) {
       return;
     }
+    // A valid fix means GNSS is present; the outage clock (see
+    // MAG_OUTAGE_GRACE) counts from here whether or not the fix is gated.
+    _last_gnss_time = gnss.timestamp;
     if (!_initialized) {
       // Shift the mag offset by the seed jump so heading + offset is
       // unchanged and the next MTi yaw sample does not fight the seed.
@@ -498,6 +536,7 @@ private:
   Config _cfg;
   float _Q[N_STATE * N_STATE] {};
   Ms _last_predict_time {0};
+  Ms _last_gnss_time {0};
   float _yaw_rate_dps = 0.0f;
   float _raw_roll_deg = 0.0f;
   float _raw_yaw_rate_dps = 0.0f;

@@ -1,6 +1,8 @@
 """Polaris IMU simulation harness."""
 
 from .ekf import TinyEkfFilter, gnss_sample_from_attitude
+from .magcal import HarmonicFit, analyze_capture
+from .replay import ReplaySource
 from .tuning import load_mount, load_tuning
 from .types import (
     GRAVITY_MS2,
@@ -42,12 +44,14 @@ __all__ = [
     "GnssAttitudeMount",
     "GnssNoiseModel",
     "GnssSample",
+    "HarmonicFit",
     "ImuNoiseModel",
     "ImuSample",
     "LevelAttitude",
     "MagNoiseModel",
     "MtiYawConfig",
     "Quaternion",
+    "ReplaySource",
     "Scenario",
     "Sinusoidal",
     "Static",
@@ -57,6 +61,7 @@ __all__ = [
     "Trace",
     "Vec3",
     "WaveMotion",
+    "analyze_capture",
     "gnss_sample_from_attitude",
     "load_mount",
     "load_tuning",
