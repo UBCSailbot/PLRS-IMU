@@ -216,8 +216,9 @@ def _build_parser() -> argparse.ArgumentParser:
     src = mon.add_mutually_exclusive_group()
     src.add_argument(
         "--port",
-        default="/dev/ttyACM0",
-        help="serial port of the RP2040 (default; live source)",
+        default=None,
+        help="serial port of the board (default: auto-detect, skipping the "
+        "debug probe; live source)",
     )
     src.add_argument(
         "--replay", type=Path, default=None, metavar="FILE", help="replay a capture"
@@ -390,7 +391,7 @@ def _cmd_analyze(args: argparse.Namespace) -> None:
 def _cmd_monitor(args: argparse.Namespace) -> None:
     from datetime import datetime
 
-    from .live import monitor, pace, replay_file, serial_lines
+    from .live import find_device_port, monitor, pace, replay_file, serial_lines
 
     if args.replay is not None:
         lines = pace(replay_file(args.replay), speed=args.speed)
@@ -415,7 +416,8 @@ def _cmd_monitor(args: argparse.Namespace) -> None:
         lines = pace(export_telemetry(source, load_tuning()), speed=args.speed)
         record = args.record
     else:
-        lines = serial_lines(args.port, args.baud)
+        port = args.port or find_device_port()
+        lines = serial_lines(port, args.baud)
         stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         record = args.record or Path("captures") / f"{stamp}.log"
 

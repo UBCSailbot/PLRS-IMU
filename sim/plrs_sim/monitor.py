@@ -201,6 +201,39 @@ def replay_file(path: Path) -> Iterator[str]:
         yield from f
 
 
+# The RP2040/RP2350 boards enumerate their telemetry CDC under the Raspberry Pi
+# USB vendor id. The debug probe also exposes a CDC (its UART bridge) under the
+# same vendor, so it is excluded -- selecting it is the usual "TUI reads nothing"
+# footgun when the probe and the board are both plugged in.
+_RP_USB_VID = 0x2E8A
+_DEBUG_PROBE_PID = 0x000C
+
+
+def find_device_port() -> str:
+    """Locate the board's telemetry serial port, skipping the debug probe.
+
+    Scans USB serial ports for the Raspberry Pi vendor id and returns the sole
+    non-probe match. Raises with what it saw if there is no unambiguous
+    candidate, so the caller can pass --port explicitly.
+    """
+    from serial.tools import list_ports
+
+    ports = list(list_ports.comports())
+    candidates = [
+        p for p in ports if p.vid == _RP_USB_VID and p.pid != _DEBUG_PROBE_PID
+    ]
+    if len(candidates) == 1:
+        return candidates[0].device
+    seen = (
+        ", ".join(
+            f"{p.device} ({p.vid:04x}:{p.pid:04x})" for p in ports if p.vid is not None
+        )
+        or "no USB serial ports"
+    )
+    what = "no board telemetry port" if not candidates else "multiple candidate ports"
+    raise RuntimeError(f"{what} found (saw: {seen}); pass --port explicitly")
+
+
 def serial_lines(port: str, baud: int = 115200) -> Iterator[str]:
     """Yield decoded lines from a serial port.
 
