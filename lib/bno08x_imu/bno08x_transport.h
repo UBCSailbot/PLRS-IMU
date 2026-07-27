@@ -84,8 +84,8 @@ public:
    *   advertisement. A cargo longer than `out` is fully drained off the bus
    *   (to keep framing aligned) but reported truncated to `out.size()`.
    *
-   * @return The cargo span, or nullopt when no data is pending (header length 0)
-   *   or an I2C read comes up short.
+   * @return The cargo span, or nullopt when no data is pending (header length
+   * 0) or an I2C read comes up short.
    */
   std::optional<ByteSpan> read_cargo(std::span<uint8_t> out) {
     if (out.size() < shtp::HEADER_LEN) {

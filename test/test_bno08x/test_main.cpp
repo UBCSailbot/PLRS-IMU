@@ -20,9 +20,9 @@ using namespace btest;
 namespace {
 constexpr auto kRvFeature = sh2::build_set_feature(sh2::Report::RotationVector,
                                                    10000); // 100 Hz
-static_assert(kRvFeature[0] == 0xFD);   // Set-Feature request
-static_assert(kRvFeature[1] == 0x05);   // Rotation Vector
-static_assert(kRvFeature[5] == 0x10);   // 10000 us = 0x00002710, LE
+static_assert(kRvFeature[0] == 0xFD); // Set-Feature request
+static_assert(kRvFeature[1] == 0x05); // Rotation Vector
+static_assert(kRvFeature[5] == 0x10); // 10000 us = 0x00002710, LE
 static_assert(kRvFeature[6] == 0x27);
 static_assert(kRvFeature[7] == 0x00);
 static_assert(kRvFeature[8] == 0x00);
@@ -102,9 +102,8 @@ void test_encode_roundtrips_through_parse() {
 
 void test_encode_rejects_oversize() {
   std::vector<uint8_t> big(shtp::MAX_TX_PAYLOAD + 1, 0);
-  auto enc = shtp::encode_packet(shtp::Channel::Control,
-                                 0,
-                                 shtp::ByteSpan(big.data(), big.size()));
+  auto enc = shtp::encode_packet(
+      shtp::Channel::Control, 0, shtp::ByteSpan(big.data(), big.size()));
   TEST_ASSERT_FALSE(enc.has_value());
 }
 
@@ -185,7 +184,8 @@ void test_full_batch_all_reports() {
   auto q = sh2::read_rotation_vector(span);
   TEST_ASSERT_TRUE(q.has_value());
   TEST_ASSERT_FLOAT_WITHIN(1e-3, 1.0f, q->w);
-  TEST_ASSERT_FLOAT_WITHIN(1e-2, 9.81f, sh2::read_accel(span)->z); // Q8 res ~0.004
+  TEST_ASSERT_FLOAT_WITHIN(
+      1e-2, 9.81f, sh2::read_accel(span)->z); // Q8 res ~0.004
 }
 
 void test_absent_report_is_nullopt() {

@@ -40,8 +40,8 @@ void setup() {
 
   // `Wire` is i2c0 on the Pico and i2c1 on the Feather; each accepts only its
   // own pins, so pick the pair that matches whichever it is here. Only variants
-  // that remap Wire define __WIRE0_DEVICE; mirror Wire.cpp's i2c0 default so the
-  // stock Pico (which leaves it undefined) still resolves.
+  // that remap Wire define __WIRE0_DEVICE; mirror Wire.cpp's i2c0 default so
+  // the stock Pico (which leaves it undefined) still resolves.
 #ifndef __WIRE0_DEVICE
 #define __WIRE0_DEVICE i2c0
 #endif

@@ -134,8 +134,8 @@ public:
    * before any GNSS fix. With q_offset_outage_deg2 pinning the offset and a
    * tight p0_offset_deg2 (trust the seed), this turns the mag into the heading
    * source from power-up; GNSS still refines heading (and the offset) once it
-   * arrives. Unset keeps the GNSS-primary behaviour (heading starts at 0 and the
-   * mag only stabilizes it), unchanged.
+   * arrives. Unset keeps the GNSS-primary behaviour (heading starts at 0 and
+   * the mag only stabilizes it), unchanged.
    */
   struct MtiYawConfig {
     float variance_deg2;

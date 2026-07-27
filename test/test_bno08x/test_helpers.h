@@ -52,11 +52,8 @@ inline std::vector<uint8_t> make_report(uint8_t id,
   return r;
 }
 
-inline std::vector<uint8_t> vec3_report(uint8_t id,
-                                        float x,
-                                        float y,
-                                        float z,
-                                        int qpoint) {
+inline std::vector<uint8_t>
+vec3_report(uint8_t id, float x, float y, float z, int qpoint) {
   std::vector<uint8_t> data;
   for (float v : {x, y, z}) {
     auto b = q_le(v, qpoint);

@@ -15,10 +15,9 @@
 
 namespace imu_task {
 
-static_assert(
-    plrs::fits_on_task_stack<std::array<uint8_t, bno08x::MAX_CARGO>>(
-        IMU_TASK_STACK_SIZE),
-    "IMU_TASK_STACK_SIZE too small for the SHTP cargo buffer");
+static_assert(plrs::fits_on_task_stack<std::array<uint8_t, bno08x::MAX_CARGO>>(
+                  IMU_TASK_STACK_SIZE),
+              "IMU_TASK_STACK_SIZE too small for the SHTP cargo buffer");
 
 static constexpr uint16_t IMU_RATE_HZ = 100;
 static constexpr uint32_t REPORT_INTERVAL_US = 1'000'000 / IMU_RATE_HZ;

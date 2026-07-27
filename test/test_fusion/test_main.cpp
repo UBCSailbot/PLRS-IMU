@@ -658,8 +658,8 @@ void test_offset_seed_holds_heading_against_gyro_bias_no_gnss() {
     f_none.predict(make_mag_imu(0.3f, t));
   }
   TEST_ASSERT_FLOAT_WITHIN(3.0f, TRUE_HEADING, f_seed.output().heading_deg);
-  TEST_ASSERT_TRUE(std::fabs(wrap180(f_none.output().heading_deg - TRUE_HEADING)) >
-                   10.0f);
+  TEST_ASSERT_TRUE(
+      std::fabs(wrap180(f_none.output().heading_deg - TRUE_HEADING)) > 10.0f);
 }
 
 /** @brief The seed is opt-in: unset, the first sample seeds roll/pitch only and

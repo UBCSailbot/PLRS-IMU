@@ -33,10 +33,10 @@ enum class Report : uint8_t {
 };
 
 // Fixed-point exponents: value = raw / 2^Q.
-constexpr int ACCEL_Q = 8;  // m/s^2
-constexpr int GYRO_Q = 9;   // rad/s
-constexpr int MAG_Q = 4;    // uT
-constexpr int QUAT_Q = 14;  // unit quaternion component
+constexpr int ACCEL_Q = 8; // m/s^2
+constexpr int GYRO_Q = 9;  // rad/s
+constexpr int MAG_Q = 4;   // uT
+constexpr int QUAT_Q = 14; // unit quaternion component
 
 constexpr std::size_t REPORT_HEADER = 4; // id, seq, status, delay
 constexpr std::size_t TIMESTAMP_LEN = 5; // id + int32 delta
@@ -122,7 +122,8 @@ read_vec3(ByteSpan payload, Report id, int qpoint) {
     return std::nullopt;
   }
   auto axis = [&](std::size_t idx) {
-    return q_to_float(read_s16_little_endian(data->subspan(idx * 2, 2)), qpoint);
+    return q_to_float(read_s16_little_endian(data->subspan(idx * 2, 2)),
+                      qpoint);
   };
   return plrs::Vec3 {axis(0), axis(1), axis(2)};
 }
@@ -152,7 +153,8 @@ read_rotation_vector(ByteSpan payload) {
     return std::nullopt;
   }
   auto comp = [&](std::size_t idx) {
-    return q_to_float(read_s16_little_endian(data->subspan(idx * 2, 2)), QUAT_Q);
+    return q_to_float(read_s16_little_endian(data->subspan(idx * 2, 2)),
+                      QUAT_Q);
   };
   return plrs::Quaternion {
       .w = comp(3),

@@ -61,8 +61,6 @@ def test_unseeded_heading_drifts_without_gnss() -> None:
     base = load_tuning()
     unseeded = replace(
         base,
-        mti_yaw=replace(
-            base.mti_yaw, offset_seed_deg=None, q_offset_outage_deg2=None
-        ),
+        mti_yaw=replace(base.mti_yaw, offset_seed_deg=None, q_offset_outage_deg2=None),
     )
     assert _peak_heading_error(run(_no_gnss_source(7), unseeded)) > 10.0
