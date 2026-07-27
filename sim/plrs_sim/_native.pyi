@@ -53,6 +53,8 @@ class MtiYawConfig:
     variance_deg2: float
     q_offset_deg2: float
     p0_offset_deg2: float
+    q_offset_outage_deg2: float | None
+    offset_seed_deg: float | None
     def __init__(self) -> None: ...
 
 class Config:

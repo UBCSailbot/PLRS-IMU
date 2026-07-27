@@ -56,11 +56,20 @@ pitch_deg2 = 1.0
 # heading error is static over the outage; a wandering mag then steers heading
 # confidently wrong. Characterize the boat's mag before enabling. See
 # docs/tuning.md.
+#
+# offset_seed_deg (optional) seeds the offset (declination + frame constant) and
+# anchors heading to the mag yaw from the first sample, before any GNSS fix.
+# With q_offset_outage_deg2 pinning it, this makes the mag the heading source
+# from boot (a BNO085 measured stable to ~0.017 deg/s holds heading with ~2 deg
+# drift over 110 s, versus ~75 deg unseeded); GNSS
+# refines the absolute value once it arrives. 0.0 trusts the BNO magnetic yaw
+# directly; set it to the site's declination + frame constant once characterized.
 [mti_yaw]
 variance_deg2 = 4.0
 q_offset_deg2 = 1.0
 p0_offset_deg2 = 100.0
-# q_offset_outage_deg2 = 1e-4
+q_offset_outage_deg2 = 1e-4
+offset_seed_deg = 0.0
 
 # GNSS dual-antenna calibration. baseline_offset_deg is the antenna baseline
 # heading measured clockwise from boat-forward; the bridge subtracts it so the

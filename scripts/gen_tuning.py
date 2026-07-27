@@ -76,19 +76,26 @@ def render(tuning: dict) -> str:
     mount = tuning.get("imu_mount", {})
     yaw = tuning.get("mti_yaw")
     # Omitted entirely when the toml has no [mti_yaw]: the Config field
-    # defaults to nullopt and the filter runs without the mag measurement.
-    mti_yaw_field = (
-        ""
-        if yaw is None
-        else (
+    # defaults to nullopt and the filter runs without the mag measurement. The
+    # two optional sub-fields are emitted only when the toml sets them, so an
+    # absent key leaves the C++ std::optional at nullopt.
+    if yaw is None:
+        mti_yaw_field = ""
+    else:
+        optional = "".join(
+            f"            .{key} = {_lit(yaw[key])},\n"
+            for key in ("q_offset_outage_deg2", "offset_seed_deg")
+            if key in yaw
+        )
+        mti_yaw_field = (
             "    .mti_yaw =\n"
             "        fusion::TinyEkfFilter::MtiYawConfig {\n"
             f"            .variance_deg2 = {_lit(yaw['variance_deg2'])},\n"
             f"            .q_offset_deg2 = {_lit(yaw['q_offset_deg2'])},\n"
             f"            .p0_offset_deg2 = {_lit(yaw['p0_offset_deg2'])},\n"
+            f"{optional}"
             "        },\n"
         )
-    )
     qw, qx, qy, qz = euler_to_quaternion(
         mount.get("mount_roll_deg", 0.0),
         mount.get("mount_pitch_deg", 0.0),

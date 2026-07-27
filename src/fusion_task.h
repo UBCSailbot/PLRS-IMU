@@ -6,6 +6,7 @@
 
 #ifdef ARDUINO
 #include "ekf_filter.h"
+#include <Arduino.h>
 #include <FreeRTOS.h>
 #include <queue.h>
 
@@ -16,6 +17,7 @@ struct TaskParams {
   QueueHandle_t gnss_queue;
   QueueHandle_t heading_mailbox;
   fusion::TinyEkfFilter::Config filter_config;
+  Print &telemetry;
 };
 
 void task(void *params);

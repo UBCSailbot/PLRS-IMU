@@ -46,12 +46,12 @@ def _source(seed: int) -> SimulatedSource:
     )
 
 
-def _tail_heading_range(source, cut_ms: int | None) -> float:
+def _tail_heading_range(source, cut_ms: int | None, cfg=None) -> float:
     ticks = (
         replace(t, gnss=None) if cut_ms is not None and t.timestamp_ms > cut_ms else t
         for t in source
     )
-    trace = run(ticks, load_tuning())
+    trace = run(ticks, cfg if cfg is not None else load_tuning())
     heading = trace.channels["heading"]
     tail = trace.t_ms >= _TAIL_MS
     est = np.degrees(np.unwrap(np.radians(heading.estimate[tail])))
@@ -74,8 +74,14 @@ def test_mag_snaps_with_gnss_stay_bounded() -> None:
 
 
 def test_mag_snaps_during_outage_do_not_steer_heading() -> None:
-    # After the cut the truth is still static and the gyro truthful: the
-    # fused heading must not walk with the mag's snap re-convergence. The
-    # MTi yaw gate blocks the snap steps and the loose offset state absorbs
-    # the re-convergence, so heading stays with the gyro.
-    assert _tail_heading_range(_source(seed=7), cut_ms=_CUT_MS) < 5.0
+    # The fail-safe (unpinned) opt-out: after the cut the truth is still static
+    # and the gyro truthful, and the fused heading must not walk with the mag's
+    # snap re-convergence. The MTi yaw gate blocks the snap steps and the loose
+    # offset absorbs the rest, so heading stays with the gyro. The shipped
+    # default now pins the offset (trusts a clean mag to hold heading through an
+    # outage), which trades this away; the pin belongs to a characterized mag.
+    unpinned = replace(
+        load_tuning(),
+        mti_yaw=replace(load_tuning().mti_yaw, q_offset_outage_deg2=None),
+    )
+    assert _tail_heading_range(_source(seed=7), cut_ms=_CUT_MS, cfg=unpinned) < 5.0

@@ -6,11 +6,13 @@
 #include "hardware_config.h"
 #include "imu_task.h"
 #include "rudder_task.h"
+#include "telemetry.h"
 #include "tuning.h"
 
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <SerialPIO.h>
+#include <Wire.h>
 #include <task.h>
 
 void heartbeat_task(void *params) {
@@ -29,11 +31,25 @@ void heartbeat_task(void *params) {
 void setup() {
   Serial.begin(115200); // required to bring up USB CDC (ttyACM0)
 
+  Serial1.setTX(TELEMETRY_UART_TX_PIN);
+  Serial1.setRX(TELEMETRY_UART_RX_PIN);
+  Serial1.begin(TELEMETRY_UART_BAUD);
+  static plrs::TelemetrySink telemetry(Serial1);
+
   static SerialPIO output_serial(OUTPUT_UART_TX_PIN, OUTPUT_UART_RX_PIN);
 
-  Serial1.setTX(IMU_UART_TX_PIN);
-  Serial1.setRX(IMU_UART_RX_PIN);
-  Serial1.begin(IMU_UART_BAUD);
+  // `Wire` is i2c0 on the Pico and i2c1 on the Feather; each accepts only its
+  // own pins, so pick the pair that matches whichever it is here. Only variants
+  // that remap Wire define __WIRE0_DEVICE; mirror Wire.cpp's i2c0 default so
+  // the stock Pico (which leaves it undefined) still resolves.
+#ifndef __WIRE0_DEVICE
+#define __WIRE0_DEVICE i2c0
+#endif
+  const bool wire_is_i2c0 = (__WIRE0_DEVICE == i2c0);
+  Wire.setSDA(wire_is_i2c0 ? BNO_I2C0_SDA_PIN : BNO_I2C1_SDA_PIN);
+  Wire.setSCL(wire_is_i2c0 ? BNO_I2C0_SCL_PIN : BNO_I2C1_SCL_PIN);
+  Wire.setClock(BNO_I2C_BAUD);
+  Wire.begin();
 
   static SerialPIO gnss_serial(GNSS_UART_TX_PIN, GNSS_UART_RX_PIN);
   gnss_serial.begin(GNSS_UART_BAUD);
@@ -44,11 +60,12 @@ void setup() {
   QueueHandle_t gnss_queue = xQueueCreate(4, sizeof(fusion::GnssSample));
   QueueHandle_t heading_mailbox = xQueueCreate(1, sizeof(fusion::FusionOutput));
 
-  static imu_task::TaskParams imu_params {mti::Uart(Serial1), imu_queue};
+  static imu_task::TaskParams imu_params {
+      bno08x::I2cTransport(Wire, BNO_I2C_ADDR), imu_queue, telemetry};
   static gnss_task::TaskParams gnss_params {
       septentrio_gnss::Uart(gnss_serial), gnss_queue, tuning::kGnssMount};
   static fusion_task::TaskParams fusion_params {
-      imu_queue, gnss_queue, heading_mailbox, tuning::kFilterConfig};
+      imu_queue, gnss_queue, heading_mailbox, tuning::kFilterConfig, telemetry};
   static rudder_task::TaskParams rudder_params {rudder::Uart(output_serial),
                                                 heading_mailbox};
 

@@ -57,22 +57,24 @@ def _outage_peak_and_final_sigma(trace) -> tuple[float, float]:
     return float(err.max()), float(ch.estimate_std[win][-1])
 
 
-def _pinned_tuning():
+def _unpinned_tuning():
+    # The fail-safe opt-out: drop the shipped offset pin so the offset floats
+    # through an outage (heading coasts on the gyro and confidence decays).
     base = load_tuning()
-    return replace(base, mti_yaw=replace(base.mti_yaw, q_offset_outage_deg2=1.0e-4))
+    return replace(base, mti_yaw=replace(base.mti_yaw, q_offset_outage_deg2=None))
 
 
 def test_pin_holds_heading_and_confidence_through_outage() -> None:
-    peak, final_sigma = _outage_peak_and_final_sigma(run(_source(7), _pinned_tuning()))
-    # Clean mag + pinned offset: heading held tight for the whole 2.5 min outage
-    # and still confident enough to steer on.
+    # The shipped default pins the offset, so a clean mag holds heading tight
+    # for the whole 2.5 min outage and stays confident enough to steer on.
+    peak, final_sigma = _outage_peak_and_final_sigma(run(_source(7), load_tuning()))
     assert peak < 2.0
     assert final_sigma < _STEER_ON_SIGMA
 
 
-def test_default_offset_loses_confidence_through_outage() -> None:
-    # Contrast: the shipped default (no outage pin) coasts and its reported
-    # confidence decays past the steer-on bound, so the rudder correctly stops
-    # trusting heading. This is the fail-safe the pin trades away for hold.
-    _, final_sigma = _outage_peak_and_final_sigma(run(_source(7), load_tuning()))
+def test_unpinned_offset_loses_confidence_through_outage() -> None:
+    # Contrast: with the pin dropped, the offset coasts and reported confidence
+    # decays past the steer-on bound, so the rudder correctly stops trusting
+    # heading. This is the fail-safe the shipped pin trades away for hold.
+    _, final_sigma = _outage_peak_and_final_sigma(run(_source(7), _unpinned_tuning()))
     assert final_sigma > _STEER_ON_SIGMA

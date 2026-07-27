@@ -623,6 +623,66 @@ void test_outage_offset_pin_grace_boundary_is_strict() {
                    f_loose.debug().mag_offset_variance_deg2);
 }
 
+/** @brief With an offset seed the mag anchors heading from the first sample,
+ * before any GNSS: seeding the true offset holds heading at truth. */
+void test_offset_seed_anchors_heading_from_boot() {
+  TinyEkfFilter::Config cfg = make_mag_config();
+  cfg.mti_yaw->q_offset_outage_deg2 = 1.0e-4f;
+  cfg.mti_yaw->offset_seed_deg = MAG_COMPASS - TRUE_HEADING; // the true offset
+  TinyEkfFilter f(cfg);
+  // Stationary mag reading MAG_COMPASS, no GNSS ever.
+  for (int i = 0; i <= 100; i++) {
+    f.predict(make_mag_imu(0.0f, Ms {1000 + 100 * i}));
+  }
+  // heading = -yaw - offset = MAG_COMPASS - offset = TRUE_HEADING, from boot.
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, TRUE_HEADING, f.output().heading_deg);
+}
+
+/** @brief The seeded, pinned offset holds heading through a no-GNSS run against
+ * a gyro bias; the unseeded default cannot (heading starts at 0 and the mag,
+ * far from it, is gated out). This is the bench-observed drift, fixed. */
+void test_offset_seed_holds_heading_against_gyro_bias_no_gnss() {
+  TinyEkfFilter::Config seeded = make_mag_config();
+  seeded.mti_yaw->q_offset_deg2 = 1.0f;
+  seeded.mti_yaw->q_offset_outage_deg2 = 1.0e-4f;
+  seeded.mti_yaw->offset_seed_deg = MAG_COMPASS - TRUE_HEADING;
+  TinyEkfFilter::Config unseeded = seeded;
+  unseeded.mti_yaw->offset_seed_deg = std::nullopt;
+
+  TinyEkfFilter f_seed(seeded);
+  TinyEkfFilter f_none(unseeded);
+  // 60 s, no GNSS, with a 0.3 deg/s raw gyro-z bias.
+  for (int i = 0; i <= 600; i++) {
+    const Ms t {1000 + 100 * i};
+    f_seed.predict(make_mag_imu(0.3f, t));
+    f_none.predict(make_mag_imu(0.3f, t));
+  }
+  TEST_ASSERT_FLOAT_WITHIN(3.0f, TRUE_HEADING, f_seed.output().heading_deg);
+  TEST_ASSERT_TRUE(
+      std::fabs(wrap180(f_none.output().heading_deg - TRUE_HEADING)) > 10.0f);
+}
+
+/** @brief The seed is opt-in: unset, the first sample seeds roll/pitch only and
+ * heading keeps its zero init (the GNSS-primary default, unchanged). */
+void test_offset_seed_unset_leaves_heading_unanchored() {
+  TinyEkfFilter f(make_mag_config()); // no offset_seed_deg
+  f.predict(make_mag_imu(0.0f, Ms {1000}));
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 0.0f, f.output().heading_deg);
+}
+
+/** @brief GNSS still owns absolute heading: a wrong seed is pulled to the GNSS
+ * truth once fixes arrive, the offset absorbing the seed error. */
+void test_gnss_refines_a_wrong_offset_seed() {
+  TinyEkfFilter::Config cfg = make_mag_config();
+  cfg.mti_yaw->q_offset_deg2 = 1.0f;
+  cfg.mti_yaw->offset_seed_deg = 0.0f; // wrong: anchors heading to MAG_COMPASS
+  TinyEkfFilter f(cfg);
+  run_converged(f, [](TinyEkfFilter &g, Ms t) {
+    g.update(make_gnss(TRUE_HEADING, 1.0f, t));
+  });
+  TEST_ASSERT_FLOAT_WITHIN(2.0f, TRUE_HEADING, f.output().heading_deg);
+}
+
 /** @brief With no mag at all, nothing bounds heading variance through an
  * outage except its own cap. */
 void test_heading_variance_capped_without_mag() {
@@ -856,6 +916,10 @@ int main(int, char **) {
   RUN_TEST(test_outage_offset_pin_extends_confident_hold);
   RUN_TEST(test_outage_offset_pin_waits_for_grace);
   RUN_TEST(test_outage_offset_pin_grace_boundary_is_strict);
+  RUN_TEST(test_offset_seed_anchors_heading_from_boot);
+  RUN_TEST(test_offset_seed_holds_heading_against_gyro_bias_no_gnss);
+  RUN_TEST(test_offset_seed_unset_leaves_heading_unanchored);
+  RUN_TEST(test_gnss_refines_a_wrong_offset_seed);
   RUN_TEST(test_heading_variance_capped_without_mag);
   RUN_TEST(test_body_frame_bias_survives_heel_change);
   RUN_TEST(test_body_frame_bias_survives_moderate_trim);
