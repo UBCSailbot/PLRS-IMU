@@ -115,6 +115,10 @@ class MtiYawConfig:
     # keeps q_offset_deg2 through the outage (the fail-safe default). A trusted
     # mag sets it small to hold heading through the outage. See docs/tuning.md.
     q_offset_outage_deg2: float | None = None
+    # Mag offset seed (declination + frame constant); None keeps the
+    # GNSS-primary behaviour. Set with q_offset_outage_deg2 + a tight
+    # p0_offset_deg2 to anchor heading to the mag from boot. See docs/tuning.md.
+    offset_seed_deg: float | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -23,10 +23,14 @@ def test_default_tuning_loads_all_fields() -> None:
 
 def test_default_tuning_enables_mti_yaw() -> None:
     cfg = load_tuning()
+    # Shipped tuning anchors heading to the mag from boot: the offset is seeded
+    # and pinned so a clean mag holds heading with no GNSS. See tuning.toml.
     assert cfg.mti_yaw == MtiYawConfig(
         variance_deg2=4.0,
         q_offset_deg2=1.0,
         p0_offset_deg2=100.0,
+        q_offset_outage_deg2=1e-4,
+        offset_seed_deg=0.0,
     )
 
 
