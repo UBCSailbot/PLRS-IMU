@@ -49,9 +49,14 @@ def _peak_heading_error(trace) -> float:
 
 
 def test_seed_anchors_heading_from_boot_without_gnss() -> None:
-    # Shipped tuning (seeded + pinned): heading is anchored to the clean mag
-    # from the first sample and holds near truth for the whole no-GNSS run.
-    assert _peak_heading_error(run(_no_gnss_source(7), load_tuning())) < 3.0
+    # Seeded + pinned: heading is anchored to the clean mag from the first
+    # sample and holds near truth for the whole no-GNSS run. The synthetic mag
+    # models no declination (magnetic == true), so the sim-correct seed is 0;
+    # the shipped tuning's -15.5 is the real Vancouver declination the water,
+    # not this scenario, carries.
+    base = load_tuning()
+    seeded = replace(base, mti_yaw=replace(base.mti_yaw, offset_seed_deg=0.0))
+    assert _peak_heading_error(run(_no_gnss_source(7), seeded)) < 3.0
 
 
 def test_unseeded_heading_drifts_without_gnss() -> None:
