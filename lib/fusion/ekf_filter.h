@@ -128,12 +128,21 @@ public:
    * sound when the mag's absolute-heading error is genuinely static over the
    * outage (declination + a fixed hard-iron), not wandering: characterize the
    * boat's mag before enabling. See docs/tuning.md.
+   *
+   * offset_seed_deg, when set, seeds the mag offset (declination + frame
+   * constant) at the first sample and anchors heading to the mag yaw from boot,
+   * before any GNSS fix. With q_offset_outage_deg2 pinning the offset and a
+   * tight p0_offset_deg2 (trust the seed), this turns the mag into the heading
+   * source from power-up; GNSS still refines heading (and the offset) once it
+   * arrives. Unset keeps the GNSS-primary behaviour (heading starts at 0 and the
+   * mag only stabilizes it), unchanged.
    */
   struct MtiYawConfig {
     float variance_deg2;
     float q_offset_deg2;
     float p0_offset_deg2;
     std::optional<float> q_offset_outage_deg2 {};
+    std::optional<float> offset_seed_deg {};
   };
 
   /**
@@ -214,6 +223,16 @@ public:
       _last_predict_time = imu.timestamp;
       _ekf.x[IDX_ROLL] = attitude.roll_deg;
       _ekf.x[IDX_PITCH] = attitude.pitch_deg;
+      // With an offset seed, anchor heading to the mag yaw from the first
+      // sample: the measurement is -yaw = heading + offset, so seeding the
+      // offset and heading = -yaw - offset makes the first innovation ~0. The
+      // mag then aids heading immediately instead of starting 90+ deg off and
+      // tripping the yaw gate for its whole forced-accept horizon.
+      if (_cfg.mti_yaw && _cfg.mti_yaw->offset_seed_deg) {
+        _ekf.x[IDX_MAG_OFFSET] = *_cfg.mti_yaw->offset_seed_deg;
+        _ekf.x[IDX_HEADING] =
+            wrap180(-attitude.yaw_deg - *_cfg.mti_yaw->offset_seed_deg);
+      }
       _has_predicted = true;
       return;
     }
@@ -278,13 +297,20 @@ public:
     F[IDX_PITCH * N_STATE + IDX_GYRO_BIAS_Y] = -jw.dpitch_dwy * dt_s;
     F[IDX_PITCH * N_STATE + IDX_GYRO_BIAS_Z] = -jw.dpitch_dwz * dt_s;
 
-    // Once GNSS has been gone past the grace, an optional outage random walk
-    // takes over the mag offset. Pinning it (small value) lets a trusted mag
-    // hold heading through the outage instead of the offset floating and
-    // heading coasting on the gyro. Absent the option, q_offset_deg2 stands and
-    // behaviour is unchanged. See MtiYawConfig::q_offset_outage_deg2.
-    if (_cfg.mti_yaw && _cfg.mti_yaw->q_offset_outage_deg2 && _initialized &&
-        imu.timestamp - _last_gnss_time > MAG_OUTAGE_GRACE) {
+    // The mag offset uses the pinned outage random walk in two cases: once GNSS
+    // has been gone past the grace, and before the first fix when a seed is
+    // configured. Pinning it (small value) lets a trusted mag hold heading
+    // instead of the offset floating and heading coasting on the gyro. A seeded
+    // offset before GNSS is a deliberate calibration to hold, not a quantity to
+    // let wander; without a seed the pre-GNSS offset still floats (GNSS-primary
+    // default). Absent q_offset_outage_deg2, q_offset_deg2 stands and behaviour
+    // is unchanged. See MtiYawConfig::q_offset_outage_deg2 / offset_seed_deg.
+    const bool gnss_outage =
+        _initialized && imu.timestamp - _last_gnss_time > MAG_OUTAGE_GRACE;
+    const bool pre_gnss_seed = _cfg.mti_yaw && !_initialized &&
+                               _cfg.mti_yaw->offset_seed_deg.has_value();
+    if (_cfg.mti_yaw && _cfg.mti_yaw->q_offset_outage_deg2 &&
+        (gnss_outage || pre_gnss_seed)) {
       _Q[IDX_MAG_OFFSET * N_STATE + IDX_MAG_OFFSET] =
           *_cfg.mti_yaw->q_offset_outage_deg2;
     } else if (_cfg.mti_yaw) {
