@@ -30,7 +30,7 @@ def test_default_tuning_enables_mti_yaw() -> None:
         q_offset_deg2=1.0,
         p0_offset_deg2=100.0,
         q_offset_outage_deg2=1e-4,
-        offset_seed_deg=0.0,
+        offset_seed_deg=-15.5,
     )
 
 

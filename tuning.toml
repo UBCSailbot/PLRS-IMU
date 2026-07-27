@@ -69,7 +69,13 @@ variance_deg2 = 4.0
 q_offset_deg2 = 1.0
 p0_offset_deg2 = 100.0
 q_offset_outage_deg2 = 1e-4
-offset_seed_deg = 0.0
+# Vancouver magnetic declination (~15.5 deg E, 2026). The measurement asserts
+# heading + offset = -yaw, so a true-north heading needs offset = -declination.
+# This fixes only the declination term; boat iron and the BNO-to-boat frame
+# constant are unknown here, so heading is not absolutely correct until GNSS
+# refines the offset (or a persisted offset from a prior fix is restored at
+# boot). GNSS still owns absolute heading.
+offset_seed_deg = -15.5
 
 # GNSS dual-antenna calibration. baseline_offset_deg is the antenna baseline
 # heading measured clockwise from boat-forward; the bridge subtracts it so the
