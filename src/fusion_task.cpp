@@ -36,20 +36,17 @@ struct Real {
   uint8_t prec;
 };
 
-static void print_field(Real f) { Serial.print(f.v, f.prec); }
-template <typename T> static void print_field(T v) { Serial.print(v); }
+static void print_field(Print &out, Real f) { out.print(f.v, f.prec); }
+template <typename T> static void print_field(Print &out, T v) { out.print(v); }
 
 /**
  * @brief Print one comma-separated telemetry line: tag, then each field.
  */
 template <typename... Fields>
-static void print_line(char tag, Fields... fields) {
-  if (!Serial) {
-    return;
-  }
-  Serial.print(tag);
-  ((Serial.print(','), print_field(fields)), ...);
-  Serial.println();
+static void print_line(Print &out, char tag, Fields... fields) {
+  out.print(tag);
+  ((out.print(','), print_field(out, fields)), ...);
+  out.println();
 }
 
 /**
@@ -67,9 +64,11 @@ static void print_line(char tag, Fields... fields) {
  * @param out  Fused estimate to print.
  * @param dbg  Internal state snapshot from the same filter tick.
  */
-static void print_fusion(const fusion::FusionOutput &out,
+static void print_fusion(Print &sink,
+                         const fusion::FusionOutput &out,
                          const fusion::TinyEkfFilter::Debug &dbg) {
-  print_line('F',
+  print_line(sink,
+             'F',
              out.timestamp.count(),
              Real {out.heading_deg, 3},
              Real {out.roll_deg, 3},
@@ -97,11 +96,12 @@ static void print_fusion(const fusion::FusionOutput &out,
  *
  * @param imu  Raw IMU sample as received from the IMU task.
  */
-static void print_imu(const fusion::ImuSample &imu) {
+static void print_imu(Print &sink, const fusion::ImuSample &imu) {
   const plrs::Quaternion q = imu.orientation.components();
   const plrs::Vec3 &g = imu.angular_velocity_rad_s;
   const plrs::Vec3 &a = imu.accel_ms2;
-  print_line('I',
+  print_line(sink,
+             'I',
              imu.timestamp.count(),
              Real {q.w, 5},
              Real {q.x, 5},
@@ -124,11 +124,12 @@ static void print_imu(const fusion::ImuSample &imu) {
  *
  * @param imu  Raw IMU sample as received from the IMU task.
  */
-static void print_mems(const fusion::ImuSample &imu) {
+static void print_mems(Print &sink, const fusion::ImuSample &imu) {
   const plrs::Vec3 &a = imu.accel_ms2;
   const plrs::Vec3 &g = imu.angular_velocity_rad_s;
   const plrs::Vec3 &m = imu.magnetic_field_au;
-  print_line('M',
+  print_line(sink,
+             'M',
              imu.timestamp.count(),
              Real {a.x, 4},
              Real {a.y, 4},
@@ -149,8 +150,9 @@ static void print_mems(const fusion::ImuSample &imu) {
  *
  * @param gnss  Raw GNSS sample as received from the GNSS task.
  */
-static void print_gnss(const fusion::GnssSample &gnss) {
-  print_line('G',
+static void print_gnss(Print &sink, const fusion::GnssSample &gnss) {
+  print_line(sink,
+             'G',
              gnss.timestamp.count(),
              Real {gnss.heading_deg, 3},
              Real {std::sqrt(gnss.heading_variance_deg2), 3},
@@ -174,16 +176,16 @@ void task(void *params) {
       fusion::GnssSample gnss;
       while (xQueueReceive(p.gnss_queue, &gnss, 0) == pdTRUE) {
         filter.update(gnss);
-        print_gnss(gnss);
+        print_gnss(p.telemetry, gnss);
       }
 
       const fusion::FusionOutput out = filter.output();
       xQueueOverwrite(p.heading_mailbox, &out);
 
       if (xTaskGetTickCount() >= next_print) {
-        print_fusion(out, filter.debug());
-        print_imu(imu);
-        print_mems(imu);
+        print_fusion(p.telemetry, out, filter.debug());
+        print_imu(p.telemetry, imu);
+        print_mems(p.telemetry, imu);
         next_print += pdMS_TO_TICKS(TELEMETRY_INTERVAL_MS);
       }
     }

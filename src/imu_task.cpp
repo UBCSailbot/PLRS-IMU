@@ -2,156 +2,174 @@
 #include "imu_task.h"
 #include "fusion.h"
 #include "hardware_config.h"
+#include "sh2_reports.h"
+#include "shtp_protocol.h"
 #include "stack_check.h"
-#include "xbus_protocol.h"
 
 #include <Arduino.h>
 #include <FreeRTOS.h>
+#include <array>
+#include <optional>
 #include <pico/time.h>
 #include <task.h>
 
 namespace imu_task {
 
-static_assert(plrs::fits_on_task_stack<xbus::Parser>(IMU_TASK_STACK_SIZE),
-              "IMU_TASK_STACK_SIZE too small for xbus::Parser");
+static_assert(
+    plrs::fits_on_task_stack<std::array<uint8_t, bno08x::MAX_CARGO>>(
+        IMU_TASK_STACK_SIZE),
+    "IMU_TASK_STACK_SIZE too small for the SHTP cargo buffer");
 
-static constexpr uint32_t ACK_TIMEOUT_MS = 500;
-static constexpr uint32_t RETRY_DELAY_MS = 1000;
 static constexpr uint16_t IMU_RATE_HZ = 100;
+static constexpr uint32_t REPORT_INTERVAL_US = 1'000'000 / IMU_RATE_HZ;
+static constexpr uint32_t READY_TIMEOUT_MS = 1000;
+static constexpr uint32_t RETRY_DELAY_MS = 500;
+static constexpr uint32_t RESET_DRAIN_MS = 300;
+static constexpr uint8_t SOFT_RESET_CMD = 0x01;
 
-static constexpr auto OUTPUT_CONFIG =
-    xbus::build_output_config(std::array<xbus::OutputItem, 4> {{
-        {xbus::DataId::Quaternion, IMU_RATE_HZ},
-        {xbus::DataId::RateOfTurn, IMU_RATE_HZ},
-        {xbus::DataId::Acceleration, IMU_RATE_HZ},
-        {xbus::DataId::MagneticField, IMU_RATE_HZ},
-    }});
+// Sensors mirrored into every ImuSample. Rotation Vector is the mag-referenced
+// orientation (the MTi quaternion's analog); the triads back it up.
+static constexpr std::array<sh2::Report, 4> ENABLED_SENSORS {{
+    sh2::Report::RotationVector,
+    sh2::Report::GyroCalibrated,
+    sh2::Report::Accelerometer,
+    sh2::Report::MagCalibrated,
+}};
 
 static std::chrono::milliseconds now() {
   return std::chrono::milliseconds(time_us_64() / 1000);
 }
 
 /**
- * @brief Drain the UART into the parser until a packet with @p mid arrives.
+ * @brief Frame a payload onto an SHTP channel and send it.
  *
- * @param uart Transport to read from.
- * @param parser Xbus parser instance.
- * @param mid Expected message ID.
- * @param timeout_ms Maximum wait in millisecons.
- *
- * @return The matched packet, or nullopt on timeout.
+ * @param transport  I2C transport to the BNO085.
+ * @param seq  Outgoing sequence counter, incremented in place.
+ * @param channel  Destination SHTP channel.
+ * @param payload  Cargo payload bytes.
  */
-static std::optional<xbus::Packet> wait_for(mti::Uart &uart,
-                                            xbus::Parser &parser,
-                                            xbus::MID mid,
-                                            uint32_t timeout_ms) {
-  auto deadline = now() + std::chrono::milliseconds(timeout_ms);
-  while (now() < deadline) {
-    auto byte = uart.read();
-    if (!byte) {
-      vTaskDelay(1);
-      continue;
-    }
-    auto packet = parser.feed(*byte, now());
-    if (packet && packet->mid == mid) {
-      return packet;
-    }
+static void send(bno08x::I2cTransport &transport,
+                 uint8_t &seq,
+                 shtp::Channel channel,
+                 shtp::ByteSpan payload) {
+  auto encoded = shtp::encode_packet(channel, seq++, payload);
+  if (encoded) {
+    transport.write_packet(encoded->view());
   }
-  return std::nullopt;
-}
-
-static void send(mti::Uart &uart, xbus::MID mid, xbus::ByteSpan payload) {
-  auto packet = xbus::Packet::command(mid, payload);
-  if (!packet)
-    return;
-  auto encoded = xbus::encode(*packet);
-  if (encoded)
-    uart.write(encoded->view());
 }
 
 /**
- * @brief Configure output and enter measurement mode. Retries indefinitely.
+ * @brief Read and discard every pending cargo for @p duration_ms.
  *
- * @param uart Transport to the MTi-3.
- * @param parser Xbus parser instance.
+ * Used after a reset to swallow the advertisement and reset-complete cargos so
+ * the first sensor batch is not mistaken for them.
  */
-static void bring_up(mti::Uart &uart, xbus::Parser &parser) {
+static void drain(bno08x::I2cTransport &transport,
+                  std::span<uint8_t> scratch,
+                  uint32_t duration_ms) {
+  auto deadline = now() + std::chrono::milliseconds(duration_ms);
+  while (now() < deadline) {
+    if (!transport.read_cargo(scratch)) {
+      vTaskDelay(1);
+    }
+  }
+}
+
+/**
+ * @brief Reset, enable the sensor set, and wait for the first sensor batch.
+ *
+ * Retries indefinitely: on the RP2040 a silent IMU means no fused heading, so
+ * there is nothing to fall back to but trying again.
+ *
+ * @param transport  I2C transport to the BNO085.
+ * @param scratch  Cargo buffer (MAX_CARGO).
+ */
+static void bring_up(bno08x::I2cTransport &transport,
+                     std::span<uint8_t> scratch,
+                     Print &out) {
+  uint8_t seq = 0;
   while (true) {
-    send(uart, xbus::MID::GoToConfig, {});
-    if (!wait_for(uart, parser, xbus::MID::GoToConfigAck, ACK_TIMEOUT_MS)) {
-      if (Serial)
-        Serial.println("# IMU: GoToConfig timeout, retrying");
-      vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-      continue;
+    const std::array<uint8_t, 1> reset {SOFT_RESET_CMD};
+    send(transport, seq, shtp::Channel::Executable, {reset.data(), 1});
+    drain(transport, scratch, RESET_DRAIN_MS);
+
+    for (const sh2::Report sensor : ENABLED_SENSORS) {
+      const auto feature = sh2::build_set_feature(sensor, REPORT_INTERVAL_US);
+      send(transport,
+           seq,
+           shtp::Channel::Control,
+           {feature.data(), feature.size()});
     }
 
-    send(uart, xbus::MID::SetOutputConfig, OUTPUT_CONFIG);
-    if (!wait_for(uart, parser, xbus::MID::OutputConfigAck, ACK_TIMEOUT_MS)) {
-      if (Serial)
-        Serial.println("# IMU: SetOutputConfig timeout, retrying");
-      vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-      continue;
+    auto deadline = now() + std::chrono::milliseconds(READY_TIMEOUT_MS);
+    while (now() < deadline) {
+      auto cargo = transport.read_cargo(scratch);
+      if (!cargo) {
+        vTaskDelay(1);
+        continue;
+      }
+      auto packet = shtp::parse_packet(*cargo);
+      if (packet && packet->channel ==
+                        static_cast<uint8_t>(shtp::Channel::InputReports)) {
+        out.println("# IMU: ready");
+        return;
+      }
     }
-
-    send(uart, xbus::MID::GoToMeasurement, {});
-    if (!wait_for(uart, parser, xbus::MID::GoToMeasAck, ACK_TIMEOUT_MS)) {
-      if (Serial)
-        Serial.println("# IMU: GoToMeasurement timeout, retrying");
-      vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-      continue;
-    }
-
-    if (Serial)
-      Serial.println("# IMU: ready");
-    return;
+    out.println("# IMU: no reports, retrying");
+    vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
   }
 }
 
 void task(void *params) {
   auto &p = *static_cast<TaskParams *>(params);
-  xbus::Parser parser;
+  std::array<uint8_t, bno08x::MAX_CARGO> scratch;
 
-  bring_up(p.uart, parser);
+  p.transport.scan(p.telemetry); // bring-up diagnostic: what ACKs on the bus
+  bring_up(p.transport, scratch, p.telemetry);
+
+  // Each report may arrive in its own cargo, so hold the latest triads and emit
+  // an ImuSample when a fresh Rotation Vector lands, paired with them.
+  std::optional<plrs::Vec3> last_gyro;
+  std::optional<plrs::Vec3> last_accel;
+  std::optional<plrs::Vec3> last_mag;
 
   while (true) {
-    auto byte = p.uart.read();
-    if (!byte) {
+    auto cargo = p.transport.read_cargo(scratch);
+    if (!cargo) {
       vTaskDelay(1);
       continue;
     }
 
-    auto packet = parser.feed(*byte, now());
-    if (!packet)
+    auto packet = shtp::parse_packet(*cargo);
+    if (!packet ||
+        packet->channel != static_cast<uint8_t>(shtp::Channel::InputReports)) {
       continue;
-    if (packet->mid != xbus::MID::MTData2)
+    }
+
+    if (auto g = sh2::read_gyro(packet->payload)) {
+      last_gyro = g;
+    }
+    if (auto a = sh2::read_accel(packet->payload)) {
+      last_accel = a;
+    }
+    if (auto m = sh2::read_mag(packet->payload)) {
+      last_mag = m;
+    }
+
+    auto quat = sh2::read_rotation_vector(packet->payload);
+    if (!quat || !last_gyro || !last_accel) {
       continue;
-
-    auto quat = xbus::read_quaternion(*packet);
-    auto gyro_data = xbus::find_data(*packet, xbus::DataId::RateOfTurn);
-    auto accel_data = xbus::find_data(*packet, xbus::DataId::Acceleration);
-    auto mag_data = xbus::find_data(*packet, xbus::DataId::MagneticField);
-
-    if (!quat || !gyro_data || !accel_data)
-      continue;
-
-    auto read_vec3 = [](xbus::ByteSpan b) -> plrs::Vec3 {
-      constexpr std::size_t stride = sizeof(float);
-      return {
-          xbus::read_f32_big_endian(b.subspan(0 * stride, stride)),
-          xbus::read_f32_big_endian(b.subspan(1 * stride, stride)),
-          xbus::read_f32_big_endian(b.subspan(2 * stride, stride)),
-      };
-    };
+    }
 
     auto orientation = fusion::UnitQuaternion::from_raw(*quat);
-    if (!orientation)
+    if (!orientation) {
       continue;
+    }
 
     fusion::ImuSample sample {
-        .angular_velocity_rad_s = read_vec3(gyro_data->bytes),
-        .accel_ms2 = read_vec3(accel_data->bytes),
-        .magnetic_field_au =
-            mag_data ? read_vec3(mag_data->bytes) : plrs::Vec3 {},
+        .angular_velocity_rad_s = *last_gyro,
+        .accel_ms2 = *last_accel,
+        .magnetic_field_au = last_mag ? *last_mag : plrs::Vec3 {},
         .orientation = *orientation,
         .timestamp = now(),
     };

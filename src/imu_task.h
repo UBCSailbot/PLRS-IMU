@@ -5,15 +5,16 @@
 #pragma once
 
 #ifdef ARDUINO
-#include "mti_transport.h"
+#include "bno08x_transport.h"
 #include <FreeRTOS.h>
 #include <queue.h>
 
 namespace imu_task {
 
 struct TaskParams {
-  mti::Uart uart;
+  bno08x::I2cTransport transport;
   QueueHandle_t queue;
+  Print &telemetry;
 };
 
 void task(void *params);
