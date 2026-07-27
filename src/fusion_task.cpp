@@ -3,6 +3,7 @@
 #include "ekf_filter.h"
 #include "fusion.h"
 #include "hardware_config.h"
+#include "persist_task.h"
 #include "stack_check.h"
 
 #include <Arduino.h>
@@ -183,7 +184,17 @@ void task(void *params) {
       xQueueOverwrite(p.heading_mailbox, &out);
 
       if (xTaskGetTickCount() >= next_print) {
-        print_fusion(p.telemetry, out, filter.debug());
+        const fusion::TinyEkfFilter::Debug dbg = filter.debug();
+        // Hand the latest offset to the persist task; it decides whether to
+        // write flash (GNSS-validated, changed, min interval). See
+        // persist_task.
+        const persist_task::OffsetSample offset_sample {
+            .offset_deg = dbg.mag_offset_deg,
+            .variance_deg2 = dbg.mag_offset_variance_deg2,
+            .timestamp = out.timestamp,
+        };
+        xQueueOverwrite(p.offset_mailbox, &offset_sample);
+        print_fusion(p.telemetry, out, dbg);
         print_imu(p.telemetry, imu);
         print_mems(p.telemetry, imu);
         next_print += pdMS_TO_TICKS(TELEMETRY_INTERVAL_MS);

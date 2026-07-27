@@ -5,11 +5,14 @@
 #include "gnss_task.h"
 #include "hardware_config.h"
 #include "imu_task.h"
+#include "offset_store_eeprom.h"
+#include "persist_task.h"
 #include "rudder_task.h"
 #include "telemetry.h"
 #include "tuning.h"
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include <FreeRTOS.h>
 #include <SerialPIO.h>
 #include <Wire.h>
@@ -59,13 +62,34 @@ void setup() {
   QueueHandle_t imu_queue = xQueueCreate(8, sizeof(fusion::ImuSample));
   QueueHandle_t gnss_queue = xQueueCreate(4, sizeof(fusion::GnssSample));
   QueueHandle_t heading_mailbox = xQueueCreate(1, sizeof(fusion::FusionOutput));
+  QueueHandle_t offset_mailbox =
+      xQueueCreate(1, sizeof(persist_task::OffsetSample));
+
+  // Restore the mag offset a prior run learned from GNSS, so heading anchors to
+  // it from boot instead of the static tuning seed. A missing/invalid blob
+  // leaves the tuning.toml offset_seed_deg in place; GNSS refines either way.
+  EEPROM.begin(offset_store_eeprom::EEPROM_SIZE);
+  static auto filter_config = tuning::kFilterConfig;
+  if (auto persisted = offset_store_eeprom::load();
+      persisted && filter_config.mti_yaw) {
+    filter_config.mti_yaw->offset_seed_deg = *persisted;
+    telemetry.print("# persist: loaded ");
+    telemetry.println(*persisted, 3);
+  } else {
+    telemetry.println("# persist: no stored offset");
+  }
 
   static imu_task::TaskParams imu_params {
       bno08x::I2cTransport(Wire, BNO_I2C_ADDR), imu_queue, telemetry};
   static gnss_task::TaskParams gnss_params {
       septentrio_gnss::Uart(gnss_serial), gnss_queue, tuning::kGnssMount};
-  static fusion_task::TaskParams fusion_params {
-      imu_queue, gnss_queue, heading_mailbox, tuning::kFilterConfig, telemetry};
+  static fusion_task::TaskParams fusion_params {imu_queue,
+                                                gnss_queue,
+                                                heading_mailbox,
+                                                offset_mailbox,
+                                                filter_config,
+                                                telemetry};
+  static persist_task::TaskParams persist_params {offset_mailbox, telemetry};
   static rudder_task::TaskParams rudder_params {rudder::Uart(output_serial),
                                                 heading_mailbox};
 
@@ -92,6 +116,12 @@ void setup() {
               RUDDER_TASK_STACK_SIZE,
               &rudder_params,
               RUDDER_TASK_PRIORITY,
+              nullptr);
+  xTaskCreate(persist_task::task,
+              "persist",
+              PERSIST_TASK_STACK_SIZE,
+              &persist_params,
+              PERSIST_TASK_PRIORITY,
               nullptr);
   // Temporary heartbeat task
   xTaskCreate(heartbeat_task, "heartbeat", 128, nullptr, 4, nullptr);

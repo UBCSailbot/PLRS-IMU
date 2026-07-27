@@ -16,6 +16,8 @@ struct TaskParams {
   QueueHandle_t imu_queue;
   QueueHandle_t gnss_queue;
   QueueHandle_t heading_mailbox;
+  // Latest mag offset + variance for the persist task (1-slot overwrite).
+  QueueHandle_t offset_mailbox;
   fusion::TinyEkfFilter::Config filter_config;
   Print &telemetry;
 };
