@@ -17,10 +17,16 @@ static constexpr uint32_t IMU_TASK_STACK_SIZE = 512;
 static constexpr uint32_t FUSION_TASK_STACK_SIZE = 1024;
 static constexpr uint32_t RUDDER_TASK_STACK_SIZE = 512;
 
+// Persists the learned mag offset to flash; only the tiny policy + blob live on
+// its stack (the EEPROM page buffer is heap), so a modest stack suffices.
+static constexpr uint32_t PERSIST_TASK_STACK_SIZE = 1024;
+
 static constexpr uint32_t GNSS_TASK_PRIORITY = 3;
 static constexpr uint32_t IMU_TASK_PRIORITY = 3;
 static constexpr uint32_t FUSION_TASK_PRIORITY = 2;
 static constexpr uint32_t RUDDER_TASK_PRIORITY = 2;
+// Lowest: a rare, latency-insensitive flash write must never preempt fusion.
+static constexpr uint32_t PERSIST_TASK_PRIORITY = 1;
 
 // Rudder link heading send rate.
 static constexpr uint32_t RUDDER_SEND_INTERVAL_MS = 100;
