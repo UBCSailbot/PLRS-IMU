@@ -54,10 +54,11 @@ static constexpr uint32_t TELEMETRY_UART_BAUD = 115200;
 static constexpr uint32_t TELEMETRY_UART_TX_PIN = 0;
 static constexpr uint32_t TELEMETRY_UART_RX_PIN = 1;
 
-// PIO UART for GNSS.
+// PIO UART for GNSS. GP6 = Pico TX -> module RXD1,
+// GP7 = Pico RX <- module TXD1.
 static constexpr uint32_t GNSS_UART_BAUD = 115200;
-static constexpr uint32_t GNSS_UART_TX_PIN = 7;
-static constexpr uint32_t GNSS_UART_RX_PIN = 6;
+static constexpr uint32_t GNSS_UART_TX_PIN = 6;
+static constexpr uint32_t GNSS_UART_RX_PIN = 7;
 
 // PIO UART for communicating with the rudder module.
 static constexpr uint32_t OUTPUT_UART_BAUD = 115200;
