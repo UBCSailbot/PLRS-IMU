@@ -497,7 +497,8 @@ void test_parse_aux_ant_positions_one_sub() {
   body[sbf::aux_ant_positions_layout::N] = 1;         // one sub-block
   body[sbf::aux_ant_positions_layout::SB_LENGTH] = 4; // NrSV..AuxAntID
   body.insert(body.end(), {9, 0, 0, 1}); // NrSV=9, error=0, amb=0, id=aux1
-  const auto pkt = make_packet(body, sbf::aux_ant_positions_layout::BLOCK_NUMBER);
+  const auto pkt =
+      make_packet(body, sbf::aux_ant_positions_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_aux_ant_positions(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -507,11 +508,13 @@ void test_parse_aux_ant_positions_one_sub() {
   TEST_ASSERT_EQUAL_UINT8(1, out->aux_ant_id);
 }
 
-/** @brief AuxAntPositions with no sub-blocks: header parses, sats Do-Not-Use. */
+/** @brief AuxAntPositions with no sub-blocks: header parses, sats Do-Not-Use.
+ */
 void test_parse_aux_ant_positions_empty() {
   std::vector<uint8_t> body(sbf::aux_ant_positions_layout::FIRST_SUB, 0);
   body[sbf::aux_ant_positions_layout::N] = 0; // aux antenna not in solution
-  const auto pkt = make_packet(body, sbf::aux_ant_positions_layout::BLOCK_NUMBER);
+  const auto pkt =
+      make_packet(body, sbf::aux_ant_positions_layout::BLOCK_NUMBER);
 
   const auto out = sbf::parse_aux_ant_positions(pkt);
   TEST_ASSERT_TRUE(out.has_value());
@@ -820,6 +823,7 @@ void test_dollar_R_without_kind_char_is_nmea() {
 // ---------------------------------------------------------------------------
 
 namespace {
+using septentrio_gnss::AttitudeResolution;
 using septentrio_gnss::Connection;
 using septentrio_gnss::GnssAttitudeMode;
 using septentrio_gnss::SbfBlock;
@@ -833,9 +837,10 @@ constexpr std::array<SbfBlock, 2> kAttBlocks {SbfBlock::AttEuler,
 
 // Framing is pinned at compile time; the runtime tests below just exercise
 // the same builders through the suite.
-constexpr auto kAttitudeCmd = set_gnss_attitude(GnssAttitudeMode::MultiAntenna);
+constexpr auto kAttitudeCmd = set_gnss_attitude(GnssAttitudeMode::MultiAntenna,
+                                                AttitudeResolution::Float);
 static_assert(kAttitudeCmd.has_value());
-static_assert(kAttitudeCmd->view() == "setGNSSAttitude,MultiAntenna\r");
+static_assert(kAttitudeCmd->view() == "setGNSSAttitude,MultiAntenna,Float\r");
 
 constexpr auto kSbfOutputCmd = set_sbf_output(
     SbfStream::Stream1, Connection::COM1, kAttBlocks, SbfInterval::Msec100);
@@ -844,11 +849,12 @@ static_assert(kSbfOutputCmd->view() ==
               "setSBFOutput,Stream1,COM1,AttEuler+AttCovEuler,msec100\r");
 } // namespace
 
-/** @brief setGNSSAttitude selects the multi-antenna attitude source. */
+/** @brief setGNSSAttitude selects the multi-antenna source and resolution. */
 void test_set_gnss_attitude_multi_antenna() {
-  auto cmd = set_gnss_attitude(GnssAttitudeMode::MultiAntenna);
+  auto cmd = set_gnss_attitude(GnssAttitudeMode::MultiAntenna,
+                               AttitudeResolution::Float);
   TEST_ASSERT_TRUE(cmd.has_value());
-  TEST_ASSERT_TRUE(cmd->view() == "setGNSSAttitude,MultiAntenna\r");
+  TEST_ASSERT_TRUE(cmd->view() == "setGNSSAttitude,MultiAntenna,Float\r");
 }
 
 /** @brief setSBFOutput joins the requested blocks with '+'. */

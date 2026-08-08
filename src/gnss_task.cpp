@@ -45,7 +45,9 @@ static void report_pvt(const sbf::PVTGeodetic &pvt) {
   last = t;
   if (Serial) {
     Serial.printf("# PVT: fix=%u sats=%u error=%u\n",
-                  pvt.mode & PVT_MODE_TYPE_MASK, pvt.nr_sv, pvt.error);
+                  pvt.mode & PVT_MODE_TYPE_MASK,
+                  pvt.nr_sv,
+                  pvt.error);
   }
 }
 
@@ -66,7 +68,10 @@ static void report_aux(const sbf::AuxAntTracking &aux) {
   last = t;
   if (Serial) {
     Serial.printf("# AUX: n=%u id=%u sats=%u error=%u\n",
-                  aux.n, aux.aux_ant_id, aux.nr_sv, aux.error);
+                  aux.n,
+                  aux.aux_ant_id,
+                  aux.nr_sv,
+                  aux.error);
   }
 }
 
@@ -188,7 +193,8 @@ static void bring_up(septentrio_gnss::Uart &uart,
         send_verified(uart,
                       parser,
                       septentrio_gnss::set_gnss_attitude(
-                          septentrio_gnss::GnssAttitudeMode::MultiAntenna),
+                          septentrio_gnss::GnssAttitudeMode::MultiAntenna,
+                          septentrio_gnss::AttitudeResolution::Float),
                       "setGNSSAttitude") &&
         send_verified(uart,
                       parser,
