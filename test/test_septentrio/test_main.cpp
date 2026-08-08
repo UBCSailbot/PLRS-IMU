@@ -456,11 +456,28 @@ void test_parse_pvt_geodetic_wrong_block_number() {
   TEST_ASSERT_FALSE(sbf::parse_pvt_geodetic(pkt).has_value());
 }
 
-/** @brief Body shorter than the Rev 2 layout is rejected. */
+/** @brief Body shorter than the Rev 0 core is rejected. */
 void test_parse_pvt_geodetic_short_body_rejected() {
-  std::vector<uint8_t> body(sbf::pvt_geodetic_layout::MIN_BODY - 1, 0);
+  std::vector<uint8_t> body(sbf::pvt_geodetic_layout::CORE_BODY - 1, 0);
   const auto pkt = make_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
   TEST_ASSERT_FALSE(sbf::parse_pvt_geodetic(pkt).has_value());
+}
+
+/** @brief A Rev 0 body (core only) parses; the trailing Rev 1/2 fields it
+ *         omits come back as Do-Not-Use rather than reading past the body. */
+void test_parse_pvt_geodetic_rev0_core_parses() {
+  auto body = stest::make_pvt_geodetic_body(make_sentinel_pvt());
+  body.resize(sbf::pvt_geodetic_layout::CORE_BODY); // drop ppp_info..misc
+  const auto pkt = make_packet(body, sbf::pvt_geodetic_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_pvt_geodetic(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT8(make_sentinel_pvt().nr_sv, out->nr_sv); // core intact
+  TEST_ASSERT_EQUAL_UINT16(sbf::DNU_U2, out->ppp_info);
+  TEST_ASSERT_EQUAL_UINT16(sbf::DNU_U2, out->latency);
+  TEST_ASSERT_EQUAL_UINT16(sbf::DNU_U2, out->h_accuracy);
+  TEST_ASSERT_EQUAL_UINT16(sbf::DNU_U2, out->v_accuracy);
+  TEST_ASSERT_EQUAL_UINT8(sbf::DNU_U1, out->misc);
 }
 
 /** @brief Body longer than the Rev 2 layout still parses (forward compat). */
@@ -472,6 +489,35 @@ void test_parse_pvt_geodetic_forward_compat() {
   const auto out = sbf::parse_pvt_geodetic(pkt);
   TEST_ASSERT_TRUE(out.has_value());
   TEST_ASSERT_EQUAL_UINT8(0x42, out->misc); // last Rev 2 field still correct
+}
+
+/** @brief AuxAntPositions with one sub-block yields that aux antenna's sats. */
+void test_parse_aux_ant_positions_one_sub() {
+  std::vector<uint8_t> body(sbf::aux_ant_positions_layout::FIRST_SUB, 0);
+  body[sbf::aux_ant_positions_layout::N] = 1;         // one sub-block
+  body[sbf::aux_ant_positions_layout::SB_LENGTH] = 4; // NrSV..AuxAntID
+  body.insert(body.end(), {9, 0, 0, 1}); // NrSV=9, error=0, amb=0, id=aux1
+  const auto pkt = make_packet(body, sbf::aux_ant_positions_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_aux_ant_positions(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT8(1, out->n);
+  TEST_ASSERT_EQUAL_UINT8(9, out->nr_sv);
+  TEST_ASSERT_EQUAL_UINT8(0, out->error);
+  TEST_ASSERT_EQUAL_UINT8(1, out->aux_ant_id);
+}
+
+/** @brief AuxAntPositions with no sub-blocks: header parses, sats Do-Not-Use. */
+void test_parse_aux_ant_positions_empty() {
+  std::vector<uint8_t> body(sbf::aux_ant_positions_layout::FIRST_SUB, 0);
+  body[sbf::aux_ant_positions_layout::N] = 0; // aux antenna not in solution
+  const auto pkt = make_packet(body, sbf::aux_ant_positions_layout::BLOCK_NUMBER);
+
+  const auto out = sbf::parse_aux_ant_positions(pkt);
+  TEST_ASSERT_TRUE(out.has_value());
+  TEST_ASSERT_EQUAL_UINT8(0, out->n);
+  TEST_ASSERT_EQUAL_UINT8(sbf::DNU_U1, out->nr_sv);
+  TEST_ASSERT_EQUAL_UINT8(0, out->aux_ant_id);
 }
 
 /** @brief Do-Not-Use sentinels survive parsing unchanged. */
@@ -848,6 +894,9 @@ int main(int, char **) {
   RUN_TEST(test_parse_pvt_geodetic_round_trip);
   RUN_TEST(test_parse_pvt_geodetic_wrong_block_number);
   RUN_TEST(test_parse_pvt_geodetic_short_body_rejected);
+  RUN_TEST(test_parse_pvt_geodetic_rev0_core_parses);
+  RUN_TEST(test_parse_aux_ant_positions_one_sub);
+  RUN_TEST(test_parse_aux_ant_positions_empty);
   RUN_TEST(test_parse_pvt_geodetic_forward_compat);
   RUN_TEST(test_parse_pvt_geodetic_dnu_preserved);
   RUN_TEST(test_parse_pos_cov_geodetic_round_trip);

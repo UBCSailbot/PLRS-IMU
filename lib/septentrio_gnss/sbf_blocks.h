@@ -63,7 +63,11 @@ constexpr std::size_t LATENCY = 80;
 constexpr std::size_t H_ACCURACY = 82;
 constexpr std::size_t V_ACCURACY = 84;
 constexpr std::size_t MISC = 86;
-constexpr std::size_t MIN_BODY = MISC + sizeof(uint8_t);
+// Rev 0 core ends at NrBases; ppp_info (Rev 1) and latency/accuracy/misc
+// (Rev 2) are optional trailing fields a shorter revision omits. The receiver
+// (mosaic-H) emits a pre-Rev-2 block, so gating on the full length dropped
+// every PVTGeodetic; require only the core and Do-Not-Use the rest.
+constexpr std::size_t CORE_BODY = NR_BASES + sizeof(uint8_t);
 } // namespace pvt_geodetic_layout
 
 /**
@@ -110,17 +114,24 @@ struct PVTGeodetic {
  * @param p The packet whose block_number must equal 4007.
  *
  * @return The decoded struct, or nullopt if the block number mismatches or
- *         the body is shorter than the full Rev 2 layout.
+ *         the body is shorter than the Rev 0 core. Trailing fields absent in
+ *         an older revision are set to their Do-Not-Use value.
  */
 inline std::optional<PVTGeodetic> parse_pvt_geodetic(const Packet &p) {
   namespace o = pvt_geodetic_layout;
   if (p.block_number() != o::BLOCK_NUMBER) {
     return std::nullopt;
   }
-  if (p.body_length < o::MIN_BODY) {
+  if (p.body_length < o::CORE_BODY) {
     return std::nullopt;
   }
   const ByteSpan b = p.body();
+  // Later-revision trailing fields; read each only when the body reaches it.
+  const auto opt_u2 = [&](std::size_t off) -> uint16_t {
+    return p.body_length >= off + sizeof(uint16_t)
+               ? read_little_endian<uint16_t>(b, off)
+               : DNU_U2;
+  };
   return PVTGeodetic {
       .tow = read_little_endian<uint32_t>(b, o::TOW),
       .wnc = read_little_endian<uint16_t>(b, o::WNC),
@@ -145,11 +156,11 @@ inline std::optional<PVTGeodetic> parse_pvt_geodetic(const Packet &p) {
       .signal_info = read_little_endian<uint32_t>(b, o::SIGNAL_INFO),
       .alert_flag = b[o::ALERT_FLAG],
       .nr_bases = b[o::NR_BASES],
-      .ppp_info = read_little_endian<uint16_t>(b, o::PPP_INFO),
-      .latency = read_little_endian<uint16_t>(b, o::LATENCY),
-      .h_accuracy = read_little_endian<uint16_t>(b, o::H_ACCURACY),
-      .v_accuracy = read_little_endian<uint16_t>(b, o::V_ACCURACY),
-      .misc = b[o::MISC],
+      .ppp_info = opt_u2(o::PPP_INFO),
+      .latency = opt_u2(o::LATENCY),
+      .h_accuracy = opt_u2(o::H_ACCURACY),
+      .v_accuracy = opt_u2(o::V_ACCURACY),
+      .misc = p.body_length >= o::MISC + sizeof(uint8_t) ? b[o::MISC] : DNU_U1,
   };
 }
 
@@ -456,6 +467,66 @@ inline std::optional<AttCovEuler> parse_att_cov_euler(const Packet &p) {
       .cov_headroll = read_little_endian<float>(b, o::COV_HEADROLL),
       .cov_pitchroll = read_little_endian<float>(b, o::COV_PITCHROLL),
   };
+}
+
+/*
+ * AuxAntPositions, block 5942, mosaic-H Reference Guide section 4.2.10. A
+ * header (N sub-blocks, each SBLength bytes) followed by one sub-block per
+ * auxiliary antenna. We surface only the first sub-block's tracking fields --
+ * enough to see whether the aux antenna is receiving satellites at all.
+ */
+namespace aux_ant_positions_layout {
+constexpr uint16_t BLOCK_NUMBER = 5942;
+constexpr std::size_t N = 6;
+constexpr std::size_t SB_LENGTH = 7;
+constexpr std::size_t FIRST_SUB = 8;
+constexpr std::size_t MIN_BODY = FIRST_SUB; // header only; sub-blocks may be 0
+// Field offsets within an AuxAntPositionSub sub-block.
+constexpr std::size_t SUB_NR_SV = 0;
+constexpr std::size_t SUB_ERROR = 1;
+constexpr std::size_t SUB_AUX_ANT_ID = 3;
+} // namespace aux_ant_positions_layout
+
+/**
+ * Tracking summary for the first auxiliary antenna baseline. `n` is how many
+ * aux sub-blocks the receiver reported (0 = the aux antenna is not in the
+ * solution at all); the rest describe the first sub-block, or Do-Not-Use when
+ * absent.
+ */
+struct AuxAntTracking {
+  uint8_t n;          // number of aux sub-blocks in the block
+  uint8_t nr_sv;      // sats tracked by the first aux antenna, DNU_U1 if absent
+  uint8_t error;      // first aux antenna error (1 = not enough measurements)
+  uint8_t aux_ant_id; // first aux antenna id (1 = aux1), 0 if absent
+};
+
+/**
+ * @brief Decode the first auxiliary antenna's tracking from AuxAntPositions.
+ *
+ * @param p The packet whose block_number must equal 5942.
+ *
+ * @return The tracking summary, or nullopt on block-number mismatch or a body
+ *         too short for the header.
+ */
+inline std::optional<AuxAntTracking> parse_aux_ant_positions(const Packet &p) {
+  namespace o = aux_ant_positions_layout;
+  if (p.block_number() != o::BLOCK_NUMBER) {
+    return std::nullopt;
+  }
+  if (p.body_length < o::MIN_BODY) {
+    return std::nullopt;
+  }
+  const ByteSpan b = p.body();
+  const uint8_t n = b[o::N];
+  const uint8_t sb_length = b[o::SB_LENGTH];
+  AuxAntTracking out {.n = n, .nr_sv = DNU_U1, .error = 0, .aux_ant_id = 0};
+  if (n >= 1 && sb_length > o::SUB_AUX_ANT_ID &&
+      p.body_length >= o::FIRST_SUB + sb_length) {
+    out.nr_sv = b[o::FIRST_SUB + o::SUB_NR_SV];
+    out.error = b[o::FIRST_SUB + o::SUB_ERROR];
+    out.aux_ant_id = b[o::FIRST_SUB + o::SUB_AUX_ANT_ID];
+  }
+  return out;
 }
 
 } // namespace sbf

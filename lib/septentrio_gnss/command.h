@@ -113,6 +113,7 @@ enum class SbfBlock : uint8_t {
   AttCovEuler,
   PVTGeodetic,
   PosCovGeodetic,
+  AuxAntPositions,
 };
 
 constexpr std::string_view to_token(GnssAttitudeMode mode) {
@@ -179,6 +180,8 @@ constexpr std::string_view to_token(SbfBlock block) {
     return "PVTGeodetic";
   case SbfBlock::PosCovGeodetic:
     return "PosCovGeodetic";
+  case SbfBlock::AuxAntPositions:
+    return "AuxAntPositions";
   }
   return {};
 }
