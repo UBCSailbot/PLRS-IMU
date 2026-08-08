@@ -132,6 +132,13 @@ void task(void *params) {
   std::optional<plrs::Vec3> last_accel;
   std::optional<plrs::Vec3> last_mag;
 
+  // Persist the magnetometer calibration once it first converges to high
+  // accuracy, so later boots start calibrated instead of reconverging from
+  // scratch. One-shot per run; the BNO reloads the saved DCD on reset.
+  uint8_t cmd_seq = 0;
+  bool dcd_saved = false;
+  constexpr uint8_t MAG_ACCURACY_HIGH = 3;
+
   while (true) {
     auto cargo = p.transport.read_cargo(scratch);
     if (!cargo) {
@@ -165,12 +172,29 @@ void task(void *params) {
       continue;
     }
 
+    // Rotation Vector status tracks the magnetometer's convergence; the fusion
+    // layer withholds heading validity until it reaches medium/high.
+    const uint8_t mag_accuracy =
+        sh2::read_report_accuracy(packet->payload, sh2::Report::RotationVector)
+            .value_or(0);
+
+    if (!dcd_saved && mag_accuracy >= MAG_ACCURACY_HIGH) {
+      const auto cmd = sh2::build_save_dcd();
+      send(p.transport,
+           cmd_seq,
+           shtp::Channel::Control,
+           {cmd.data(), cmd.size()});
+      dcd_saved = true;
+      p.telemetry.println("# IMU: saved calibration (DCD)");
+    }
+
     fusion::ImuSample sample {
         .angular_velocity_rad_s = *last_gyro,
         .accel_ms2 = *last_accel,
         .magnetic_field_au = last_mag ? *last_mag : plrs::Vec3 {},
         .orientation = *orientation,
         .timestamp = now(),
+        .mag_accuracy = mag_accuracy,
     };
 
     xQueueSend(p.queue, &sample, 0);

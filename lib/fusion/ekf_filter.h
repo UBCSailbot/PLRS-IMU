@@ -204,6 +204,7 @@ public:
    * @param imu. IMU sample.
    */
   void predict(ImuSample imu) {
+    _mag_accuracy = imu.mag_accuracy;
     const EulerZyx attitude = measured_attitude(imu.orientation);
 
     // Pre-filter values off the MTi orientation, for the raw rudder link. Roll
@@ -416,16 +417,25 @@ public:
   /**
    * @brief Read the current fused estimate.
    *
-   * @return Current FusionOutput. heading_variance_deg2 is FLT_MAX before the
-   * first valid GNSS update; roll/pitch variances are FLT_MAX before the first
-   * predict seeds them. Afterward each is the matching P diagonal entry.
+   * @return Current FusionOutput. heading_variance_deg2 is FLT_MAX until
+   * heading is anchored -- by the first valid GNSS fix, or, in mag-primary mode
+   * (offset_seed_deg set), by the first predict that seeds the offset; roll/
+   * pitch variances are FLT_MAX before the first predict seeds them. Afterward
+   * each is the matching P diagonal entry.
    */
   FusionOutput output() const {
+    // Mag-primary (seeded offset) anchors heading from the first predict, so
+    // its variance is meaningful without ever seeing GNSS; report it rather
+    // than the FLT_MAX sentinel that would flag heading untrustworthy to the
+    // rudder.
+    const bool heading_anchored =
+        _initialized || (_has_predicted && _cfg.mti_yaw &&
+                         _cfg.mti_yaw->offset_seed_deg.has_value());
     return FusionOutput {
         .heading_deg = _ekf.x[IDX_HEADING],
         .heading_variance_deg2 =
-            _initialized ? _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING]
-                         : FLT_MAX,
+            heading_anchored ? _ekf.P[IDX_HEADING * N_STATE + IDX_HEADING]
+                             : FLT_MAX,
         .roll_deg = _ekf.x[IDX_ROLL],
         .roll_variance_deg2 =
             _has_predicted ? _ekf.P[IDX_ROLL * N_STATE + IDX_ROLL] : FLT_MAX,
@@ -436,6 +446,7 @@ public:
         .yaw_rate_dps = _yaw_rate_dps,
         .raw_roll_deg = _raw_roll_deg,
         .raw_yaw_rate_dps = _raw_yaw_rate_dps,
+        .mag_accuracy = _mag_accuracy,
     };
   }
 
@@ -568,6 +579,7 @@ private:
   float _raw_yaw_rate_dps = 0.0f;
   uint32_t _gate_rejects = 0;
   uint32_t _mag_gate_rejects = 0;
+  uint8_t _mag_accuracy = 0;
   bool _initialized = false;
   bool _has_predicted = false;
 };

@@ -67,15 +67,25 @@ pitch_deg2 = 1.0
 [mti_yaw]
 variance_deg2 = 4.0
 q_offset_deg2 = 1.0
-p0_offset_deg2 = 100.0
+# Tight because the mag is the sole heading reference (the dual-antenna GNSS aux
+# input is dead): the calibrated offset_seed is trusted as absolute heading from
+# boot, which holds the heading sigma under the rudder's validity gate. Loosen
+# back toward 100 once a working dual-antenna receiver can refine the offset.
+p0_offset_deg2 = 4.0
 q_offset_outage_deg2 = 1e-4
-# Vancouver magnetic declination (~15.5 deg E, 2026). The measurement asserts
-# heading + offset = -yaw, so a true-north heading needs offset = -declination.
-# This fixes only the declination term; boat iron and the BNO-to-boat frame
-# constant are unknown here, so heading is not absolutely correct until GNSS
-# refines the offset (or a persisted offset from a prior fix is restored at
-# boot). GNSS still owns absolute heading.
-offset_seed_deg = -15.5
+# Full single-point calibration (declination + BNO-to-boat frame + local iron),
+# not just declination: with the boat bow on magnetic north and level, the seed
+# is set so heading reads true north-of-magnetic (+declination). Measured on the
+# boat in its mounted orientation, after the magnetometer converged (spin cal,
+# accuracy >= 2) so the -yaw it reflects is the calibrated one. The measurement
+# asserts heading + offset = -yaw. Redo (or let a working GNSS refine it) if the
+# mount or magnetic environment changes.
+#
+# From the 2026-08-07 spin: calibrated north-hold heading -14.71 at offset state
+# -101.53 gives -yaw = -116.24; targeting +15.5 (magnetic-north true heading)
+# yields offset = -131.7. PROVISIONAL: verify on hardware (heading ~15.5 at
+# magnetic north, and repeatable across a reboot now that DCD is saved).
+offset_seed_deg = -131.7
 
 # GNSS dual-antenna calibration. baseline_offset_deg is the antenna baseline
 # heading measured clockwise from boat-forward; the bridge subtracts it so the

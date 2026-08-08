@@ -105,6 +105,7 @@ struct Reply {
  */
 
 enum class GnssAttitudeMode : uint8_t { None, MultiAntenna };
+enum class AttitudeResolution : uint8_t { Auto, Float, Fixed };
 enum class Connection : uint8_t { COM1, COM2, COM3, USB1, USB2 };
 enum class SbfStream : uint8_t { Stream1, Stream2, Stream3, Stream4 };
 enum class SbfInterval : uint8_t { Msec100, Msec200, Msec500, Sec1 };
@@ -113,6 +114,7 @@ enum class SbfBlock : uint8_t {
   AttCovEuler,
   PVTGeodetic,
   PosCovGeodetic,
+  AuxAntPositions,
 };
 
 constexpr std::string_view to_token(GnssAttitudeMode mode) {
@@ -121,6 +123,18 @@ constexpr std::string_view to_token(GnssAttitudeMode mode) {
     return "none";
   case GnssAttitudeMode::MultiAntenna:
     return "MultiAntenna";
+  }
+  return {};
+}
+
+constexpr std::string_view to_token(AttitudeResolution resolution) {
+  switch (resolution) {
+  case AttitudeResolution::Auto:
+    return "auto";
+  case AttitudeResolution::Float:
+    return "Float";
+  case AttitudeResolution::Fixed:
+    return "Fixed";
   }
   return {};
 }
@@ -179,6 +193,8 @@ constexpr std::string_view to_token(SbfBlock block) {
     return "PVTGeodetic";
   case SbfBlock::PosCovGeodetic:
     return "PosCovGeodetic";
+  case SbfBlock::AuxAntPositions:
+    return "AuxAntPositions";
   }
   return {};
 }
@@ -223,13 +239,19 @@ struct CommandBuilder {
 };
 
 /**
- * @brief Build "setGNSSAttitude,<mode>", selecting the attitude source.
+ * @brief Build "setGNSSAttitude,<mode>,<resolution>".
+ *
+ * The resolution is emitted explicitly rather than relying on the receiver's
+ * default (Fixed): a short baseline may never fix its ambiguities, so Float
+ * keeps heading available.
  */
 constexpr std::expected<Command, const char *>
-set_gnss_attitude(GnssAttitudeMode mode) {
+set_gnss_attitude(GnssAttitudeMode mode, AttitudeResolution resolution) {
   CommandBuilder b;
   b.put("setGNSSAttitude,");
   b.put(to_token(mode));
+  b.put(',');
+  b.put(to_token(resolution));
   return b.finish();
 }
 

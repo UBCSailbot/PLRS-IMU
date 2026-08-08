@@ -92,7 +92,8 @@ constexpr std::size_t report_len(uint8_t id) {
  * @return The report's data span (borrowing `payload`), or nullopt if absent
  *   or the batch is truncated / holds an unknown id before it.
  */
-constexpr std::optional<ByteSpan> find_report(ByteSpan payload, Report wanted) {
+constexpr std::optional<ByteSpan> find_report_frame(ByteSpan payload,
+                                                    Report wanted) {
   std::size_t i = 0;
   while (i < payload.size()) {
     const uint8_t id = payload[i];
@@ -100,12 +101,39 @@ constexpr std::optional<ByteSpan> find_report(ByteSpan payload, Report wanted) {
     if (len == 0 || i + len > payload.size()) {
       break;
     }
-    if (id == static_cast<uint8_t>(wanted) && len > REPORT_HEADER) {
-      return payload.subspan(i + REPORT_HEADER, len - REPORT_HEADER);
+    if (id == static_cast<uint8_t>(wanted)) {
+      return payload.subspan(i, len);
     }
     i += len;
   }
   return std::nullopt;
+}
+
+constexpr std::optional<ByteSpan> find_report(ByteSpan payload, Report wanted) {
+  auto frame = find_report_frame(payload, wanted);
+  if (!frame || frame->size() <= REPORT_HEADER) {
+    return std::nullopt;
+  }
+  return frame->subspan(REPORT_HEADER);
+}
+
+/**
+ * @brief Calibration accuracy from a report's status byte: 0 unreliable, 1 low,
+ * 2 medium, 3 high. nullopt if the report is absent from the batch.
+ *
+ * Every sensor report's third header byte carries the accuracy in bits 0-1. For
+ * the Rotation Vector this tracks the magnetometer's convergence, so heading is
+ * only trustworthy once it reaches medium/high.
+ */
+constexpr std::optional<uint8_t> read_report_accuracy(ByteSpan payload,
+                                                      Report wanted) {
+  auto frame = find_report_frame(payload, wanted);
+  if (!frame) {
+    return std::nullopt;
+  }
+  constexpr std::size_t STATUS_OFFSET = 2;
+  constexpr uint8_t ACCURACY_MASK = 0x03;
+  return static_cast<uint8_t>((*frame)[STATUS_OFFSET] & ACCURACY_MASK);
 }
 
 /**
@@ -185,6 +213,29 @@ build_set_feature(Report sensor, uint32_t interval_us) {
   p[7] = static_cast<uint8_t>((interval_us >> 16) & 0xff);
   p[8] = static_cast<uint8_t>((interval_us >> 24) & 0xff);
   // p[9..12] batch interval, p[13..16] sensor-specific config: left zero.
+  return p;
+}
+
+// Command request (host -> control channel), report 0xf2: report id, sequence,
+// command, then nine parameter bytes.
+constexpr uint8_t COMMAND_REQUEST = 0xf2;
+constexpr std::size_t COMMAND_REQUEST_LEN = 12;
+constexpr uint8_t COMMAND_SAVE_DCD = 0x06;
+
+/**
+ * @brief Build a Save-DCD command: persist the current dynamic calibration
+ * (accel/gyro/mag) to the BNO's flash.
+ *
+ * Frame onto the control channel with shtp::encode_packet. Without it a
+ * converged magnetometer calibration is lost on reset, so heading has to
+ * reconverge from scratch every boot. All nine parameter bytes are zero for
+ * Save DCD.
+ */
+constexpr std::array<uint8_t, COMMAND_REQUEST_LEN> build_save_dcd() {
+  std::array<uint8_t, COMMAND_REQUEST_LEN> p {};
+  p[0] = COMMAND_REQUEST;
+  // p[1] sequence left zero; the SHTP layer carries the transport sequence.
+  p[2] = COMMAND_SAVE_DCD;
   return p;
 }
 
