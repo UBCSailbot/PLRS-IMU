@@ -55,7 +55,8 @@ static void print_line(Print &out, char tag, Fields... fields) {
  *
  * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,bias,
  * bias_sigma,bias_x,bias_x_sigma,bias_y,bias_y_sigma,mag_offset,
- * offset_sigma,gate_rejects,mag_gate_rejects` (deg, deg/s). `bias` is the
+ * offset_sigma,gate_rejects,mag_gate_rejects,mag_accuracy` (deg, deg/s;
+ * mag_accuracy 0..3 is the BNO calibration status). `bias` is the
  * Z (vertical) gyro bias; `bias_x`/`bias_y` are its body-frame companions,
  * the ones that read as heading drift only at heel. The trailing debug fields
  * expose the internal states behind heading drift (bias wind-up, mag-offset
@@ -86,7 +87,8 @@ static void print_fusion(Print &sink,
              Real {dbg.mag_offset_deg, 3},
              Real {std::sqrt(dbg.mag_offset_variance_deg2), 3},
              dbg.gate_rejects,
-             dbg.mag_gate_rejects);
+             dbg.mag_gate_rejects,
+             out.mag_accuracy);
 }
 
 /**

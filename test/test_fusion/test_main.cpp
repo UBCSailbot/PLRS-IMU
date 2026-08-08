@@ -885,6 +885,55 @@ void test_bridge_baseline_error_is_invalid();
 void test_bridge_dnu_covariance_uses_fallback();
 
 // ---------------------------------------------------------------------------
+// Mag-primary heading (no GNSS ever): the aux GNSS antenna is dead, so the
+// magnetometer is the sole heading reference.
+// ---------------------------------------------------------------------------
+
+/** @brief Regression: with a seeded, pinned offset and no GNSS ever, output()
+ * reports a finite heading variance under the rudder's steer-on bound and
+ * heading_trustworthy passes. The FLT_MAX sentinel (keyed on a GNSS fix that
+ * can never arrive) used to flag mag-only heading permanently invalid. */
+void test_mag_primary_reports_steerable_heading() {
+  TinyEkfFilter::Config cfg = make_mag_config();
+  cfg.mti_yaw->q_offset_outage_deg2 = 1.0e-4f;
+  cfg.mti_yaw->p0_offset_deg2 = 4.0f; // trust the calibrated seed
+  cfg.mti_yaw->offset_seed_deg = MAG_COMPASS - TRUE_HEADING;
+  TinyEkfFilter f(cfg);
+  for (int i = 0; i <= 200; i++) {
+    ImuSample s = make_mag_imu(0.0f, Ms {1000 + 100 * i});
+    s.mag_accuracy = 3; // BNO magnetometer converged
+    f.predict(s);
+  }
+  const FusionOutput out = f.output();
+  constexpr float kSteerOnVariance = 25.0f; // rudder_task bound (5 deg sigma)
+  TEST_ASSERT_TRUE(out.heading_variance_deg2 < kSteerOnVariance);
+  TEST_ASSERT_FLOAT_WITHIN(2.0f, TRUE_HEADING, out.heading_deg);
+  TEST_ASSERT_EQUAL_UINT8(3, out.mag_accuracy);
+  TEST_ASSERT_TRUE(heading_trustworthy(
+      out, kSteerOnVariance, PITCH_KINEMATICS_LIMIT_DEG, 2));
+}
+
+/** @brief Regression: heading_trustworthy withholds validity until the BNO mag
+ * calibration reaches the caller's minimum, so an uncalibrated mag (confident
+ * variance, wrong bearing) cannot steer the boat. */
+void test_heading_trustworthy_gates_on_mag_accuracy() {
+  FusionOutput out {};
+  out.heading_deg = 30.0f;
+  out.heading_variance_deg2 = 4.0f; // well within the variance bound
+  out.pitch_deg = 0.0f;
+  out.mag_accuracy = 1; // low: not yet trustworthy
+  TEST_ASSERT_FALSE(
+      heading_trustworthy(out, 25.0f, PITCH_KINEMATICS_LIMIT_DEG, 2));
+  out.mag_accuracy = 2; // medium: clears the gate
+  TEST_ASSERT_TRUE(
+      heading_trustworthy(out, 25.0f, PITCH_KINEMATICS_LIMIT_DEG, 2));
+  // min 0 disables the check (GNSS-primary callers, unchanged).
+  out.mag_accuracy = 0;
+  TEST_ASSERT_TRUE(
+      heading_trustworthy(out, 25.0f, PITCH_KINEMATICS_LIMIT_DEG, 0));
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int, char **) {
   UNITY_BEGIN();
@@ -919,6 +968,8 @@ int main(int, char **) {
   RUN_TEST(test_offset_seed_anchors_heading_from_boot);
   RUN_TEST(test_offset_seed_holds_heading_against_gyro_bias_no_gnss);
   RUN_TEST(test_offset_seed_unset_leaves_heading_unanchored);
+  RUN_TEST(test_mag_primary_reports_steerable_heading);
+  RUN_TEST(test_heading_trustworthy_gates_on_mag_accuracy);
   RUN_TEST(test_gnss_refines_a_wrong_offset_seed);
   RUN_TEST(test_heading_variance_capped_without_mag);
   RUN_TEST(test_body_frame_bias_survives_heel_change);

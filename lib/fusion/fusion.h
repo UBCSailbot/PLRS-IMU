@@ -140,6 +140,10 @@ struct ImuSample {
   plrs::Vec3 magnetic_field_au = {};
   UnitQuaternion orientation = UnitQuaternion::identity();
   Ms timestamp;
+  // BNO Rotation Vector calibration accuracy: 0 unreliable, 1 low, 2 medium,
+  // 3 high. Tracks magnetometer convergence; heading is only trusted once the
+  // mag has calibrated (see heading_trustworthy). Zero when unknown.
+  uint8_t mag_accuracy = 0;
 };
 
 /**
@@ -180,25 +184,34 @@ struct FusionOutput {
   // subtraction.
   float raw_roll_deg;
   float raw_yaw_rate_dps;
+  // Latest BNO Rotation Vector calibration accuracy (0..3); see ImuSample.
+  // With the mag as the sole heading reference, heading is only trustworthy
+  // once this reaches the caller's minimum (see heading_trustworthy).
+  uint8_t mag_accuracy = 0;
 };
 
 /**
  * @brief Whether a fused heading is trustworthy enough to steer on.
  *
- * Three ways it is not: a non-finite value (should never happen, but a hard
+ * Four ways it is not: a non-finite value (should never happen, but a hard
  * backstop against a NaN reaching the rudder), a variance past max_variance
- * (GNSS-unanchored and free-drifting), or a pitch past max_pitch of level,
+ * (GNSS-unanchored and free-drifting), a pitch past max_pitch of level,
  * where the ZYX heading kinematics are singular and "heading" is not a
- * well-defined compass bearing (see PITCH_KINEMATICS_LIMIT_DEG).
+ * well-defined compass bearing (see PITCH_KINEMATICS_LIMIT_DEG), or a mag
+ * calibration accuracy below min_mag_accuracy: with the magnetometer the sole
+ * heading reference, an uncalibrated mag gives a confident but wrong bearing,
+ * so heading must wait for it to converge (0 disables the check).
  * Thresholds are the caller's policy; the rudder link carries the result as
  * the Attitude message's heading_valid flag.
  */
 inline bool heading_trustworthy(const FusionOutput &out,
                                 float max_variance_deg2,
-                                float max_pitch_deg) {
+                                float max_pitch_deg,
+                                uint8_t min_mag_accuracy = 0) {
   return std::isfinite(out.heading_deg) &&
          out.heading_variance_deg2 <= max_variance_deg2 &&
-         std::fabs(out.pitch_deg) <= max_pitch_deg;
+         std::fabs(out.pitch_deg) <= max_pitch_deg &&
+         out.mag_accuracy >= min_mag_accuracy;
 }
 
 /**

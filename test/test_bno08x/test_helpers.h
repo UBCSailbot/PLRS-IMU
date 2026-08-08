@@ -44,10 +44,12 @@ inline std::vector<uint8_t> base_timestamp() {
   return {0xFB, 0x00, 0x00, 0x00, 0x00};
 }
 
-// One sensor report: 4-byte header (id, seq, status, delay) + data.
+// One sensor report: 4-byte header (id, seq, status, delay) + data. status
+// carries the calibration accuracy in bits 0-1.
 inline std::vector<uint8_t> make_report(uint8_t id,
-                                        const std::vector<uint8_t> &data) {
-  std::vector<uint8_t> r {id, 0x00, 0x00, 0x00};
+                                        const std::vector<uint8_t> &data,
+                                        uint8_t status = 0x00) {
+  std::vector<uint8_t> r {id, 0x00, status, 0x00};
   r.insert(r.end(), data.begin(), data.end());
   return r;
 }
@@ -63,8 +65,9 @@ vec3_report(uint8_t id, float x, float y, float z, int qpoint) {
 }
 
 // Rotation Vector report: i, j, k, real, accuracy (Q14 quat, Q12 accuracy).
+// status carries the calibration accuracy (0-3) in its low two bits.
 inline std::vector<uint8_t>
-rotation_report(float w, float x, float y, float z) {
+rotation_report(float w, float x, float y, float z, uint8_t status = 0x00) {
   std::vector<uint8_t> data;
   for (float v : {x, y, z, w}) { // wire order i, j, k, real
     auto b = q_le(v, 14);
@@ -72,7 +75,7 @@ rotation_report(float w, float x, float y, float z) {
   }
   auto acc = q_le(0.0f, 12);
   data.insert(data.end(), acc.begin(), acc.end());
-  return make_report(0x05, data);
+  return make_report(0x05, data, status);
 }
 
 inline void append(std::vector<uint8_t> &dst, const std::vector<uint8_t> &src) {

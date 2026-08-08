@@ -36,6 +36,16 @@ static_assert(kFrame->len == shtp::HEADER_LEN + sh2::SET_FEATURE_LEN);
 static_assert(kFrame->bytes[0] == 21); // total length incl. header, LE
 static_assert(kFrame->bytes[1] == 0);
 static_assert(kFrame->bytes[2] == 2); // control channel
+
+// The Save-DCD command request must land on the exact bytes the SH-2 firmware
+// expects: report 0xF2, command 0x06, nine zero parameters. Without this a
+// converged mag calibration is never persisted across reboots.
+constexpr auto kSaveDcd = sh2::build_save_dcd();
+static_assert(kSaveDcd.size() == 12);
+static_assert(kSaveDcd[0] == 0xF2); // command request report id
+static_assert(kSaveDcd[2] == 0x06); // Save DCD
+static_assert(kSaveDcd[1] == 0x00);
+static_assert(kSaveDcd[3] == 0x00 && kSaveDcd[11] == 0x00); // params zeroed
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -217,6 +227,32 @@ void test_truncated_report_is_safe() {
   TEST_ASSERT_FALSE(sh2::read_accel(span).has_value());
 }
 
+// Regression: heading validity gates on the Rotation Vector's calibration
+// accuracy (status bits 0-1), so an uncalibrated mag cannot steer the boat.
+void test_read_report_accuracy() {
+  std::vector<uint8_t> batch = base_timestamp();
+  // status 0x0B = 0b1011: accuracy 3 in the low two bits, other bits set.
+  append(batch, rotation_report(1.0f, 0.0f, 0.0f, 0.0f, 0x0B));
+  auto span = shtp::ByteSpan(batch.data(), batch.size());
+  auto acc = sh2::read_report_accuracy(span, sh2::Report::RotationVector);
+  TEST_ASSERT_TRUE(acc.has_value());
+  TEST_ASSERT_EQUAL_UINT8(3, *acc); // masked to the accuracy bits
+  // A report absent from the batch yields nullopt, not a false 0.
+  TEST_ASSERT_FALSE(
+      sh2::read_report_accuracy(span, sh2::Report::MagCalibrated).has_value());
+}
+
+// Regression: the quaternion decode still reads correctly through a nonzero
+// status byte (the accuracy refactor must not shift the data offset).
+void test_rotation_vector_decodes_with_status_set() {
+  std::vector<uint8_t> batch = base_timestamp();
+  append(batch, rotation_report(1.0f, 0.0f, 0.0f, 0.0f, 0x02));
+  auto q =
+      sh2::read_rotation_vector(shtp::ByteSpan(batch.data(), batch.size()));
+  TEST_ASSERT_TRUE(q.has_value());
+  TEST_ASSERT_FLOAT_WITHIN(1e-3, 1.0f, q->w);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_parse_packet_basic);
@@ -236,5 +272,7 @@ int main() {
   RUN_TEST(test_absent_report_is_nullopt);
   RUN_TEST(test_unknown_report_stops_walk);
   RUN_TEST(test_truncated_report_is_safe);
+  RUN_TEST(test_read_report_accuracy);
+  RUN_TEST(test_rotation_vector_decodes_with_status_set);
   return UNITY_END();
 }

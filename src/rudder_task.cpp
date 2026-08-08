@@ -15,6 +15,12 @@ namespace rudder_task {
 // cleanly separates anchored from free-drifting. Tune to taste.
 static constexpr float HEADING_VALID_MAX_VARIANCE_DEG2 = 25.0f; // 5 deg sigma
 
+// With the magnetometer the sole heading reference (no dual-antenna GNSS), an
+// uncalibrated mag yields a confident-looking but wrong bearing. Require at
+// least medium BNO calibration accuracy before heading may steer the boat, so
+// it stays invalid until the mag has converged (spin to calibrate on boot).
+static constexpr uint8_t HEADING_VALID_MIN_MAG_ACCURACY = 2;
+
 // ...and while pitch stays out of the near-vertical regime where the ZYX
 // heading is singular. The bound is fusion::PITCH_KINEMATICS_LIMIT_DEG, the
 // same value the filter clamps its kinematics at, so the two cannot drift
@@ -34,7 +40,8 @@ void task(void *params) {
       const bool heading_valid =
           fusion::heading_trustworthy(out,
                                       HEADING_VALID_MAX_VARIANCE_DEG2,
-                                      fusion::PITCH_KINEMATICS_LIMIT_DEG);
+                                      fusion::PITCH_KINEMATICS_LIMIT_DEG,
+                                      HEADING_VALID_MIN_MAG_ACCURACY);
       p.uart.write(sender
                        .next(rudder::Attitude {.heading_deg = out.heading_deg,
                                                .roll_deg = out.roll_deg,
