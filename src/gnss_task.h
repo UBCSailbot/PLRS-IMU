@@ -7,6 +7,7 @@
 #ifdef ARDUINO
 #include "gnss_bridge.h"
 #include "septentrio_transport.h"
+#include "telemetry.h"
 #include <FreeRTOS.h>
 #include <queue.h>
 
@@ -16,6 +17,7 @@ struct TaskParams {
   septentrio_gnss::Uart uart;
   QueueHandle_t queue;
   fusion::GnssAttitudeMount mount;
+  plrs::TelemetrySink &telemetry;
 };
 
 void task(void *params);

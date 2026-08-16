@@ -73,16 +73,19 @@ void setup() {
   if (auto persisted = offset_store_eeprom::load();
       persisted && filter_config.mti_yaw) {
     filter_config.mti_yaw->offset_seed_deg = *persisted;
-    telemetry.print("# persist: loaded ");
-    telemetry.println(*persisted, 3);
+    auto line = telemetry.line();
+    line.print("# persist: loaded ");
+    line.println(*persisted, 3);
   } else {
-    telemetry.println("# persist: no stored offset");
+    telemetry.line().println("# persist: no stored offset");
   }
 
   static imu_task::TaskParams imu_params {
       bno08x::I2cTransport(Wire, BNO_I2C_ADDR), imu_queue, telemetry};
-  static gnss_task::TaskParams gnss_params {
-      septentrio_gnss::Uart(gnss_serial), gnss_queue, tuning::kGnssMount};
+  static gnss_task::TaskParams gnss_params {septentrio_gnss::Uart(gnss_serial),
+                                            gnss_queue,
+                                            tuning::kGnssMount,
+                                            telemetry};
   static fusion_task::TaskParams fusion_params {imu_queue,
                                                 gnss_queue,
                                                 heading_mailbox,

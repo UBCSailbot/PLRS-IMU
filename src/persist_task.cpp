@@ -26,8 +26,9 @@ void task(void *params) {
     }
     offset_store_eeprom::save(sample.offset_deg);
     policy.mark_written(sample.offset_deg, sample.timestamp);
-    p.telemetry.print("# persist: saved ");
-    p.telemetry.println(sample.offset_deg, 3);
+    auto line = p.telemetry.line();
+    line.print("# persist: saved ");
+    line.println(sample.offset_deg, 3);
   }
 }
 
