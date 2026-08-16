@@ -11,6 +11,7 @@
 
 #ifdef ARDUINO
 #include "fusion.h"
+#include "telemetry.h"
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <queue.h>
@@ -29,7 +30,7 @@ struct OffsetSample {
 
 struct TaskParams {
   QueueHandle_t offset_mailbox;
-  Print &telemetry;
+  plrs::TelemetrySink &telemetry;
 };
 
 void task(void *params);

@@ -36,19 +36,17 @@ static constexpr uint8_t PVT_MODE_TYPE_MASK = 0x0F;
  * and how many satellites it uses, separating "no signal at all" from
  * "position fine, aux antenna missing".
  */
-static void report_pvt(const sbf::PVTGeodetic &pvt) {
+static void report_pvt(plrs::TelemetrySink &sink, const sbf::PVTGeodetic &pvt) {
   static std::chrono::milliseconds last {0};
   const auto t = now();
   if (t - last < std::chrono::milliseconds(PVT_REPORT_INTERVAL_MS)) {
     return;
   }
   last = t;
-  if (Serial) {
-    Serial.printf("# PVT: fix=%u sats=%u error=%u\n",
-                  pvt.mode & PVT_MODE_TYPE_MASK,
-                  pvt.nr_sv,
-                  pvt.error);
-  }
+  sink.line().printf("# PVT: fix=%u sats=%u error=%u\n",
+                     pvt.mode & PVT_MODE_TYPE_MASK,
+                     pvt.nr_sv,
+                     pvt.error);
 }
 
 /**
@@ -59,20 +57,19 @@ static void report_pvt(const sbf::PVTGeodetic &pvt) {
  * receiving nothing (RF path or receiver aux input), even when its port is
  * powered; n=0 means the aux antenna is not in the solution at all.
  */
-static void report_aux(const sbf::AuxAntTracking &aux) {
+static void report_aux(plrs::TelemetrySink &sink,
+                       const sbf::AuxAntTracking &aux) {
   static std::chrono::milliseconds last {0};
   const auto t = now();
   if (t - last < std::chrono::milliseconds(PVT_REPORT_INTERVAL_MS)) {
     return;
   }
   last = t;
-  if (Serial) {
-    Serial.printf("# AUX: n=%u id=%u sats=%u error=%u\n",
-                  aux.n,
-                  aux.aux_ant_id,
-                  aux.nr_sv,
-                  aux.error);
-  }
+  sink.line().printf("# AUX: n=%u id=%u sats=%u error=%u\n",
+                     aux.n,
+                     aux.aux_ant_id,
+                     aux.nr_sv,
+                     aux.error);
 }
 
 /**
@@ -132,15 +129,15 @@ wait_for_reply(septentrio_gnss::Uart &uart,
 static bool
 send_verified(septentrio_gnss::Uart &uart,
               septentrio_gnss::Parser &parser,
+              plrs::TelemetrySink &sink,
               const std::expected<septentrio_gnss::Command, const char *> &cmd,
               const char *label) {
   const auto fail = [&](const char *why) {
-    if (Serial) {
-      Serial.print("# GNSS: ");
-      Serial.print(label);
-      Serial.print(' ');
-      Serial.println(why);
-    }
+    auto line = sink.line();
+    line.print("# GNSS: ");
+    line.print(label);
+    line.print(' ');
+    line.println(why);
     return false;
   };
 
@@ -152,12 +149,10 @@ send_verified(septentrio_gnss::Uart &uart,
   LinkStats stats;
   auto reply = wait_for_reply(uart, parser, REPLY_TIMEOUT_MS, stats);
   if (!reply) {
-    if (Serial) {
-      Serial.printf("# GNSS: %s timeout (rx=%lu sbf=%lu)\n",
-                    label,
-                    static_cast<unsigned long>(stats.bytes),
-                    static_cast<unsigned long>(stats.sbf));
-    }
+    sink.line().printf("# GNSS: %s timeout (rx=%lu sbf=%lu)\n",
+                       label,
+                       static_cast<unsigned long>(stats.bytes),
+                       static_cast<unsigned long>(stats.sbf));
     return false;
   }
   if (reply->kind == septentrio_gnss::ReplyKind::Err) {
@@ -184,7 +179,8 @@ send_verified(septentrio_gnss::Uart &uart,
  * @param parser  Wire parser instance.
  */
 static void bring_up(septentrio_gnss::Uart &uart,
-                     septentrio_gnss::Parser &parser) {
+                     septentrio_gnss::Parser &parser,
+                     plrs::TelemetrySink &sink) {
   constexpr std::array<septentrio_gnss::SbfBlock, 4> blocks {
       septentrio_gnss::SbfBlock::AttEuler,
       septentrio_gnss::SbfBlock::AttCovEuler,
@@ -196,12 +192,14 @@ static void bring_up(septentrio_gnss::Uart &uart,
     const bool ready =
         send_verified(uart,
                       parser,
+                      sink,
                       septentrio_gnss::set_gnss_attitude(
                           septentrio_gnss::GnssAttitudeMode::MultiAntenna,
                           septentrio_gnss::AttitudeResolution::Fixed),
                       "setGNSSAttitude") &&
         send_verified(uart,
                       parser,
+                      sink,
                       septentrio_gnss::set_sbf_output(
                           septentrio_gnss::SbfStream::Stream1,
                           septentrio_gnss::Connection::COM1,
@@ -210,8 +208,7 @@ static void bring_up(septentrio_gnss::Uart &uart,
                       "setSBFOutput");
 
     if (ready) {
-      if (Serial)
-        Serial.println("# GNSS: ready");
+      sink.line().println("# GNSS: ready");
       return;
     }
     vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
@@ -222,7 +219,7 @@ void task(void *params) {
   auto &p = *static_cast<TaskParams *>(params);
   septentrio_gnss::Parser parser;
 
-  bring_up(p.uart, parser);
+  bring_up(p.uart, parser, p.telemetry);
 
   std::optional<sbf::AttEuler> pending_att;
 
@@ -242,12 +239,12 @@ void task(void *params) {
       continue;
 
     if (auto aux = sbf::parse_aux_ant_positions(*packet)) {
-      report_aux(*aux);
+      report_aux(p.telemetry, *aux);
       continue;
     }
 
     if (auto pvt = sbf::parse_pvt_geodetic(*packet)) {
-      report_pvt(*pvt);
+      report_pvt(p.telemetry, *pvt);
       continue;
     }
 

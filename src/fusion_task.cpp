@@ -66,10 +66,11 @@ static void print_line(Print &out, char tag, Fields... fields) {
  * @param out  Fused estimate to print.
  * @param dbg  Internal state snapshot from the same filter tick.
  */
-static void print_fusion(Print &sink,
+static void print_fusion(plrs::TelemetrySink &sink,
                          const fusion::FusionOutput &out,
                          const fusion::TinyEkfFilter::Debug &dbg) {
-  print_line(sink,
+  auto line = sink.line();
+  print_line(line,
              'F',
              out.timestamp.count(),
              Real {out.heading_deg, 3},
@@ -99,11 +100,12 @@ static void print_fusion(Print &sink,
  *
  * @param imu  Raw IMU sample as received from the IMU task.
  */
-static void print_imu(Print &sink, const fusion::ImuSample &imu) {
+static void print_imu(plrs::TelemetrySink &sink, const fusion::ImuSample &imu) {
   const plrs::Quaternion q = imu.orientation.components();
   const plrs::Vec3 &g = imu.angular_velocity_rad_s;
   const plrs::Vec3 &a = imu.accel_ms2;
-  print_line(sink,
+  auto line = sink.line();
+  print_line(line,
              'I',
              imu.timestamp.count(),
              Real {q.w, 5},
@@ -127,11 +129,13 @@ static void print_imu(Print &sink, const fusion::ImuSample &imu) {
  *
  * @param imu  Raw IMU sample as received from the IMU task.
  */
-static void print_mems(Print &sink, const fusion::ImuSample &imu) {
+static void print_mems(plrs::TelemetrySink &sink,
+                       const fusion::ImuSample &imu) {
   const plrs::Vec3 &a = imu.accel_ms2;
   const plrs::Vec3 &g = imu.angular_velocity_rad_s;
   const plrs::Vec3 &m = imu.magnetic_field_au;
-  print_line(sink,
+  auto line = sink.line();
+  print_line(line,
              'M',
              imu.timestamp.count(),
              Real {a.x, 4},
@@ -153,8 +157,10 @@ static void print_mems(Print &sink, const fusion::ImuSample &imu) {
  *
  * @param gnss  Raw GNSS sample as received from the GNSS task.
  */
-static void print_gnss(Print &sink, const fusion::GnssSample &gnss) {
-  print_line(sink,
+static void print_gnss(plrs::TelemetrySink &sink,
+                       const fusion::GnssSample &gnss) {
+  auto line = sink.line();
+  print_line(line,
              'G',
              gnss.timestamp.count(),
              Real {gnss.heading_deg, 3},

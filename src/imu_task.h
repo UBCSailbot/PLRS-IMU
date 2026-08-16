@@ -6,6 +6,7 @@
 
 #ifdef ARDUINO
 #include "bno08x_transport.h"
+#include "telemetry.h"
 #include <FreeRTOS.h>
 #include <queue.h>
 
@@ -14,7 +15,7 @@ namespace imu_task {
 struct TaskParams {
   bno08x::I2cTransport transport;
   QueueHandle_t queue;
-  Print &telemetry;
+  plrs::TelemetrySink &telemetry;
 };
 
 void task(void *params);

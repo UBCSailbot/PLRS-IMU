@@ -85,7 +85,7 @@ static void drain(bno08x::I2cTransport &transport,
  */
 static void bring_up(bno08x::I2cTransport &transport,
                      std::span<uint8_t> scratch,
-                     Print &out) {
+                     plrs::TelemetrySink &out) {
   uint8_t seq = 0;
   while (true) {
     const std::array<uint8_t, 1> reset {SOFT_RESET_CMD};
@@ -110,11 +110,11 @@ static void bring_up(bno08x::I2cTransport &transport,
       auto packet = shtp::parse_packet(*cargo);
       if (packet && packet->channel ==
                         static_cast<uint8_t>(shtp::Channel::InputReports)) {
-        out.println("# IMU: ready");
+        out.line().println("# IMU: ready");
         return;
       }
     }
-    out.println("# IMU: no reports, retrying");
+    out.line().println("# IMU: no reports, retrying");
     vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
   }
 }
@@ -123,7 +123,13 @@ void task(void *params) {
   auto &p = *static_cast<TaskParams *>(params);
   std::array<uint8_t, bno08x::MAX_CARGO> scratch;
 
-  p.transport.scan(p.telemetry); // bring-up diagnostic: what ACKs on the bus
+  {
+    // Bring-up diagnostic: what ACKs on the bus. scan() builds one line across
+    // many prints, so the hold spans the whole call. It stays a plain Print so
+    // the transport keeps no dependency on the firmware's sink.
+    auto line = p.telemetry.line();
+    p.transport.scan(line);
+  }
   bring_up(p.transport, scratch, p.telemetry);
 
   // Each report may arrive in its own cargo, so hold the latest triads and emit
@@ -185,7 +191,7 @@ void task(void *params) {
            shtp::Channel::Control,
            {cmd.data(), cmd.size()});
       dcd_saved = true;
-      p.telemetry.println("# IMU: saved calibration (DCD)");
+      p.telemetry.line().println("# IMU: saved calibration (DCD)");
     }
 
     fusion::ImuSample sample {
