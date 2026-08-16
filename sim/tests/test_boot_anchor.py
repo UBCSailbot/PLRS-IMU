@@ -15,8 +15,9 @@ from dataclasses import replace
 
 import numpy as np
 
-from plrs_sim import GnssNoiseModel, ImuNoiseModel, Scenario, Static, Vec3
+from plrs_sim import EkfConfig, GnssNoiseModel, ImuNoiseModel, Scenario, Static, Vec3
 from plrs_sim.angles import wrap180
+from plrs_sim.attitude import euler_to_quaternion
 from plrs_sim.noise import MTI3_GYRO_WHITE_STD_RAD_S
 from plrs_sim.runner import run
 from plrs_sim.source import SimulatedSource
@@ -26,10 +27,18 @@ _END_S = 120.0
 _DEG2RAD = math.pi / 180.0
 
 
-def _no_gnss_source(seed: int) -> SimulatedSource:
+def _no_gnss_source(seed: int, cfg: EkfConfig) -> SimulatedSource:
     # No GNSS ever (outage from t=0), a clean mag, and a 0.2 deg/s turn-on Z
     # bias so there is real heading drift for the anchor to hold against.
+    #
+    # The synthesized IMU is tilted by the same mount the filter corrects for,
+    # as __main__ does. Leaving it identity while the filter carries the boat's
+    # measured mount would make the filter de-rotate a rotation the IMU never
+    # had, and with no GNSS to pull heading back nothing would absorb the error.
     return SimulatedSource(
+        imu_mount=euler_to_quaternion(
+            cfg.mount_roll_deg, cfg.mount_pitch_deg, cfg.mount_yaw_deg
+        ),
         scenario=Scenario(heading=Static(heading_deg=0.0)),
         imu_noise=ImuNoiseModel(
             gyro_white_std_rad_s=MTI3_GYRO_WHITE_STD_RAD_S,
@@ -51,12 +60,12 @@ def _peak_heading_error(trace) -> float:
 def test_seed_anchors_heading_from_boot_without_gnss() -> None:
     # Seeded + pinned: heading is anchored to the clean mag from the first
     # sample and holds near truth for the whole no-GNSS run. The synthetic mag
-    # models no declination (magnetic == true), so the sim-correct seed is 0;
-    # the shipped tuning's -15.5 is the real Vancouver declination the water,
-    # not this scenario, carries.
+    # models no declination (magnetic == true) and a square IMU, so the
+    # sim-correct seed is 0; the shipped seed is the real boat's declination
+    # plus frame constant, which this scenario does not carry.
     base = load_tuning()
     seeded = replace(base, mti_yaw=replace(base.mti_yaw, offset_seed_deg=0.0))
-    assert _peak_heading_error(run(_no_gnss_source(7), seeded)) < 3.0
+    assert _peak_heading_error(run(_no_gnss_source(7, seeded), seeded)) < 3.0
 
 
 def test_unseeded_heading_drifts_without_gnss() -> None:
@@ -68,4 +77,4 @@ def test_unseeded_heading_drifts_without_gnss() -> None:
         base,
         mti_yaw=replace(base.mti_yaw, offset_seed_deg=None, q_offset_outage_deg2=None),
     )
-    assert _peak_heading_error(run(_no_gnss_source(7), unseeded)) > 10.0
+    assert _peak_heading_error(run(_no_gnss_source(7, unseeded), unseeded)) > 10.0

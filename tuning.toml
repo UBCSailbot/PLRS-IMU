@@ -67,10 +67,12 @@ pitch_deg2 = 1.0
 [mti_yaw]
 variance_deg2 = 4.0
 q_offset_deg2 = 1.0
-# Tight because the mag is the sole heading reference (the dual-antenna GNSS aux
-# input is dead): the calibrated offset_seed is trusted as absolute heading from
-# boot, which holds the heading sigma under the rudder's validity gate. Loosen
-# back toward 100 once a working dual-antenna receiver can refine the offset.
+# Tight so the seed is trusted as absolute heading from boot, which holds the
+# heading sigma under the rudder's validity gate and lets the boat steer before
+# the first GNSS fix and through an outage. Only sound while the seed below is
+# a real measurement: at 4.0 a wrong seed steers the boat confidently wrong from
+# the first sample. Loosen toward 100 if the seed is ever left provisional, and
+# rely on GNSS to supply absolute heading instead.
 p0_offset_deg2 = 4.0
 q_offset_outage_deg2 = 1e-4
 # Full single-point calibration (declination + BNO-to-boat frame + local iron),
@@ -81,16 +83,22 @@ q_offset_outage_deg2 = 1e-4
 # asserts heading + offset = -yaw. Redo (or let a working GNSS refine it) if the
 # mount or magnetic environment changes.
 #
-# From the 2026-08-07 spin: calibrated north-hold heading -14.71 at offset state
-# -101.53 gives -yaw = -116.24; targeting +15.5 (magnetic-north true heading)
-# yields offset = -131.7. PROVISIONAL: verify on hardware (heading ~15.5 at
-# magnetic north, and repeatable across a reboot now that DCD is saved).
-offset_seed_deg = -131.7
+# Measured 2026-08-16 on the boat, level and mounted, mag_accuracy 2 to 3, with
+# the mount below applied. Read off the filter's own learned offset once it had
+# converged against fixed-ambiguity GNSS headings (AttEuler mode 2), which is a
+# better reference than a hand compass. It settles near -64.4 and wanders to
+# about -65.1 as the loose q_offset_deg2 absorbs mag drift; -64.7 is the middle.
+# This only sets the heading before the first GNSS fix; GNSS refines it in
+# flight. Redo it if the mount or the magnetic environment changes.
+offset_seed_deg = -64.7
 
 # GNSS dual-antenna calibration. baseline_offset_deg is the antenna baseline
 # heading measured clockwise from boat-forward; the bridge subtracts it so the
 # filter sees boat heading. fallback_heading_variance_deg2 is used only when a
 # fix arrives without a valid covariance.
+#
+# Zero because the antennas sit on the centerline with the aux one forward, so
+# the main -> aux baseline already points at the bow. Confirmed 2026-08-16.
 [gnss]
 baseline_offset_deg = 0.0
 fallback_heading_variance_deg2 = 4.0
@@ -98,7 +106,14 @@ fallback_heading_variance_deg2 = 4.0
 # IMU mounting offset, as ZYX Euler angles from boat axes to the IMU's axes.
 # The filter rotates the MTi quaternion by this to recover boat attitude. Zero
 # when the IMU is bolted square; see docs/attitude.md for the calibration.
+#
+# Measured 2026-08-16 on the boat, level and mounted. The board's -X axis points
+# at the bow, hence the 180 yaw. Roll and pitch are the residual tilt of the
+# board in its bracket, solved so the filter reports 0.000 roll and 0.000 pitch
+# in this attitude. The rotation is applied on the right (boat = imu * mount),
+# in the IMU frame, so these two keep the sign of the raw reading even though
+# the 180 yaw flips the reported angles.
 [imu_mount]
-mount_roll_deg = 0.0
-mount_pitch_deg = 0.0
-mount_yaw_deg = 0.0
+mount_roll_deg = -1.178
+mount_pitch_deg = -5.622
+mount_yaw_deg = 180.0

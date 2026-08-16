@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from plrs_sim import MtiYawConfig, load_mount, load_tuning
+from plrs_sim import load_mount, load_tuning
 from plrs_sim.tuning import DEFAULT_PATH
 
 
@@ -22,16 +22,18 @@ def test_default_tuning_loads_all_fields() -> None:
 
 
 def test_default_tuning_enables_mti_yaw() -> None:
-    cfg = load_tuning()
-    # Shipped tuning anchors heading to the mag from boot: the offset is seeded
-    # and pinned so a clean mag holds heading with no GNSS. See tuning.toml.
-    assert cfg.mti_yaw == MtiYawConfig(
-        variance_deg2=4.0,
-        q_offset_deg2=1.0,
-        p0_offset_deg2=4.0,
-        q_offset_outage_deg2=1e-4,
-        offset_seed_deg=-131.7,
-    )
+    # The capability the shipped tuning must keep: the mag measurement is on,
+    # the offset is seeded so heading is anchored from boot, and it is pinned so
+    # a clean mag holds heading with no GNSS. The values themselves are a site
+    # and boat calibration, so they are deliberately not asserted here; the
+    # loader is covered against a fixture in test_load_tuning_reads_a_custom_file.
+    yaw = load_tuning().mti_yaw
+    assert yaw is not None
+    assert yaw.offset_seed_deg is not None
+    assert yaw.q_offset_outage_deg2 is not None
+    assert yaw.variance_deg2 > 0.0
+    assert yaw.q_offset_deg2 > 0.0
+    assert yaw.p0_offset_deg2 > 0.0
 
 
 def test_load_tuning_reads_a_custom_file(tmp_path) -> None:
@@ -60,9 +62,11 @@ def test_load_tuning_reads_a_custom_file(tmp_path) -> None:
 
 
 def test_load_mount_reads_gnss_section() -> None:
+    # baseline_offset_deg is a physical antenna measurement, so only its range
+    # is asserted; test_load_mount_reads_a_custom_file pins exact parsing.
     mount = load_mount()
-    assert mount.baseline_offset_deg == 0.0
-    assert mount.fallback_heading_variance_deg2 == 4.0
+    assert -360.0 <= mount.baseline_offset_deg <= 360.0
+    assert mount.fallback_heading_variance_deg2 > 0.0
 
 
 def test_load_mount_reads_a_custom_file(tmp_path) -> None:
@@ -73,15 +77,6 @@ def test_load_mount_reads_a_custom_file(tmp_path) -> None:
     mount = load_mount(path)
     assert mount.baseline_offset_deg == 17.5
     assert mount.fallback_heading_variance_deg2 == 9.0
-
-
-def test_default_tuning_has_zero_imu_mount() -> None:
-    cfg = load_tuning()
-    assert (cfg.mount_roll_deg, cfg.mount_pitch_deg, cfg.mount_yaw_deg) == (
-        0.0,
-        0.0,
-        0.0,
-    )
 
 
 def test_load_tuning_reads_imu_mount_section(tmp_path) -> None:
