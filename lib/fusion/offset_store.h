@@ -25,8 +25,12 @@ using plrs::ByteSpan;
 
 // Identifies our blob in the flash sector and versions its layout, so a stale
 // or foreign sector (or a format change) is rejected rather than trusted.
+// Bump VERSION whenever the meaning of the stored offset changes, not only its
+// layout: a persisted offset is only valid for the frame it was learned in, so
+// an IMU mount or antenna baseline change must invalidate it. Version 2 is the
+// 2026-08-16 recalibration to boat-forward.
 constexpr uint32_t MAGIC = 0x4d414730; // "MAG0"
-constexpr uint16_t VERSION = 1;
+constexpr uint16_t VERSION = 2;
 
 // A mag offset outside this is not a physical heading offset; reject on load.
 constexpr float OFFSET_LIMIT_DEG = 180.0f;

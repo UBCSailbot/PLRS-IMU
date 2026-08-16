@@ -176,6 +176,10 @@ send_verified(septentrio_gnss::Uart &uart,
  * headings. Without it the receiver emits AttEuler with mode NO_ATTITUDE and
  * the filter never gets a heading fix.
  *
+ * The resolution is Fixed because gnss_bridge accepts only fixed-ambiguity
+ * modes (2 and 4). Under Float the receiver reports mode 1, so every sample
+ * arrives valid=false and the filter never sees a heading at all.
+ *
  * @param uart    Transport to the mosaic-go-H.
  * @param parser  Wire parser instance.
  */
@@ -194,7 +198,7 @@ static void bring_up(septentrio_gnss::Uart &uart,
                       parser,
                       septentrio_gnss::set_gnss_attitude(
                           septentrio_gnss::GnssAttitudeMode::MultiAntenna,
-                          septentrio_gnss::AttitudeResolution::Float),
+                          septentrio_gnss::AttitudeResolution::Fixed),
                       "setGNSSAttitude") &&
         send_verified(uart,
                       parser,
