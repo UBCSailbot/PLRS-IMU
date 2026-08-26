@@ -8,6 +8,7 @@
 #include "offset_store_eeprom.h"
 #include "persist_task.h"
 #include "rudder_task.h"
+#include "telemetry_task.h"
 #include "telemetry.h"
 #include "tuning.h"
 
@@ -64,6 +65,8 @@ void setup() {
   QueueHandle_t heading_mailbox = xQueueCreate(1, sizeof(fusion::FusionOutput));
   QueueHandle_t offset_mailbox =
       xQueueCreate(1, sizeof(persist_task::OffsetSample));
+  QueueHandle_t telemetry_mailbox =
+      xQueueCreate(1, sizeof(telemetry_task::Snapshot));
 
   // Restore the mag offset a prior run learned from GNSS, so heading anchors to
   // it from boot instead of the static tuning seed. A missing/invalid blob
@@ -90,8 +93,8 @@ void setup() {
                                                 gnss_queue,
                                                 heading_mailbox,
                                                 offset_mailbox,
-                                                filter_config,
-                                                telemetry};
+                                                telemetry_mailbox,
+                                                filter_config};
   static persist_task::TaskParams persist_params {offset_mailbox, telemetry};
   static rudder_task::TaskParams rudder_params {rudder::Uart(output_serial),
                                                 heading_mailbox};
@@ -125,6 +128,14 @@ void setup() {
               PERSIST_TASK_STACK_SIZE,
               &persist_params,
               PERSIST_TASK_PRIORITY,
+              nullptr);
+  static telemetry_task::TaskParams telemetry_params {telemetry_mailbox,
+                                                      telemetry};
+  xTaskCreate(telemetry_task::task,
+              "telemetry",
+              TELEMETRY_TASK_STACK_SIZE,
+              &telemetry_params,
+              TELEMETRY_TASK_PRIORITY,
               nullptr);
   // Temporary heartbeat task
   xTaskCreate(heartbeat_task, "heartbeat", 128, nullptr, 4, nullptr);

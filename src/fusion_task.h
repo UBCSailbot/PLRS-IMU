@@ -6,7 +6,7 @@
 
 #ifdef ARDUINO
 #include "ekf_filter.h"
-#include "telemetry.h"
+#include "telemetry_task.h"
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <queue.h>
@@ -19,8 +19,9 @@ struct TaskParams {
   QueueHandle_t heading_mailbox;
   // Latest mag offset + variance for the persist task (1-slot overwrite).
   QueueHandle_t offset_mailbox;
+  // Latest fusion snapshot for the telemetry task (1-slot overwrite).
+  QueueHandle_t telemetry_mailbox;
   fusion::TinyEkfFilter::Config filter_config;
-  plrs::TelemetrySink &telemetry;
 };
 
 void task(void *params);

@@ -18,163 +18,23 @@ static_assert(
 
 static constexpr uint32_t IMU_QUEUE_TIMEOUT_MS = 20;
 
-// Telemetry throttle. The default 10 Hz keeps the live monitor readable; a
-// PLRS_RAW_LOG build (env:pico_rawlog) drops it so every predict tick is
-// emitted, giving a full-rate capture. Faithful offline replay and tuning need
-// the IMU at the predict rate, not decimated (see docs/magnetometer.md).
+// Publish cadence for the telemetry mailbox. The default 10 Hz keeps the live
+// monitor readable; a PLRS_RAW_LOG build drops it so every predict tick is
+// published for full-rate capture (see docs/magnetometer.md).
 #ifdef PLRS_RAW_LOG
-static constexpr uint32_t TELEMETRY_INTERVAL_MS = 0;
+static constexpr uint32_t TELEMETRY_PUBLISH_INTERVAL_MS = 0;
 #else
-static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;
+static constexpr uint32_t TELEMETRY_PUBLISH_INTERVAL_MS = 100;
 #endif
-
-/**
- * A float telemetry field with its wire precision (decimal digits). The
- * precisions here mirror the Annotated types in sim/plrs_sim/live.py.
- */
-struct Real {
-  float v;
-  uint8_t prec;
-};
-
-static void print_field(Print &out, Real f) { out.print(f.v, f.prec); }
-template <typename T> static void print_field(Print &out, T v) { out.print(v); }
-
-/**
- * @brief Print one comma-separated telemetry line: tag, then each field.
- */
-template <typename... Fields>
-static void print_line(Print &out, char tag, Fields... fields) {
-  out.print(tag);
-  ((out.print(','), print_field(out, fields)), ...);
-  out.println();
-}
-
-/**
- * @brief Emit the fused estimate as an `F` telemetry line.
- *
- * `F,ts_ms,heading,roll,pitch,hdg_sigma,roll_sigma,pitch_sigma,bias,
- * bias_sigma,bias_x,bias_x_sigma,bias_y,bias_y_sigma,mag_offset,
- * offset_sigma,gate_rejects,mag_gate_rejects,mag_accuracy` (deg, deg/s;
- * mag_accuracy 0..3 is the BNO calibration status). `bias` is the
- * Z (vertical) gyro bias; `bias_x`/`bias_y` are its body-frame companions,
- * the ones that read as heading drift only at heel. The trailing debug fields
- * expose the internal states behind heading drift (bias wind-up, mag-offset
- * wander, gate activity); the parser treats them as one optional
- * format-version tail.
- *
- * @param out  Fused estimate to print.
- * @param dbg  Internal state snapshot from the same filter tick.
- */
-static void print_fusion(plrs::TelemetrySink &sink,
-                         const fusion::FusionOutput &out,
-                         const fusion::TinyEkfFilter::Debug &dbg) {
-  auto line = sink.line();
-  print_line(line,
-             'F',
-             out.timestamp.count(),
-             Real {out.heading_deg, 3},
-             Real {out.roll_deg, 3},
-             Real {out.pitch_deg, 3},
-             Real {std::sqrt(out.heading_variance_deg2), 3},
-             Real {std::sqrt(out.roll_variance_deg2), 3},
-             Real {std::sqrt(out.pitch_variance_deg2), 3},
-             Real {dbg.gyro_bias_dps, 4},
-             Real {std::sqrt(dbg.gyro_bias_variance_deg2_s2), 4},
-             Real {dbg.gyro_bias_x_dps, 4},
-             Real {std::sqrt(dbg.gyro_bias_x_variance_deg2_s2), 4},
-             Real {dbg.gyro_bias_y_dps, 4},
-             Real {std::sqrt(dbg.gyro_bias_y_variance_deg2_s2), 4},
-             Real {dbg.mag_offset_deg, 3},
-             Real {std::sqrt(dbg.mag_offset_variance_deg2), 3},
-             dbg.gate_rejects,
-             dbg.mag_gate_rejects,
-             out.mag_accuracy);
-}
-
-/**
- * @brief Emit a raw IMU sample as an `I` telemetry line.
- *
- * `I,ts_ms,qw,qx,qy,qz,gx,gy,gz,ax,ay,az` (quaternion, gyro rad/s, accel
- * m/s^2).
- *
- * @param imu  Raw IMU sample as received from the IMU task.
- */
-static void print_imu(plrs::TelemetrySink &sink, const fusion::ImuSample &imu) {
-  const plrs::Quaternion q = imu.orientation.components();
-  const plrs::Vec3 &g = imu.angular_velocity_rad_s;
-  const plrs::Vec3 &a = imu.accel_ms2;
-  auto line = sink.line();
-  print_line(line,
-             'I',
-             imu.timestamp.count(),
-             Real {q.w, 5},
-             Real {q.x, 5},
-             Real {q.y, 5},
-             Real {q.z, 5},
-             Real {g.x, 5},
-             Real {g.y, 5},
-             Real {g.z, 5},
-             Real {a.x, 4},
-             Real {a.y, 4},
-             Real {a.z, 4});
-}
-
-/**
- * @brief Emit the raw MEMS sensor triad as an `M` telemetry line.
- *
- * `M,ts_ms,ax,ay,az,gx,gy,gz,mx,my,mz` (accel m/s^2, gyro rad/s, magnetic
- * field a.u.). Accel and gyro duplicate the `I` frame so this line stands
- * alone as the bare MEMS output; the magnetometer appears only here.
- *
- * @param imu  Raw IMU sample as received from the IMU task.
- */
-static void print_mems(plrs::TelemetrySink &sink,
-                       const fusion::ImuSample &imu) {
-  const plrs::Vec3 &a = imu.accel_ms2;
-  const plrs::Vec3 &g = imu.angular_velocity_rad_s;
-  const plrs::Vec3 &m = imu.magnetic_field_au;
-  auto line = sink.line();
-  print_line(line,
-             'M',
-             imu.timestamp.count(),
-             Real {a.x, 4},
-             Real {a.y, 4},
-             Real {a.z, 4},
-             Real {g.x, 5},
-             Real {g.y, 5},
-             Real {g.z, 5},
-             Real {m.x, 5},
-             Real {m.y, 5},
-             Real {m.z, 5});
-}
-
-/**
- * @brief Emit a raw GNSS attitude sample as a `G` telemetry line.
- *
- * `G,ts_ms,heading,hdg_sigma,valid,mode,error` (deg; mode/error are the raw
- * AttEuler codes).
- *
- * @param gnss  Raw GNSS sample as received from the GNSS task.
- */
-static void print_gnss(plrs::TelemetrySink &sink,
-                       const fusion::GnssSample &gnss) {
-  auto line = sink.line();
-  print_line(line,
-             'G',
-             gnss.timestamp.count(),
-             Real {gnss.heading_deg, 3},
-             Real {std::sqrt(gnss.heading_variance_deg2), 3},
-             gnss.valid ? 1 : 0,
-             gnss.mode,
-             gnss.error);
-}
 
 void task(void *params) {
   auto &p = *static_cast<TaskParams *>(params);
   fusion::TinyEkfFilter filter {p.filter_config};
 
-  TickType_t next_print = xTaskGetTickCount();
+  TickType_t next_publish = xTaskGetTickCount();
+  uint32_t telemetry_seq = 0;
+  fusion::GnssSample last_gnss {};
+  bool have_gnss = false;
 
   while (true) {
     fusion::ImuSample imu;
@@ -185,13 +45,17 @@ void task(void *params) {
       fusion::GnssSample gnss;
       while (xQueueReceive(p.gnss_queue, &gnss, 0) == pdTRUE) {
         filter.update(gnss);
-        print_gnss(p.telemetry, gnss);
+        last_gnss = gnss;
+        have_gnss = true;
       }
 
       const fusion::FusionOutput out = filter.output();
       xQueueOverwrite(p.heading_mailbox, &out);
 
-      if (xTaskGetTickCount() >= next_print) {
+      const bool due =
+          (TELEMETRY_PUBLISH_INTERVAL_MS == 0) ||
+          (xTaskGetTickCount() >= next_publish);
+      if (due) {
         const fusion::TinyEkfFilter::Debug dbg = filter.debug();
         // Hand the latest offset to the persist task; it decides whether to
         // write flash (GNSS-validated, changed, min interval). See
@@ -202,10 +66,21 @@ void task(void *params) {
             .timestamp = out.timestamp,
         };
         xQueueOverwrite(p.offset_mailbox, &offset_sample);
-        print_fusion(p.telemetry, out, dbg);
-        print_imu(p.telemetry, imu);
-        print_mems(p.telemetry, imu);
-        next_print += pdMS_TO_TICKS(TELEMETRY_INTERVAL_MS);
+
+        telemetry_task::Snapshot snap {
+            .out = out,
+            .dbg = dbg,
+            .imu = imu,
+            .gnss = last_gnss,
+            .has_imu = true,
+            .has_gnss = have_gnss,
+            .seq = ++telemetry_seq,
+        };
+        xQueueOverwrite(p.telemetry_mailbox, &snap);
+
+        if (TELEMETRY_PUBLISH_INTERVAL_MS != 0) {
+          next_publish += pdMS_TO_TICKS(TELEMETRY_PUBLISH_INTERVAL_MS);
+        }
       }
     }
   }

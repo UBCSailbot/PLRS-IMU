@@ -6,7 +6,7 @@
  *   - a hardware UART (fallback bench readout over the probe's UART bridge).
  * Boat and bench share one firmware.
  *
- * Four tasks write here concurrently, and a telemetry line is several Print
+ * Several tasks write here concurrently, and a telemetry line is several Print
  * calls long (a tag, its fields, the newline), so the invariant the sink has to
  * defend is that a whole line reaches the wire uninterrupted. It does that by
  * handing out a Line: an RAII hold on the sink that is the only way to write.
