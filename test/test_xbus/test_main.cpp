@@ -667,8 +667,8 @@ void test_build_output_config_round_trips_through_encode() {
 
 // ---------------------------------------------------------------------------
 
-int main(int, char **) {
-  UNITY_BEGIN();
+// Shared test list so the host and on-target entry points stay in sync.
+static void run_all() {
   RUN_TEST(test_checksum_gotoconfig);
   RUN_TEST(test_checksum_with_payload);
   RUN_TEST(test_command_empty_payload);
@@ -708,5 +708,33 @@ int main(int, char **) {
   RUN_TEST(test_build_output_config_one_item);
   RUN_TEST(test_build_output_config_multiple_items);
   RUN_TEST(test_build_output_config_round_trips_through_encode);
+}
+
+#ifdef ARDUINO
+#include <Arduino.h>
+
+void setup() {
+  Serial.begin(115200);
+  // Block until the host opens the CDC port; a fixed delay races the
+  // post-upload USB re-enumeration (see test_loopback).
+  while (!Serial) {
+  }
+  UNITY_BEGIN();
+  run_all();
+  UNITY_END();
+  Serial.flush();
+}
+
+void loop() {
+  // Keep pumping tud_task so the CDC port stays up until the runner drains the
+  // Unity output (see test_loopback).
+  (void)static_cast<bool>(Serial);
+  delay(10);
+}
+#else
+int main(int, char **) {
+  UNITY_BEGIN();
+  run_all();
   return UNITY_END();
 }
+#endif
